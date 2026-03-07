@@ -290,8 +290,8 @@ export function Features() {
         </h2>
 
         {/* Tabs */}
-        <div className="flex items-center justify-center mb-16">
-          <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-full p-1 mx-4">
+        <div className="flex items-center justify-center mb-16 ">
+          <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-full p-1 mx-4 ">
           {tabs.map((tab) => (
             <button
               key={tab.id}
