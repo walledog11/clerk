@@ -7,6 +7,7 @@ import {
   MessageCircle, ShoppingBag, Mail, Filter, Bell,
   Star, Zap, Clock, FileText, Bot, PenLine,
   Link2, Settings, RefreshCw, Shield,
+  Pointer,
 } from "lucide-react";
 
 const tabs = [
@@ -132,28 +133,178 @@ function InboxPreview() {
 }
 
 function SummaryPreview() {
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    // Animation sequence timeline
+    const timers = [
+      setTimeout(() => setStep(1), 1000), // Cursor moves to button
+      setTimeout(() => setStep(2), 2000), // Cursor clicks
+      setTimeout(() => setStep(3), 2700), // Processing state
+      setTimeout(() => setStep(4), 5000), // Success state
+    ];
+
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b bg-slate-50">
-         <SendHorizontal className="w-4 h-4 text-blue-600 transform scale-x-[-1]" />
-        <span className="text-xs font-medium text-muted-foreground">Support Ticket</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="flex items-start gap-3 bg-blue-50 rounded-lg p-3">
-          <div className="text-xs space-y-2 w-full">
-            <div className="flex justify-between"><span className="font-semibold text-foreground">Customer</span><span className="text-muted-foreground">Sarah M.</span></div>
-            <div className="flex justify-between"><span className="font-semibold text-foreground">Order</span><span className="text-muted-foreground">#2849</span></div>
-            <div className="flex justify-between"><span className="font-semibold text-foreground">Channel</span><span className="text-muted-foreground">Instagram DM</span></div>
-            <div className="flex justify-between"><span className="font-semibold text-foreground">Intent</span><span className="text-blue-600 font-medium">Address change</span></div>
-            <div className="flex justify-between"><span className="font-semibold text-foreground">Tracking</span><span className="text-muted-foreground">1Z999AA1...</span></div>
+    <div className="flex justify-center w-full h-[580px]">
+      {/* Dashboard App Window */}
+      <div className="relative w-[340px] h-full rounded-2xl border border-slate-200 bg-slate-50 shadow-xl overflow-hidden flex flex-col font-sans">
+        
+        {/* App Header */}
+        <div className="h-12 bg-white border-b border-slate-200 flex items-center justify-center px-4 shrink-0 z-10">
+          <div className="flex items-center gap-2">
+            <Bot className="w-6 h-6 text-yellow-400" />
+            <span className="text-sm font-semibold text-slate-800">clerk</span>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Customer wants to update the shipping address for order #2849 before it ships tomorrow.</p>
+
+        {/* List of Cards */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          
+          {/* CARD 1 - Animated */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden relative">
+            
+            {/* Standard View (Fades out when processing) */}
+            <div className={`transition-opacity duration-300 ${step >= 3 ? 'opacity-0 hidden' : 'opacity-100'}`}>
+              <div className="p-3 border-b border-slate-100">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-slate-400 font-medium">Marketplace Prints</span>
+                    <span className="text-xs font-bold text-slate-800">Order #MXP29187</span>
+                  </div>
+                  <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-medium border border-red-100">
+                    Modify Order
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-snug">
+                  Customer would like to remove the &quot;Canvas Tote&quot; from their order before it ships.
+                </p>
+              </div>
+              
+              <div className="p-3 bg-gradient-to-b from-blue-50/50 to-blue-50 border-t-2 border-t-blue-100">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Bot className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Suggested Action</span>
+                </div>
+                <p className="text-[11px] text-blue-900 mb-3 leading-snug font-medium">
+                  Check if shipped. If not, remove item, issue partial refund, and notify customer.
+                </p>
+                <div className="flex gap-2">
+                  <button className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold transition-all flex items-center justify-center gap-1
+                    ${step === 2 ? 'bg-blue-700 text-white scale-[0.98]' : 'bg-blue-600 text-white shadow-sm hover:bg-blue-700'}`}>
+                    <Zap className="w-3 h-3" />
+                    Approve & Run
+                  </button>
+                  <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-md text-[11px] font-medium text-slate-600 hover:bg-slate-50">
+                    Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Processing / Success State (Fades in) */}
+            <div className={`absolute inset-0 bg-white flex flex-col justify-center items-center p-4 transition-opacity duration-300 
+              ${step >= 3 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+              
+              {step === 3 && (
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs font-bold text-slate-800 mb-1">Agent is working...</span>
+                    <span className="text-[10px] text-slate-500">Checking Shopify fulfillment status...</span>
+                  </div>
+                </div>
+              )}
+
+              {step >= 4 && (
+                <motion.div 
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex flex-col items-center text-center w-full"
+                >
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                    <Shield className="w-5 h-5 text-green-600" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 mb-1">Resolved Successfully</span>
+                  <div className="text-[10px] text-slate-600 bg-slate-50 w-full p-2 rounded border border-slate-100 text-left space-y-1">
+                    <div>✅ Item removed from #MXP29187</div>
+                    <div>✅ $24.00 refunded to original payment</div>
+                    <div>✅ Confirmation email sent</div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+
+          </div>
+
+          {/* CARD 2 - Static */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden opacity-90">
+            <div className="p-3 border-b border-slate-100">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 font-medium">Color Couture</span>
+                  <span className="text-xs font-bold text-slate-800">TikTok Comment</span>
+                </div>
+                <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-medium border border-orange-100">
+                  Restock Info
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-snug mb-2">
+                User asking &quot;When will the summer dress be back in stock?&quot; Also noted some negative sentiment on the post.
+              </p>
+            </div>
+            <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-[10px] font-medium text-slate-500">AI drafted response ready</span>
+              <button className="px-3 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 shadow-sm">
+                Review Draft
+              </button>
+            </div>
+          </div>
+
+          {/* CARD 3 - Static */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden opacity-80">
+            <div className="p-3 border-b border-slate-100">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-400 font-medium">Marketplace Prints</span>
+                  <span className="text-xs font-bold text-slate-800">Order #MXP28196</span>
+                </div>
+                <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-medium border border-amber-100">
+                  Return
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-snug">
+                Customer would like to start a return for their recent order.
+              </p>
+            </div>
+            <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <span className="text-[10px] font-medium text-slate-500">Action requires approval</span>
+              <button className="px-3 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 shadow-sm">
+                Review Policy
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Animated Mouse Cursor */}
+        <div 
+          className="absolute z-50 pointer-events-none transition-all duration-800 ease-in-out"
+          style={{
+            top: step >= 1 ? '250px' : '350px',
+            left: step >= 1 ? '200px' : '300px',
+            opacity: step >= 3 ? 0 : 1
+          }}
+        >
+          <Pointer />
+        </div>
+
       </div>
     </div>
   );
 }
-
 let respondAnimationPlayed = false;
 
 const YOU_SAID_TEXT = "Update the address and inform the customer about the changes";
