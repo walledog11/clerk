@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export function CTA() {
   return (
-    <section className="w-full py-24 bg-slate-50/80">
+    <section className="relative z-10 w-full py-24">
       <div className="container mx-auto px-4 md:px-6 text-center">
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4">
           Your customers deserve faster answers

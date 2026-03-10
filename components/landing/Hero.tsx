@@ -1,21 +1,12 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Smartphone, Settings2, Bot } from "lucide-react";
-import { DotPattern } from "../ui/dot-pattern";
 import Image from "next/image";
 import HeroGraphic from "@/components/ui/heroGraphic"
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden w-full bg-background pt-6 pb-10 md:pb-32 md:pt-10">
-      {/* Dot pattern behind everything, fading out toward edges */}
-      <DotPattern
-        width={20}
-        height={20}
-        cr={1}
-        className="absolute inset-0 z-0 opacity-80 [mask-image:radial-gradient(ellipse_at_center,white_30%,transparent_90%)]"
-      />
-
+    <section className="relative overflow-hidden w-full pt-6 pb-10 md:pb-32 md:pt-10">
       <div className="container relative z-10 mx-auto px-4 md:px-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           {/* Left side – Text */}

@@ -1,44 +1,86 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Inbox, BrainCircuit, Send, SendHorizontal, Plug, MessageCircle, ShoppingBag, Mail } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Inbox, BrainCircuit, Send, SendHorizontal, Plug,
+  MessageCircle, ShoppingBag, Mail, Filter, Bell,
+  Star, Zap, Clock, FileText, Bot, PenLine,
+  Link2, Settings, RefreshCw, Shield,
+} from "lucide-react";
 
 const tabs = [
   {
     id: "inbox",
     label: "Unified Inbox",
-    title: "Meet your unified inbox",
+    category: "INBOX",
+    title: "All your messages,\none clean dashboard",
     description:
-      "All your customer messages from TikTok, Instagram, Shopify Inbox, and Email — routed to one clean dashboard. No more switching tabs.",
+      "Customer messages from TikTok, Instagram, Shopify Inbox, and Email — routed to one place. No more switching tabs.",
     icon: Inbox,
     preview: "inbox",
+    bgClass: "bg-blue-100/60",
+    categoryColor: "text-blue-600",
+    subFeatures: [
+      { icon: MessageCircle, label: "Multi-channel" },
+      { icon: RefreshCw, label: "Real-time Sync" },
+      { icon: Filter, label: "Smart Filters" },
+      { icon: Bell, label: "Notifications" },
+    ],
   },
   {
     id: "summarize",
     label: "AI Summaries",
-    title: "Instant AI summaries",
+    category: "SUMMARIZE",
+    title: "From ticket\nto insight, instantly",
     description:
-      "Every incoming ticket is summarized with vital details — order numbers, tracking info, customer intent — so you can respond in seconds, not minutes.",
+      "Every incoming ticket is summarized with vital details — order numbers, tracking info, customer intent — so you respond in seconds.",
     icon: BrainCircuit,
     preview: "summary",
+    bgClass: "bg-amber-100/60",
+    categoryColor: "text-amber-600",
+    subFeatures: [
+      { icon: Zap, label: "Instant Analysis" },
+      { icon: FileText, label: "Key Details" },
+      { icon: Clock, label: "Time Saved" },
+      { icon: Star, label: "Smart Priority" },
+    ],
   },
   {
     id: "respond",
     label: "Agentic Capabilities",
-    title: "Offload tasks and delegate",
+    category: "RESPOND",
+    title: "Delegate tasks,\nlike a real employee",
     description:
-      "Communicate with clerk like a real employee. Delegate tasks by simply instructing what you would like done. ",
+      "Communicate with clerk like a team member. Delegate tasks by simply instructing what you'd like done.",
     icon: Send,
     preview: "respond",
+    bgClass: "bg-green-100/60",
+    categoryColor: "text-green-600",
+    subFeatures: [
+      { icon: Bot, label: "AI Agent" },
+      { icon: Send, label: "Auto-respond" },
+      { icon: PenLine, label: "Draft & Edit" },
+      { icon: Shield, label: "Brand Voice" },
+    ],
   },
   {
     id: "integrations",
     label: "Integrations",
-    title: "Connect all your channels",
+    category: "CONNECT",
+    title: "Connect all your\nchannels in minutes",
     description:
-      "Plug in TikTok, Instagram, Shopify Chat, and your business email. New channels are added regularly. Setup takes under 5 minutes.",
+      "Plug in TikTok, Instagram, Shopify Chat, and your business email. New channels added regularly. Setup takes under 5 minutes.",
     icon: Plug,
     preview: "integrations",
+    bgClass: "bg-purple-100/60",
+    categoryColor: "text-purple-600",
+    subFeatures: [
+      { icon: Link2, label: "Easy Setup" },
+      { icon: Settings, label: "Configure" },
+      { icon: RefreshCw, label: "Auto-sync" },
+      { icon: Plug, label: "Extensible" },
+    ],
   },
 ];
 
@@ -282,49 +324,131 @@ export function Features() {
   const PreviewComponent = previewComponents[activeFeature.preview];
 
   return (
-    <section id="features" className="w-full py-24 bg-white">
+    <section id="features" className="relative z-10 w-full py-14">
       <div className="container mx-auto px-4 md:px-6">
         {/* Section heading */}
         <h2 className="text-center text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-12">
           Everything you need in one place
         </h2>
 
-        {/* Tabs */}
-        <div className="flex items-center justify-center mb-16 ">
-          <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-full p-1 mx-4 ">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`text-[11px] sm:text-sm font-medium rounded-full px-2 sm:px-4 py-1.5 sm:py-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Tab bar */}
+        <div className="flex items-center justify-center mb-10">
+          <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-full p-1 mx-4">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative text-[11px] sm:text-sm font-medium rounded-full px-2 sm:px-5 py-1.5 sm:py-2 transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {activeTab === tab.id && (
+                  <motion.span
+                    layoutId="activeTabPill"
+                    className="absolute inset-0 bg-white rounded-full shadow-sm"
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <span className="relative z-10">{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Content area */}
-        <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-start max-w-5xl mx-auto">
-          {/* Left: text */}
-          <div className="flex flex-col space-y-6">
-      
-            <h3 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-              {activeFeature.title}
-            </h3>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              {activeFeature.description}
-            </p>
-          </div>
+        {/* Feature panel */}
+        <div className="max-w-6xl mx-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.35, ease: "easeInOut" }}
+              className={`rounded-3xl ${activeFeature.bgClass} p-8 md:p-12 lg:p-16`}
+            >
+              <div className="grid md:grid-cols-2 gap-10 md:gap-14 items-center">
+                {/* Left: preview */}
+                <motion.div
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.45, delay: 0.1, ease: "easeOut" }}
+                  className="flex items-center justify-center"
+                >
+                  <PreviewComponent />
+                </motion.div>
 
-          {/* Right: preview mock */}
-          <div className="flex items-center justify-center">
-            <PreviewComponent />
-          </div>
+                {/* Right: text content */}
+                <div className="flex flex-col">
+                  {/* Category label */}
+                  <motion.span
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.05 }}
+                    className={`text-xs font-semibold tracking-widest uppercase ${activeFeature.categoryColor} mb-4`}
+                  >
+                    {activeFeature.category}
+                  </motion.span>
+
+                  {/* Heading */}
+                  <motion.h3
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                    className="text-3xl sm:text-4xl lg:text-[2.75rem] font-bold tracking-tight text-foreground leading-tight whitespace-pre-line"
+                  >
+                    {activeFeature.title}
+                  </motion.h3>
+
+                  {/* Description */}
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.15 }}
+                    className="mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed"
+                  >
+                    {activeFeature.description}
+                  </motion.p>
+
+                  {/* Sub-features 2×2 grid */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3, delay: 0.25 }}
+                    className="grid grid-cols-2 gap-x-6 gap-y-4 mt-8"
+                  >
+                    {activeFeature.subFeatures.map((sf, i) => (
+                      <motion.div
+                        key={sf.label}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: 0.3 + i * 0.06 }}
+                        className="flex items-center gap-2.5"
+                      >
+                        <sf.icon className="w-5 h-5 text-foreground/70 shrink-0" />
+                        <span className="text-sm font-medium text-foreground">
+                          {sf.label}
+                        </span>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+
+                  {/* CTA */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.45 }}
+                    className="mt-8"
+                  >
+                    <button className="px-6 py-2.5 bg-foreground text-background rounded-full text-sm font-medium hover:opacity-90 transition-opacity">
+                      Learn more
+                    </button>
+                  </motion.div>
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </section>

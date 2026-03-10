@@ -11,7 +11,7 @@ export function LogoScrollBar() {
   ];
 
   return (
-    <section className="w-full py-4 border-t border-b border-slate-100 overflow-hidden">
+    <section className="relative z-10 w-full py-4 border-t border-b border-slate-100 overflow-hidden bg-white">
         
         <div className="logos">
             {[0, 1].map((i) => (

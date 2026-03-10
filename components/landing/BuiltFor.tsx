@@ -357,29 +357,6 @@ function SupportGraphic() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Compliance badges                                                  */
-/* ------------------------------------------------------------------ */
-function ComplianceBadges() {
-  return (
-    <div className="flex items-center gap-4">
-      {[
-        { label: "Data Protected", color: "text-green-500" },
-        { label: "Always Online", color: "text-green-500" },
-      ].map((badge) => (
-        <motion.div
-          key={badge.label}
-          className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm"
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          <span className="text-xs font-medium text-foreground">{badge.label}</span>
-          <CheckCircle2 className={`w-3.5 h-3.5 ${badge.color}`} />
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 export function BuiltFor() {
@@ -405,27 +382,13 @@ export function BuiltFor() {
   ];
 
   return (
-    <section ref={sectionRef} className="w-full py-24 bg-white overflow-hidden">
+    <section ref={sectionRef} className="relative z-10 w-full py-24 overflow-hidden">
       <div className="container mx-auto px-4 md:px-6">
         {/* ---- Header row ---- */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between mb-16 gap-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6 }}
-          >
+        <div className="flex flex-col sm:flex-row items-start sm:items-end justify-center mb-16 gap-4">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground">
               Built to grow with you
             </h2>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={isInView ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6, delay: 0.15 }}
-          >
-            <ComplianceBadges />
-          </motion.div>
         </div>
 
         {/* ---- Top 3 feature cards ---- */}

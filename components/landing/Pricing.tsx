@@ -8,8 +8,8 @@ import { Badge } from "../ui/badge";
 const tiers = [
   {
     name: "Starter",
-    priceMonthly: 25,
-    priceAnnually: 19,
+    priceMonthly: 14.95,
+    priceAnnually: 9.95,
     seats: "up to 10 seats",
     description:
       "Essential capabilities to get started with single-channel support",
@@ -27,8 +27,8 @@ const tiers = [
   },
   {
     name: "Professional",
-    priceMonthly: 65,
-    priceAnnually: 49,
+    priceMonthly: 39.95,
+    priceAnnually: 29.95,
     seats: "up to 50 seats",
     description:
       "Enhanced automation and reporting for omnichannel support",
@@ -69,7 +69,7 @@ export function Pricing() {
   const [annual, setAnnual] = useState(true);
 
   return (
-    <section id="pricing" className="w-full py-24 bg-white">
+    <section id="pricing" className="relative z-10 w-full py-24">
       <div className="container mx-auto px-4 md:px-6">
         {/* Top area: heading left, cards right */}
         <div className="flex flex-col lg:flex-row gap-12 lg:gap-16 max-w-7xl mx-auto items-start">
@@ -140,12 +140,7 @@ export function Pricing() {
                   {/* Price */}
                   <div className="mt-3 flex items-baseline gap-0.5">
                     <span className="text-4xl font-bold text-foreground">
-                      ${price}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      /seat/mo
-                      {tier.seats ? `, ${tier.seats}` : ""}
-                    </span>
+                      ${price}</span> <span className="text-sm font-semibold text-muted-foreground">/mo</span>
                   </div>
 
                   {/* Divider */}

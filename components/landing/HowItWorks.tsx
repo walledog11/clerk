@@ -211,12 +211,11 @@ function RunCard() {
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="w-full py-24 bg-slate-50/80">
+    <section id="how-it-works" className="relative z-10 w-full py-14 ">
       <div className="container mx-auto px-4 md:px-6">
         {/* Header */}
-        <div className="mb-14">
-          <p className="text-sm text-yellow-500 font-medium mb-3">Get started with three simple steps</p>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground">
+        <div className="mb-14 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground">
             How it works
           </h2>
         </div>

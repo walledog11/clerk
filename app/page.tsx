@@ -8,13 +8,22 @@ import { Pricing } from "@/components/landing/Pricing";
 import { CTA } from "@/components/landing/CTA";
 import { Footer } from "@/components/landing/Footer";
 import { LogoScrollBar } from "@/components/ui/LogoScrollBar";
+import { WorkSprawl } from "@/components/landing/WorkSprawl";
+import { DotPattern } from "@/components/ui/dot-pattern";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col bg-white">
+    <main className="relative flex min-h-screen flex-col bg-white">
+      <DotPattern
+        width={26}
+        height={26}
+        cr={1}
+        className="absolute inset-0 z-0 opacity-80 [mask-image:radial-gradient(ellipse_at_center,white_40%,transparent_85%)]"
+      />
       <Navbar />
       <Hero />
       <LogoScrollBar />
+      <WorkSprawl />
       <Features />
       <HowItWorks />
       <BuiltFor />
