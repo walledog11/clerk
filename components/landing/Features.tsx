@@ -1,24 +1,21 @@
 "use client";
-
+import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
-  Inbox, BrainCircuit, Send, SendHorizontal, Plug,
-  MessageCircle, ShoppingBag, Mail, Filter, Bell,
+  Send, Plug, MessageCircle, Filter, Bell,
   Star, Zap, Clock, FileText, Bot, PenLine,
-  Link2, Settings, RefreshCw, Shield,
-  Pointer,
+  Link2, Settings, RefreshCw, Shield, Sparkles,
+  Loader2, CheckCircle2, ArrowRight, Ticket, Settings2, Plus
 } from "lucide-react";
 
-const tabs = [
+const features = [
   {
     id: "inbox",
-    label: "Unified Inbox",
     category: "INBOX",
     title: "All your messages,\none clean dashboard",
     description:
       "Customer messages from TikTok, Instagram, Shopify Inbox, and Email — routed to one place. No more switching tabs.",
-    icon: Inbox,
     preview: "inbox",
     bgClass: "bg-blue-100/60",
     categoryColor: "text-blue-600",
@@ -31,12 +28,10 @@ const tabs = [
   },
   {
     id: "summarize",
-    label: "AI Summaries",
     category: "SUMMARIZE",
     title: "From ticket\nto insight, instantly",
     description:
       "Every incoming ticket is summarized with vital details — order numbers, tracking info, customer intent — so you respond in seconds.",
-    icon: BrainCircuit,
     preview: "summary",
     bgClass: "bg-amber-100/60",
     categoryColor: "text-amber-600",
@@ -49,12 +44,10 @@ const tabs = [
   },
   {
     id: "respond",
-    label: "Agentic Capabilities",
     category: "RESPOND",
     title: "Delegate tasks,\nlike a real employee",
     description:
       "Communicate with clerk like a team member. Delegate tasks by simply instructing what you'd like done.",
-    icon: Send,
     preview: "respond",
     bgClass: "bg-green-100/60",
     categoryColor: "text-green-600",
@@ -67,12 +60,10 @@ const tabs = [
   },
   {
     id: "integrations",
-    label: "Integrations",
     category: "CONNECT",
     title: "Connect all your\nchannels in minutes",
     description:
       "Plug in TikTok, Instagram, Shopify Chat, and your business email. New channels added regularly. Setup takes under 5 minutes.",
-    icon: Plug,
     preview: "integrations",
     bgClass: "bg-purple-100/60",
     categoryColor: "text-purple-600",
@@ -87,22 +78,15 @@ const tabs = [
 
 function InboxPreview() {
   return (
-    <div className="flex justify-center">
-      {/* Phone frame — 9:19.5 ratio like a real smartphone */}
+    <div className="flex justify-center w-full">
       <div className="relative w-[260px] aspect-[9/19.5] rounded-[2.5rem] border-[6px] border-slate-900 bg-white shadow-xl overflow-hidden flex flex-col">
-        {/* Status bar / notch area */}
         <div className="relative flex items-center justify-center pt-3 pb-2 bg-white">
-          {/* Dynamic Island */}
           <div className="w-20 h-5 bg-slate-900 rounded-full" />
         </div>
-
-        {/* App header */}
         <div className="flex items-center justify-between px-4 py-2 bg-white border-b">
           <span className="text-xs font-semibold text-foreground">Inbox</span>
           <span className="text-[10px] text-muted-foreground">4 new</span>
         </div>
-
-        {/* Message list */}
         <div className="divide-y flex-1">
           {[
             { platform: "IG", color: "bg-pink-100 text-pink-600", name: "Sarah M.", msg: "Hi, I need help with my order #2849..." },
@@ -122,8 +106,6 @@ function InboxPreview() {
             </div>
           ))}
         </div>
-
-        {/* Home indicator */}
         <div className="flex justify-center py-3 bg-white mt-auto">
           <div className="w-24 h-1 bg-slate-300 rounded-full" />
         </div>
@@ -136,177 +118,147 @@ function SummaryPreview() {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    // Animation sequence timeline
     const timers = [
-      setTimeout(() => setStep(1), 1000), // Cursor moves to button
-      setTimeout(() => setStep(2), 2000), // Cursor clicks
-      setTimeout(() => setStep(3), 2700), // Processing state
-      setTimeout(() => setStep(4), 5000), // Success state
+      setTimeout(() => setStep(1), 1000), // Cursor moves in
+      setTimeout(() => setStep(2), 2200), // Cursor clicks
+      setTimeout(() => setStep(3), 2400), // Processing state starts
+      setTimeout(() => setStep(4), 4800), // Success state
     ];
-
     return () => timers.forEach(clearTimeout);
   }, []);
 
   return (
-    <div className="flex justify-center w-full h-[580px]">
-      {/* Dashboard App Window */}
-      <div className="relative w-[340px] h-full rounded-2xl border border-slate-200 bg-slate-50 shadow-xl overflow-hidden flex flex-col font-sans">
-        
-        {/* App Header */}
-        <div className="h-12 bg-white border-b border-slate-200 flex items-center justify-center px-4 shrink-0 z-10">
-          <div className="flex items-center gap-2">
-            <Bot className="w-6 h-6 text-yellow-400" />
-            <span className="text-sm font-semibold text-slate-800">clerk</span>
+    <div className="flex justify-center w-full h-[520px]">
+      <div className="relative w-full max-w-[360px] h-full rounded-[2rem] bg-[#FAFAFC] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-slate-200/60 flex flex-col overflow-hidden font-sans">
+        <div className="h-14 bg-white/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between px-5 shrink-0 z-10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 bg-slate-900 rounded-lg flex items-center justify-center shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-slate-800 tracking-tight">AI Triage</span>
           </div>
+          <span className="text-[10px] font-medium bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+            3 Pending
+          </span>
         </div>
 
-        {/* List of Cards */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          
-          {/* CARD 1 - Animated */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden relative">
-            
-            {/* Standard View (Fades out when processing) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-10 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100/80 overflow-hidden relative">
             <div className={`transition-opacity duration-300 ${step >= 3 ? 'opacity-0 hidden' : 'opacity-100'}`}>
-              <div className="p-3 border-b border-slate-100">
-                <div className="flex justify-between items-start mb-2">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-400 font-medium">Marketplace Prints</span>
-                    <span className="text-xs font-bold text-slate-800">Order #MXP29187</span>
-                  </div>
-                  <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-medium border border-red-100">
+              <div className="p-4 pb-3">
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-[11px] font-medium text-slate-400">Marketplace Prints • #MXP29187</span>
+                  <span className="text-[10px] font-semibold tracking-wide bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md">
                     Modify Order
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-600 leading-snug">
-                  Customer would like to remove the &quot;Canvas Tote&quot; from their order before it ships.
+                <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                  Customer wants to remove the &quot;Canvas Tote&quot; from their order before it ships.
                 </p>
               </div>
               
-              <div className="p-3 bg-gradient-to-b from-blue-50/50 to-blue-50 border-t-2 border-t-blue-100">
+              <div className="p-3 mx-3 mb-3 bg-slate-50 rounded-xl border border-slate-100/60">
                 <div className="flex items-center gap-1.5 mb-2">
-                  <Bot className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Suggested Action</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-[11px] font-semibold text-slate-800">Suggested Action</span>
                 </div>
-                <p className="text-[11px] text-blue-900 mb-3 leading-snug font-medium">
-                  Check if shipped. If not, remove item, issue partial refund, and notify customer.
+                <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                  Check if shipped. If not, remove item, issue $24.00 refund, and notify customer.
                 </p>
                 <div className="flex gap-2">
-                  <button className={`flex-1 py-1.5 rounded-md text-[11px] font-semibold transition-all flex items-center justify-center gap-1
-                    ${step === 2 ? 'bg-blue-700 text-white scale-[0.98]' : 'bg-blue-600 text-white shadow-sm hover:bg-blue-700'}`}>
-                    <Zap className="w-3 h-3" />
+                  <button className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all
+                    ${step === 2 ? 'bg-slate-800 text-white scale-[0.97]' : 'bg-slate-900 text-white shadow-sm hover:bg-slate-800'}`}>
                     Approve & Run
                   </button>
-                  <button className="px-3 py-1.5 bg-white border border-slate-200 rounded-md text-[11px] font-medium text-slate-600 hover:bg-slate-50">
+                  <button className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 shadow-sm">
                     Edit
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Processing / Success State (Fades in) */}
-            <div className={`absolute inset-0 bg-white flex flex-col justify-center items-center p-4 transition-opacity duration-300 
+            <div className={`absolute inset-0 bg-white flex flex-col justify-center items-center p-5 transition-opacity duration-300 
               ${step >= 3 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-              
               {step === 3 && (
-                <div className="flex flex-col items-center justify-center space-y-3">
-                  <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
-                  <div className="flex flex-col items-center">
-                    <span className="text-xs font-bold text-slate-800 mb-1">Agent is working...</span>
-                    <span className="text-[10px] text-slate-500">Checking Shopify fulfillment status...</span>
+                <motion.div 
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center justify-center space-y-4"
+                >
+                  <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                  <div className="text-center">
+                    <div className="text-xs font-semibold text-slate-800">Executing workflow</div>
+                    <div className="text-[11px] text-slate-400 mt-1">Checking fulfillment status...</div>
                   </div>
-                </div>
+                </motion.div>
               )}
-
               {step >= 4 && (
                 <motion.div 
-                  initial={{ scale: 0.8, opacity: 0 }}
+                  initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="flex flex-col items-center text-center w-full"
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className="flex flex-col items-center w-full"
                 >
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mb-2">
-                    <Shield className="w-5 h-5 text-green-600" />
+                  <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center mb-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-500" />
                   </div>
-                  <span className="text-xs font-bold text-slate-800 mb-1">Resolved Successfully</span>
-                  <div className="text-[10px] text-slate-600 bg-slate-50 w-full p-2 rounded border border-slate-100 text-left space-y-1">
-                    <div>✅ Item removed from #MXP29187</div>
-                    <div>✅ $24.00 refunded to original payment</div>
-                    <div>✅ Confirmation email sent</div>
+                  <span className="text-sm font-semibold text-slate-800 mb-4">Resolved Successfully</span>
+                  <div className="w-full space-y-2">
+                    {["Item removed from #MXP29187", "$24.00 refunded to original payment", "Confirmation email sent"].map((txt, i) => (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -5 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 * i }}
+                        key={i} 
+                        className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-lg border border-slate-100"
+                      >
+                        <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                        {txt}
+                      </motion.div>
+                    ))}
                   </div>
                 </motion.div>
               )}
             </div>
-
           </div>
 
-          {/* CARD 2 - Static */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden opacity-90">
-            <div className="p-3 border-b border-slate-100">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-medium">Color Couture</span>
-                  <span className="text-xs font-bold text-slate-800">TikTok Comment</span>
-                </div>
-                <span className="text-[10px] bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-medium border border-orange-100">
-                  Restock Info
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-snug mb-2">
-                User asking &quot;When will the summer dress be back in stock?&quot; Also noted some negative sentiment on the post.
-              </p>
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-100/80 p-4 opacity-90">
+            <div className="flex justify-between items-start mb-3">
+              <span className="text-[11px] font-medium text-slate-400">Color Couture • TikTok</span>
+              <span className="text-[10px] font-semibold tracking-wide bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md">
+                Restock Info
+              </span>
             </div>
-            <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-              <span className="text-[10px] font-medium text-slate-500">AI drafted response ready</span>
-              <button className="px-3 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 shadow-sm">
-                Review Draft
+            <p className="text-sm text-slate-700 leading-relaxed font-medium mb-4">
+              User asking &quot;When will the summer dress be back in stock?&quot;
+            </p>
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100/80">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[11px] font-medium text-slate-500">Draft ready to review</span>
+              </div>
+              <button className="text-xs font-semibold text-slate-900 hover:text-slate-600 transition-colors">
+                View →
               </button>
             </div>
           </div>
-
-          {/* CARD 3 - Static */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden opacity-80">
-            <div className="p-3 border-b border-slate-100">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-medium">Marketplace Prints</span>
-                  <span className="text-xs font-bold text-slate-800">Order #MXP28196</span>
-                </div>
-                <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-medium border border-amber-100">
-                  Return
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-snug">
-                Customer would like to start a return for their recent order.
-              </p>
-            </div>
-            <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-              <span className="text-[10px] font-medium text-slate-500">Action requires approval</span>
-              <button className="px-3 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700 shadow-sm">
-                Review Policy
-              </button>
-            </div>
-          </div>
-
         </div>
 
-        {/* Animated Mouse Cursor */}
         <div 
-          className="absolute z-50 pointer-events-none transition-all duration-800 ease-in-out"
-          style={{
-            top: step >= 1 ? '250px' : '350px',
-            left: step >= 1 ? '200px' : '300px',
-            opacity: step >= 3 ? 0 : 1
-          }}
+          className="absolute z-50 pointer-events-none transition-all duration-[1200ms] ease-out"
+          style={{ top: step >= 1 ? '168px' : '400px', left: step >= 1 ? '110px' : '280px', opacity: step >= 3 ? 0 : 1 }}
         >
-          <Pointer />
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-lg scale-110">
+            <path d="M5.5 3.21V20.8C5.5 21.43 6.24 21.76 6.71 21.34L11.43 17.16H18C18.55 17.16 19 16.71 19 16.16V3.21C19 2.66 18.55 2.21 18 2.21H6.5C5.95 2.21 5.5 2.66 5.5 3.21Z" fill="black"/>
+            <path d="M6 3.21V20.8C6 21.12 6.37 21.28 6.6 21.08L11.23 17H18C18.28 17 18.5 16.78 18.5 16.5V3.21C18.5 2.93 18.28 2.71 18 2.71H6.5C6.22 2.71 6 2.93 6 3.21Z" fill="white"/>
+          </svg>
         </div>
-
       </div>
     </div>
   );
 }
-let respondAnimationPlayed = false;
 
+let respondAnimationPlayed = false;
 const YOU_SAID_TEXT = "Update the address and inform the customer about the changes";
 
 function RespondPreview() {
@@ -357,73 +309,106 @@ function RespondPreview() {
     return () => clearTimeout(timer);
   }, [step]);
 
-  const messages = [
-    {
-      content: (
-        <div className="rounded-xl shadow-xs shadow-pink-200 overflow-hidden">
-          <div className="bg-pink-100 rounded-lg p-3 text-xs">
-            <span className="text-pink-400 font-medium">Support ticket for <span className="text-blue-500 underline">#2849</span>:</span>
-            <p className="mt-1 text-muted-foreground">Customer requested an address change to this address: <br /><br />1234 Main Street<br />Los Angeles, CA 90210</p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      content: (
-        <div className="rounded-xl shadow-xs shadow-blue-200 overflow-hidden">
-          <div className="bg-blue-100 rounded-lg p-3 text-xs">
-            <span className="text-blue-400 font-medium">You said:</span>
-            <p className="mt-1 text-muted-foreground">&quot;{typedText}{showCursor && <span className="inline-block w-[2px] h-3 bg-muted-foreground align-middle ml-[1px] animate-pulse" />}&quot;</p>
-          </div>
-        </div>
-      ),
-    },
-  ];
-
   return (
-    <div className="space-y-4 min-h-[300px]">
-      {messages.map((msg, i) => (
-        <div
-          key={i}
-          className={`transition-all duration-1000 ease-out ${
-            i < step
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-4"
-          }`}
-        >
-          {msg.content}
-        </div>
-      ))}
-
-      <div
-        className={`transition-all duration-1000 ease-out ${
-          step >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
-        }`}
-      >
-        <div className="rounded-xl shadow-xs shadow-green-150 overflow-hidden">
-          <div className="bg-green-50 rounded-lg text-xs border border-green-100 relative">
-
-            <div className={`p-3 transition-opacity duration-700 ease-in-out ${
-              step === 3 ? "opacity-100" : "opacity-0 absolute inset-0"
-            }`}>
-              <div className="flex items-center gap-1.5 py-1">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
+    <div className="flex justify-center w-full h-[460px]">
+      {/* App Window Shell */}
+      <div className="relative w-[340px] h-full rounded-2xl border border-slate-200 bg-slate-50 shadow-xl overflow-hidden flex flex-col font-sans">
+        
+        {/* Header */}
+        <div className="h-12 bg-white border-b border-slate-200 flex items-center px-4 shrink-0 z-10 justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-yellow-400 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-white" />
             </div>
-   
-            <div className={`p-3 transition-opacity duration-700 ease-in-out ${
-              step >= 4 ? "opacity-100" : "opacity-0 absolute inset-0"
-            }`}>
-              <span className="text-green-600 font-medium">clerk Draft → Instagram DM:</span>
-              <p className="mt-1 text-foreground">Hi Sarah! We&apos;ve updated the shipping address for your order #2849 and it will ship to the new address tomorrow. Let us know if you need anything else!</p>
-              <div className="flex gap-2 mt-3">
-                <div className="px-5 py-1.5 bg-green-600 text-background rounded-full text-xs font-medium">Send</div>
-                <div className="px-5 py-1.5 border border-green-600 text-foreground rounded-full text-xs font-medium">Edit</div>
+            <span className="text-sm font-semibold text-slate-800">Agent Chat</span>
+          </div>
+          <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+            Online
+          </span>
+        </div>
+
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          
+          {/* Step 0: System Context (Ticket Reference) */}
+          <div className={`transition-all duration-700 ease-out ${step >= 0 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            <div className="flex flex-col gap-1 items-start">
+              <span className="text-[10px] font-medium text-slate-400 ml-1 uppercase tracking-wider">Context</span>
+              <div className="bg-white border border-slate-200 rounded-xl rounded-tl-sm p-3 shadow-sm max-w-[90%]">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Ticket className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-xs font-semibold text-slate-700">Ticket #2849</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Customer requested an address change to: <br />
+                  <span className="font-medium text-slate-800">1234 Main Street, Los Angeles, CA 90210</span>
+                </p>
               </div>
             </div>
           </div>
+
+          {/* Step 1/2: User Input */}
+          <div className={`transition-all duration-700 ease-out flex justify-end ${step >= 1 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            <div className="bg-slate-800 text-white rounded-xl rounded-tr-sm p-3 shadow-sm max-w-[85%]">
+              <p className="text-[11px] leading-relaxed">
+                {typedText}
+                {showCursor && <span className="inline-block w-[2px] h-3 bg-white align-middle ml-[1px] animate-pulse" />}
+              </p>
+            </div>
+          </div>
+
+          {/* Step 3/4: AI Response & Action */}
+          <div className={`transition-all duration-700 ease-out ${step >= 3 ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}>
+            <div className="flex flex-col gap-1 items-start w-full">
+              <span className="text-[10px] font-medium text-slate-400 ml-1 uppercase tracking-wider flex items-center gap-1">
+                <Bot className="w-3 h-3" /> clerk agent
+              </span>
+              
+              <div className="bg-white border border-slate-200 rounded-xl rounded-tl-sm p-1 shadow-sm w-full relative overflow-hidden">
+                
+                {/* Thinking State */}
+                <div className={`p-3 transition-opacity duration-500 ease-in-out ${step === 3 ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"}`}>
+                   <div className="flex items-center gap-1.5 py-1">
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+
+                {/* Draft Ready State */}
+                <div className={`transition-opacity duration-500 ease-in-out flex flex-col ${step >= 4 ? "opacity-100" : "opacity-0 absolute inset-0 pointer-events-none"}`}>
+                  
+                  {/* Routing Header */}
+                  <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border-b border-slate-100 rounded-t-lg">
+                    <span className="text-[10px] font-bold text-slate-500">Drafted Reply</span>
+                    <ArrowRight className="w-3 h-3 text-slate-400" />
+                    <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded border border-pink-100">
+                      Instagram DM
+                    </span>
+                  </div>
+
+                  {/* Message Content */}
+                  <div className="p-3">
+                    <p className="text-[11px] text-slate-700 leading-relaxed mb-3">
+                      Hi Sarah! We&apos;ve updated the shipping address for your order #2849 and it will ship to the new address tomorrow. Let us know if you need anything else!
+                    </p>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <button className="flex-1 py-1.5 bg-foreground text-background rounded-md text-[11px] font-medium hover:bg-foreground/90 transition-colors flex items-center justify-center gap-1.5">
+                        <Zap className="w-3 h-3" /> Approve & Send
+                      </button>
+                      <button className="px-4 py-1.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 rounded-md text-[11px] font-medium transition-colors">
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -431,37 +416,79 @@ function RespondPreview() {
 }
 
 function IntegrationsPreview() {
+  const channels = [
+    { name: "Instagram DM", icon: "/logos/instagram-logo.png", status: "Connected & Syncing", toggle: true },
+    { name: "TikTok Shop", icon: "/logos/tiktok-logo.png", status: "Connected & Syncing", toggle: true },
+    { name: "Shopify Inbox", icon: "/logos/shopify-inbox.png", status: "Connected & Syncing", toggle: true },
+    { name: "Gmail Support", icon: "/logos/gmail.png", status: "Connected & Syncing", toggle: true },
+  ];
+
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b bg-slate-50">
-        <Plug className="w-4 h-4 text-purple-600" />
-        <span className="text-xs font-medium text-muted-foreground">Connected Channels</span>
-      </div>
-      <div className="p-4 grid grid-cols-2 gap-3">
-        {[
-          { name: "Instagram", icon: MessageCircle, color: "text-pink-500 bg-pink-50", connected: true },
-          { name: "TikTok", icon: MessageCircle, color: "text-slate-900 bg-slate-100", connected: true },
-          { name: "Shopify Inbox", icon: ShoppingBag, color: "text-green-600 bg-green-50", connected: true },
-          { name: "Email", icon: Mail, color: "text-red-500 bg-red-50", connected: true },
-        ].map((ch) => (
-          <div key={ch.name} className="flex items-center gap-2 rounded-lg border p-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${ch.color}`}>
-              <ch.icon className="w-4 h-4" />
+    <div className="flex justify-center w-full h-[460px]">
+      {/* App Window Shell */}
+      <div className="relative w-[340px] h-full rounded-2xl border border-slate-200 bg-slate-50 shadow-xl overflow-hidden flex flex-col font-sans">
+        
+        {/* Header */}
+        <div className="h-12 bg-white border-b border-slate-200 flex items-center px-4 shrink-0 z-10 justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-yellow-400 flex items-center justify-center shadow-sm">
+              <Settings2 className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <div className="text-xs font-medium">{ch.name}</div>
-              <div className={`text-[10px] ${ch.connected ? "text-green-600" : "text-muted-foreground"}`}>
-                {ch.connected ? "Connected" : "Connect →"}
-              </div>
-            </div>
+            <span className="text-sm font-semibold text-slate-800">Settings</span>
           </div>
-        ))}
+          <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+            4 Active
+          </span>
+        </div>
+
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          
+          <div className="mb-4">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Channels</h4>
+            <p className="text-xs text-slate-800 font-semibold">Manage your linked platforms</p>
+          </div>
+
+          {/* Channel Cards */}
+          <div className="space-y-2.5">
+            {channels.map((ch) => (
+              <div 
+                key={ch.name} 
+                className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-3 shadow-sm group hover:border-slate-300 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                    <Image src={ch.icon} alt={ch.name} width={20} height={20} className="object-contain" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-800">{ch.name}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.5)]" />
+                      <span className="text-[10px] text-slate-500">{ch.status}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Custom Toggle Switch */}
+                <div className={`w-8 h-4.5 rounded-full ${ch.toggle ? "bg-yellow-400" : "bg-slate-200"} relative cursor-pointer shadow-inner`}>
+                  <div className={`absolute top-[2px] w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all ${ch.toggle ? "right-[2px]" : "left-[2px]"}`} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add New Button */}
+          <div className="pt-2">
+            <button className="w-full py-3 border-2 border-dashed border-slate-200 bg-slate-50/50 rounded-xl text-xs font-semibold text-slate-500 hover:bg-white hover:border-slate-300 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5">
+              <Plus className="w-4 h-4" /> Connect New Channel
+            </button>
+          </div>
+          
+        </div>
       </div>
     </div>
   );
 }
-
-
 const previewComponents: Record<string, React.FC> = {
   inbox: InboxPreview,
   summary: SummaryPreview,
@@ -470,136 +497,104 @@ const previewComponents: Record<string, React.FC> = {
 };
 
 export function Features() {
-  const [activeTab, setActiveTab] = useState("inbox");
-  const activeFeature = tabs.find((t) => t.id === activeTab)!;
-  const PreviewComponent = previewComponents[activeFeature.preview];
+  const [activeIndex, setActiveIndex] = useState(0);
 
   return (
-    <section id="features" className="relative z-10 w-full py-14">
-      <div className="container mx-auto px-4 md:px-6">
+    <section id="features" className="relative z-10 w-full py-14 bg-background">
+      <div className="container mx-auto px-4 md:px-6 max-w-6xl">
         {/* Section heading */}
-        <h2 className="text-center text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-12">
+        <h2 className="text-center text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-16 md:mb-24">
           Everything you need in one place
         </h2>
 
-        {/* Tab bar */}
-        <div className="flex items-center justify-center mb-10">
-          <div className="inline-flex items-center gap-0.5 sm:gap-1 bg-gray-100 rounded-full p-1 mx-4">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`relative text-[11px] sm:text-sm font-medium rounded-full px-2 sm:px-5 py-1.5 sm:py-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {activeTab === tab.id && (
-                  <motion.span
-                    layoutId="activeTabPill"
-                    className="absolute inset-0 bg-white rounded-full shadow-sm"
-                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                  />
-                )}
-                <span className="relative z-10">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Feature panel */}
-        <div className="max-w-6xl mx-auto">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.35, ease: "easeInOut" }}
-              className={`rounded-3xl ${activeFeature.bgClass} p-8 md:p-12 lg:p-16`}
-            >
-              <div className="grid md:grid-cols-2 gap-10 md:gap-14 items-center">
-                {/* Left: preview */}
-                <motion.div
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.45, delay: 0.1, ease: "easeOut" }}
-                  className="flex items-center justify-center"
-                >
-                  <PreviewComponent />
-                </motion.div>
-
-                {/* Right: text content */}
-                <div className="flex flex-col">
-                  {/* Category label */}
-                  <motion.span
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.05 }}
-                    className={`text-xs font-semibold tracking-widest uppercase ${activeFeature.categoryColor} mb-4`}
+        <div className="flex flex-col md:flex-row gap-12 lg:gap-20 items-start">
+          
+          {/* Desktop Left Side: Sticky Visual Pane */}
+          {/* Hides on mobile (hidden md:flex), stays sticky on desktop */}
+          <div className="hidden md:flex w-full md:w-1/2 sticky top-24 h-[600px] items-center justify-center rounded-3xl overflow-hidden transition-colors duration-500">
+            <AnimatePresence mode="wait">
+              {features.map((feature, index) => {
+                if (index !== activeIndex) return null;
+                const PreviewComponent = previewComponents[feature.preview];
+                return (
+                  <motion.div
+                    key={feature.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.05 }}
+                    transition={{ duration: 0.4, ease: "easeInOut" }}
+                    className={`absolute inset-0 flex items-center justify-center p-6 sm:p-10 ${feature.bgClass}`}
                   >
-                    {activeFeature.category}
-                  </motion.span>
+                    <PreviewComponent />
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+
+          {/* Right Side: Text & Mobile Graphics */}
+          <div className="w-full md:w-1/2 pb-12 md:pb-[50vh]">
+            {features.map((feature, index) => {
+              const isActive = index === activeIndex;
+              const MobilePreviewComponent = previewComponents[feature.preview];
+              
+              return (
+                <motion.div
+                  key={feature.id}
+                  // Detects scroll position to trigger desktop graphics
+                  onViewportEnter={() => setActiveIndex(index)}
+                  viewport={{ margin: "-45% 0px -45% 0px" }} 
+                  className={`
+                    flex flex-col justify-center transition-all duration-500
+                    mb-24 md:mb-0 md:min-h-[80vh]
+                    ${isActive ? "md:opacity-100 md:translate-x-0" : "md:opacity-30 md:-translate-x-4"}
+                  `}
+                >
+                  
+                  {/* Mobile Preview Block */}
+                  {/* Only shows on mobile (< md), creates the standard stacked layout */}
+                  <div className={`md:hidden w-full h-[500px] sm:h-[550px] mb-8 rounded-3xl flex items-center justify-center p-4 relative overflow-hidden ${feature.bgClass}`}>
+                    <MobilePreviewComponent />
+                  </div>
+
+                  {/* Category label */}
+                  <span className={`text-xs font-semibold tracking-widest uppercase ${feature.categoryColor} mb-4`}>
+                    {feature.category}
+                  </span>
 
                   {/* Heading */}
-                  <motion.h3
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 }}
-                    className="text-3xl sm:text-4xl lg:text-[2.75rem] font-bold tracking-tight text-foreground leading-tight whitespace-pre-line"
-                  >
-                    {activeFeature.title}
-                  </motion.h3>
+                  <h3 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-tight whitespace-pre-line">
+                    {feature.title}
+                  </h3>
 
                   {/* Description */}
-                  <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.15 }}
-                    className="mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed"
-                  >
-                    {activeFeature.description}
-                  </motion.p>
+                  <p className="mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed max-w-md">
+                    {feature.description}
+                  </p>
 
                   {/* Sub-features 2×2 grid */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3, delay: 0.25 }}
-                    className="grid grid-cols-2 gap-x-6 gap-y-4 mt-8"
-                  >
-                    {activeFeature.subFeatures.map((sf, i) => (
-                      <motion.div
-                        key={sf.label}
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: 0.3 + i * 0.06 }}
-                        className="flex items-center gap-2.5"
-                      >
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-8 max-w-md">
+                    {feature.subFeatures.map((sf) => (
+                      <div key={sf.label} className="flex items-center gap-2.5">
                         <sf.icon className="w-5 h-5 text-foreground/70 shrink-0" />
                         <span className="text-sm font-medium text-foreground">
                           {sf.label}
                         </span>
-                      </motion.div>
+                      </div>
                     ))}
-                  </motion.div>
+                  </div>
 
                   {/* CTA */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.45 }}
-                    className="mt-8"
-                  >
-                    <button className="px-6 py-2.5 bg-foreground text-background rounded-full text-sm font-medium hover:opacity-90 transition-opacity">
+                  <div className="mt-10">
+                    <button className="px-6 py-3 bg-foreground text-background rounded-full text-sm font-medium hover:opacity-90 transition-opacity shadow-sm">
                       Learn more
                     </button>
-                  </motion.div>
-                </div>
-              </div>
-            </motion.div>
-          </AnimatePresence>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+
         </div>
       </div>
     </section>

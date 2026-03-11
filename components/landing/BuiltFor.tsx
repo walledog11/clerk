@@ -382,7 +382,7 @@ export function BuiltFor() {
   ];
 
   return (
-    <section ref={sectionRef} className="relative z-10 w-full py-24 overflow-hidden">
+    <section ref={sectionRef} className="relative z-10 w-full py-24 overflow-hidde bg-white">
       <div className="container mx-auto px-4 md:px-6">
         {/* ---- Header row ---- */}
         <div className="flex flex-col sm:flex-row items-start sm:items-end justify-center mb-16 gap-4">

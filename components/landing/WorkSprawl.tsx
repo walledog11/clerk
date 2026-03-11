@@ -3,277 +3,212 @@
 import { useRef } from "react";
 import { motion, useInView } from "motion/react";
 import Image from "next/image";
-
-/* ------------------------------------------------------------------ */
-/*  SVG Tangle Graphics                                                */
-/* ------------------------------------------------------------------ */
-
-function Tangle1() {
-  return (
-    <svg viewBox="0 0 240 200" fill="none" className="w-full h-full">
-      <defs>
-        <filter id="ts1">
-          <feDropShadow dx="0" dy="3" stdDeviation="5" floodOpacity="0.08" />
-        </filter>
-        <linearGradient id="rg1" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#eaeaec" />
-          <stop offset="100%" stopColor="#d0d0d5" />
-        </linearGradient>
-      </defs>
-      <g filter="url(#ts1)">
-        <path
-          d="M40,100 C40,50 80,20 120,55 C160,90 90,125 65,100 C40,75 95,35 135,60 C175,85 135,135 95,118 C55,101 75,55 115,65"
-          stroke="url(#rg1)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M55,115 C85,70 145,55 160,95 C175,135 120,145 85,120"
-          stroke="url(#rg1)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M105,40 C140,50 165,85 145,115 C125,145 80,130 75,100"
-          stroke="url(#rg1)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-      </g>
-    </svg>
-  );
-}
-
-function Tangle2() {
-  return (
-    <svg viewBox="0 0 240 200" fill="none" className="w-full h-full">
-      <defs>
-        <filter id="ts2">
-          <feDropShadow dx="0" dy="3" stdDeviation="5" floodOpacity="0.08" />
-        </filter>
-        <linearGradient id="rg2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#eaeaec" />
-          <stop offset="100%" stopColor="#d0d0d5" />
-        </linearGradient>
-      </defs>
-      <g filter="url(#ts2)">
-        <path
-          d="M50,90 C80,30 160,25 175,80 C190,135 110,155 65,125 C20,95 85,40 140,60 C195,80 155,145 100,135"
-          stroke="url(#rg2)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M70,70 C100,45 155,50 165,90 C175,130 125,140 90,115 C55,90 90,55 130,75"
-          stroke="url(#rg2)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M100,45 C130,35 170,60 160,100 C150,140 100,145 80,115"
-          stroke="url(#rg2)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-      </g>
-    </svg>
-  );
-}
-
-function Tangle3() {
-  return (
-    <svg viewBox="0 0 240 200" fill="none" className="w-full h-full">
-      <defs>
-        <filter id="ts3">
-          <feDropShadow dx="0" dy="3" stdDeviation="5" floodOpacity="0.08" />
-        </filter>
-        <linearGradient id="rg3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#eaeaec" />
-          <stop offset="100%" stopColor="#d0d0d5" />
-        </linearGradient>
-      </defs>
-      <g filter="url(#ts3)">
-        <path
-          d="M35,85 C55,30 135,15 165,60 C195,105 140,145 90,130 C40,115 60,65 115,55 C170,45 200,95 170,125"
-          stroke="url(#rg3)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M60,120 C30,85 65,45 115,50 C165,55 185,100 150,130 C115,160 65,145 55,110"
-          stroke="url(#rg3)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-        <path
-          d="M130,40 C160,55 180,90 155,120 C130,150 80,140 65,110 C50,80 80,50 120,55"
-          stroke="url(#rg3)" strokeWidth="18" strokeLinecap="round" strokeLinejoin="round"
-        />
-      </g>
-    </svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Floating App Icon                                                  */
-/* ------------------------------------------------------------------ */
-
-function FloatingIcon({
-  src,
-  alt,
-  className,
-}: {
-  src: string;
-  alt: string;
-  className: string;
-}) {
-  return (
-    <div
-      className={`absolute w-9 h-9 rounded-xl bg-white shadow-md border border-slate-100 flex items-center justify-center ${className}`}
-    >
-      <Image src={src} alt={alt} width={20} height={20} className="object-contain" />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Small decorative icon (for the middle tangle)                      */
-/* ------------------------------------------------------------------ */
-
-function DecorIcon({
-  children,
-  className,
-  round = false,
-}: {
-  children: React.ReactNode;
-  className: string;
-  round?: boolean;
-}) {
-  return (
-    <div
-      className={`absolute w-9 h-9 ${
-        round ? "rounded-full" : "rounded-xl"
-      } bg-white shadow-md border border-slate-100 flex items-center justify-center ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Speech Bubble                                                      */
-/* ------------------------------------------------------------------ */
-
-function SpeechBubble({ text, className }: { text: string; className: string }) {
-  return (
-    <div
-      className={`absolute bg-white rounded-lg shadow-md border border-slate-100 px-3 py-1.5 text-xs text-muted-foreground whitespace-nowrap ${className}`}
-    >
-      {text}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Main Component                                                     */
-/* ------------------------------------------------------------------ */
+import { Search, Loader2, ArrowRight } from "lucide-react";
 
 export function WorkSprawl() {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section ref={ref} className="relative z-10 w-full py-20 md:py-28 bg-white overflow-hidden">
+    <section ref={ref} className="relative z-10 w-full py-24 md:py-32 bg-white overflow-hidden">
       <div className="container mx-auto px-4 md:px-6">
+        
         {/* ── Headline ── */}
         <motion.div
-          className="text-center max-w-4xl mx-auto mb-16 md:mb-24"
+          className="text-center max-w-3xl mx-auto mb-16 md:mb-24"
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
         >
           <h2 className="text-3xl md:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight leading-[1.1] text-foreground">
-            60% of work is lost in context
-            <br />
-            <span className="text-muted-foreground">– and AI is lost without it.</span>
+            Customer support shouldn&apos;t be a
+            <br className="hidden md:block" />
+            <span className="text-muted-foreground"> full-time job.</span>
           </h2>
-          <p className="mt-5 text-lg md:text-xl text-muted-foreground">
-            Work Sprawl is killing context and destroying productivity.
+          <p className="mt-6 text-lg md:text-xl text-muted-foreground leading-relaxed">
+            As your e-commerce brand grows, keeping up with customers becomes a nightmare. 
+            You&apos;re losing time to the chaos instead of growing your business.
           </p>
         </motion.div>
 
-        {/* ── Three tangled sections ── */}
+        {/* ── Three Pain Point Cards ── */}
         <div className="relative max-w-6xl mx-auto">
-          {/* Connecting line (desktop) */}
-          <div className="hidden md:block absolute top-[38%] left-[12%] right-[12%] h-[4px] rounded-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-6 lg:gap-10">
-            {/* ─── Context Switching ─── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10">
+            
+            {/* Pain Point 1: Scattered Channels */}
             <motion.div
-              className="flex flex-col items-center text-center"
+              className="group flex flex-col bg-white rounded-[2.5rem] border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
               initial={{ opacity: 0, y: 40 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.15 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
             >
-              <div className="relative w-60 h-52 mb-6">
-                <Tangle1 />
-                <FloatingIcon src="/logos/instagram-logo.png" alt="Instagram" className="top-0 left-2" />
-                <FloatingIcon src="/logos/shopify-inbox.png" alt="Shopify Inbox" className="-top-1 right-6" />
-                <FloatingIcon src="/logos/tiktok-logo.png" alt="TikTok" className="bottom-4 left-0" />
-                <FloatingIcon src="/logos/gmail.png" alt="Email" className="bottom-6 right-2" />
+              {/* Eye-catching Graphic Area */}
+              <div className="h-56 relative bg-slate-50/50 overflow-hidden border-b border-slate-100/80">
+                {/* Glowing background blob */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-rose-400/20 rounded-full blur-3xl" />
+                
+                {/* Floating Notification Pills */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  
+                  {/* IG Notification */}
+                  <motion.div 
+                    animate={{ y: [-5, 5, -5], rotate: [-2, 2, -2] }} 
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+                    className="absolute -top-2 left-6 bg-white/90 backdrop-blur-md px-3 py-2 rounded-2xl shadow-lg border border-slate-200/60 flex items-center gap-3 z-20"
+                  >
+                    <Image src="/logos/instagram-logo.png" alt="IG" width={20} height={20} className="object-contain" />
+                    <div className="flex flex-col gap-1">
+                      <div className="w-16 h-1.5 bg-slate-200 rounded-full" />
+                      <div className="w-10 h-1.5 bg-slate-100 rounded-full" />
+                    </div>
+                    <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                      3
+                    </div>
+                  </motion.div>
+
+                  {/* TikTok Notification */}
+                  <motion.div 
+                    animate={{ y: [5, -5, 5], rotate: [1, -1, 1] }} 
+                    transition={{ repeat: Infinity, duration: 5, ease: "easeInOut", delay: 1 }}
+                    className="absolute bottom-6 right-4 bg-white/90 backdrop-blur-md px-3 py-2 rounded-2xl shadow-lg border border-slate-200/60 flex items-center gap-3 z-10"
+                  >
+                    <Image src="/logos/tiktok-logo.png" alt="TikTok" width={20} height={20} className="object-contain" />
+                    <div className="flex flex-col gap-1">
+                      <div className="w-12 h-1.5 bg-slate-200 rounded-full" />
+                      <div className="w-14 h-1.5 bg-slate-100 rounded-full" />
+                    </div>
+                    <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                      7
+                    </div>
+                  </motion.div>
+
+                  {/* Email Notification */}
+                  <motion.div 
+                    animate={{ y: [0, -8, 0], scale: [1, 1.02, 1] }} 
+                    transition={{ repeat: Infinity, duration: 4.5, ease: "easeInOut", delay: 0.5 }}
+                    className="absolute top-14 right-8 w-12 h-12 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200/60 flex items-center justify-center z-0"
+                  >
+                    <Image src="/logos/gmail.png" alt="Email" width={24} height={24} className="object-contain" />
+                    <div className="absolute top-0 -right-1 w-3 h-3 bg-rose-500 rounded-full border-2 border-white" />
+                  </motion.div>
+
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Context Switching</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
-                Digital fatigue reduces employee
-                <br />
-                performance by up to <span className="font-bold text-foreground">32%</span>
-              </p>
+              
+              {/* Text Area */}
+              <div className="p-8">
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Scattered Channels</h3>
+                <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                  Messages are slipping through the cracks. Bouncing between Instagram DMs, TikTok comments, and emails means missed requests and angry customers.
+                </p>
+              </div>
             </motion.div>
 
-            {/* ─── Context Missing ─── */}
+            {/* Pain Point 2: Digging for Context */}
             <motion.div
-              className="flex flex-col items-center text-center"
+              className="group flex flex-col bg-white rounded-[2.5rem] border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
+              initial={{ opacity: 0, y: 40 }}
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
+              {/* Eye-catching Graphic Area */}
+              <div className="h-56 relative bg-slate-50/50 overflow-hidden border-b border-slate-100/80 flex items-center justify-center">
+                {/* Glowing background blob */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-blue-400/20 rounded-full blur-3xl" />
+                
+                {/* Mini Dashboard Mockup */}
+                <div className="relative w-48 h-32 bg-white rounded-xl shadow-lg border border-slate-200/60 p-3 flex flex-col gap-2 z-10">
+                  {/* Search bar skeleton */}
+                  <div className="w-full bg-slate-50 rounded-md border border-slate-100 p-1.5 flex items-center gap-2">
+                    <Search className="w-3 h-3 text-slate-400" />
+                    <div className="w-20 h-1.5 bg-slate-200 rounded-full" />
+                  </div>
+                  {/* Results skeleton */}
+                  <div className="w-full flex-1 border border-slate-100 rounded-md border-dashed flex flex-col items-center justify-center gap-2 bg-slate-50/50">
+                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                    <div className="w-16 h-1.5 bg-slate-200 rounded-full" />
+                  </div>
+                </div>
+
+                {/* Animated Scanner line */}
+                <motion.div 
+                  animate={{ top: ["10%", "80%", "10%"] }}
+                  transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                  className="absolute left-1/2 -translate-x-1/2 w-56 h-8 bg-gradient-to-b from-blue-400/0 via-blue-400/20 to-blue-400/0 z-20 pointer-events-none"
+                >
+                  <div className="w-full h-[1px] bg-blue-400/50 shadow-[0_0_8px_rgba(96,165,250,0.8)]" />
+                </motion.div>
+              </div>
+
+              {/* Text Area */}
+              <div className="p-8">
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Digging for Orders</h3>
+                <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                  Every &quot;Where is my package?&quot; forces you to leave the chat, log into Shopify, hunt down the tracking number, and paste it back.
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Pain Point 3: The Time Sink */}
+            <motion.div
+              className="group flex flex-col bg-white rounded-[2.5rem] border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-500 overflow-hidden"
               initial={{ opacity: 0, y: 40 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.6, delay: 0.3 }}
             >
-              <div className="relative w-60 h-52 mb-6">
-                <Tangle2 />
-                {/* Sparkle / AI-style icons */}
-                <DecorIcon className="top-0 left-[42%]" round>
-                  <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74z" />
-                  </svg>
-                </DecorIcon>
-                <DecorIcon className="top-14 -right-1" round>
-                  <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-                  </svg>
-                </DecorIcon>
-                <DecorIcon className="bottom-2 left-10" round>
-                  <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 3c-1.5 4-4.5 7-9 7 4.5 0 7.5 3 9 7 1.5-4 4.5-7 9-7-4.5 0-7.5-3-9-7z" />
-                  </svg>
-                </DecorIcon>
-                <DecorIcon className="bottom-8 right-4" round>
-                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M9 12l2 2 4-4m6 2a10 10 0 11-20 0 10 10 0 0120 0z" />
-                  </svg>
-                </DecorIcon>
+              {/* Eye-catching Graphic Area */}
+              <div className="h-56 relative bg-slate-50/50 overflow-hidden border-b border-slate-100/80 flex items-center justify-center">
+                {/* Glowing background blob */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-amber-400/20 rounded-full blur-3xl" />
+                
+                {/* Chat Bubble Animations */}
+                <div className="relative w-full h-full flex flex-col justify-center items-center gap-3">
+                  
+                  {/* Customer Bubble */}
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: [0, 1, 1, 0], y: [10, 0, -10, -20] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut", times: [0, 0.2, 0.8, 1] }}
+                    className="bg-white px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-md border border-slate-100 flex items-center gap-2 z-10 mr-12"
+                  >
+                    <div className="w-20 h-2 bg-slate-200 rounded-full" />
+                  </motion.div>
+
+                  {/* "You" Typing Bubble */}
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: [0, 0, 1, 1], y: [10, 10, 0, -10] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "easeInOut", times: [0, 0.3, 0.5, 1] }}
+                    className="bg-slate-900 px-4 py-3 rounded-2xl rounded-br-sm shadow-md ml-12 flex items-center justify-center gap-1 z-20"
+                  >
+                    {/* Animated Typing Dots */}
+                    <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: 0 }} className="w-1.5 h-1.5 bg-white/80 rounded-full" />
+                    <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: 0.15 }} className="w-1.5 h-1.5 bg-white/80 rounded-full" />
+                    <motion.div animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.8, delay: 0.3 }} className="w-1.5 h-1.5 bg-white/80 rounded-full" />
+                  </motion.div>
+
+                </div>
+
+                {/* Overlaid Time Pill */}
+                <motion.div 
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md text-[10px] font-bold text-slate-700 px-3 py-1.5 rounded-full border border-slate-200/60 shadow-lg flex items-center gap-1.5 z-30"
+                >
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                  2 hrs / day wasted
+                </motion.div>
               </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Context Missing</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
-                <span className="font-bold text-foreground">96% of companies fail</span>
-                <br />
-                in AI value &amp; adoption
-              </p>
+
+              {/* Text Area */}
+              <div className="p-8">
+                <h3 className="text-xl font-bold text-slate-900 mb-3">Endless Manual Typing</h3>
+                <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                  You&apos;re wasting hours writing the exact same polite responses and issuing routine refunds instead of focusing on actual business operations.
+                </p>
+              </div>
             </motion.div>
 
-            {/* ─── Context Stitching ─── */}
-            <motion.div
-              className="flex flex-col items-center text-center"
-              initial={{ opacity: 0, y: 40 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.6, delay: 0.45 }}
-            >
-              <div className="relative w-60 h-52 mb-6">
-                <Tangle3 />
-                <SpeechBubble text="Where&rsquo;s that..." className="-top-1 right-0" />
-                <SpeechBubble text="Who can help with..." className="top-14 -right-6" />
-                <SpeechBubble text="Is this accurate?" className="bottom-8 -right-2" />
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-2">Context Stitching</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-[240px]">
-                <span className="font-bold text-foreground">2.5 hours daily</span> wasted
-                <br />
-                searching &amp; stitching context
-              </p>
-            </motion.div>
           </div>
         </div>
       </div>

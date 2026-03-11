@@ -1,68 +1,70 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Smartphone, Settings2, Bot } from "lucide-react";
-import Image from "next/image";
-import HeroGraphic from "@/components/ui/heroGraphic"
+import { ChevronRight } from "lucide-react";
+import HeroGraphic from "@/components/ui/heroGraphic";
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden w-full pt-6 pb-10 md:pb-32 md:pt-10">
-      <div className="container relative z-10 mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+    <section className="relative overflow-hidden w-full pt-28 md:pt-36 lg:pt-32 pb-16 md:pb-24">
+      {/* Subtle Background Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-20 pointer-events-none blur-[100px] bg-gradient-to-b from-yellow-400 to-transparent z-0" />
+
+      <div className="container relative z-10 mx-auto px-4 md:px-6 max-w-7xl">
+        {/* Adjusted gaps for better medium-screen breathing room */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-10 xl:gap-16 items-center">
+          
           {/* Left side – Text */}
-          <div className="flex flex-col gap-6 items-center lg:items-start">
-            <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl 2xl:text-5xl leading-[1.05] text-center lg:text-5xl lg:text-left">
-              The only customer service employee you&apos;ll need.
+          <div className="flex flex-col items-center text-center lg:items-start lg:text-left gap-6 lg:gap-8">
+            
+            <div className="inline-flex items-center rounded-full border border-yellow-200 bg-yellow-50/50 backdrop-blur-sm px-3 py-1.5 text-xs sm:text-sm font-medium text-yellow-800 shadow-sm transition-colors hover:bg-yellow-100">
+              <span className="flex h-2 w-2 rounded-full bg-yellow-500 mr-2 shadow-[0_0_8px_rgba(234,179,8,0.8)]"></span>
+              Meet your new AI Support Agent
+              <ChevronRight className="ml-1 h-3.5 w-3.5 text-yellow-600" />
+            </div>
+
+            {/* Main Headline - SCALED for exact breakpoints */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-5xl xl:text-6xl 2xl:text-7xl font-extrabold tracking-tighter text-foreground leading-[1.05] max-w-2xl">
+              The only customer support employee you&apos;ll need.
             </h1>
 
-            <p className="max-w-xl text-xl text-muted-foreground leading-relaxed text-center lg:text-left">
-              Never miss a support ticket again. Respond to customers faster and
-              automate tasks. Powered by agentic AI.
+            {/* Subtitle */}
+            <p className="max-w-[540px] text-base sm:text-lg md:text-xl lg:text-lg xl:text-xl text-muted-foreground leading-relaxed">
+              Never miss a support ticket again. Consolidate every channel, automate repetitive tasks, and resolve issues in seconds with agentic AI.
             </p>
 
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-md justify-center lg:justify-start font-bold">
-              <span className="inline-flex items-center gap-1.5 text-yellow-400">
-                <Smartphone className="size-4 text-yellow-400" /> Consolidate support channels
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-yellow-400">
-                <Settings2 className="size-4 text-yellow-400" /> Automate common requests
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-yellow-400">
-                <Bot className="size-4 text-yellow-400" /> Agent learns about your store
-              </span>
+            {/* CTA Group */}
+            <div className="flex flex-col w-full sm:w-auto items-center lg:items-start gap-3 mt-2">
+              <div className="flex flex-col sm:flex-row w-full gap-3">
+                <Button
+                  size="lg"
+                  className="h-12 px-8 text-base font-semibold rounded-full shadow-lg hover:shadow-xl transition-all"
+                  asChild
+                >
+                  <Link href="/signup">Get started free</Link>
+                </Button>
+                
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-12 px-8 text-base font-semibold rounded-full bg-white/50 backdrop-blur-sm border-slate-200 hover:bg-slate-50 transition-all"
+                  asChild
+                >
+                  <Link href="#how-it-works">See how it works</Link>
+                </Button>
+              </div>
+              
+              <p className="text-xs font-medium text-slate-400 mt-2">
+                No credit card required &middot; Setup in 5 minutes
+              </p>
             </div>
 
-            <div className="hidden lg:flex items-center justify-center gap-4 mt-2">
-              <Button
-                size="lg"
-                className="text-lg h-14 px-10 rounded-full"
-                asChild
-              >
-                <Link href="/signup">Get started free</Link>
-              </Button>
-
-              <span className="-rotate-3 ml-4 hover:rotate-3 transition duration-300 ease-in-out">
-                  <Image src="/images/no-credit-card-required.png" alt="No-credit-card-required" width={150} height={150} />
-              </span>
-            </div>
           </div>
 
-          <HeroGraphic />
-
-          {/* Mobile-only CTA below graphic */}
-          <div className="flex lg:hidden items-center justify-center gap-4 mt-2">
-            <Button
-              size="lg"
-              className="text-lg h-14 px-10 rounded-full"
-              asChild
-            >
-              <Link href="/signup">Get started free</Link>
-            </Button>
-
-            <span className="-rotate-3 hover:rotate-3 transition duration-300 ease-in-out">
-              <Image src="/images/no-credit-card-required.png" alt="No-credit-card-required" width={150} height={150} />
-            </span>
+          {/* Right side - Graphic */}
+          <div className="w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-full mx-auto">
+            <HeroGraphic />
           </div>
+
         </div>
       </div>
     </section>
