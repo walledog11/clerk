@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import { ArrowLeft } from "lucide-react"
 
 // --- MOCK DATA ---
 const MOCK_TICKETS = [
@@ -61,7 +62,8 @@ const FILTERS = ["All", "Shopify", "Instagram", "TikTok", "Gmail"]
 
 export default function InteractiveTicketsPage() {
   const [activeFilter, setActiveFilter] = useState("All")
-  const [activeTicketId, setActiveTicketId] = useState<string | null>(MOCK_TICKETS[0].id)
+  // Start with null so mobile users see the list first
+  const [activeTicketId, setActiveTicketId] = useState<string | null>(null) 
   const [replyText, setReplyText] = useState("")
 
   // Filter tickets based on the selected platform badge
@@ -77,10 +79,14 @@ export default function InteractiveTicketsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-full overflow-hidden bg-background">
+    // Using an absolute min-height ensures it doesn't get crushed by the parent's padding
+    <div className="flex h-full min-h-[600px] w-full overflow-hidden bg-background rounded-xl border">
       
-      {/* LEFT/MIDDLE COLUMN: Ticket List */}
-      <div className="w-1/3 min-w-[320px] max-w-[420px] border-r flex flex-col">
+      {/* LEFT COLUMN: Ticket List (Hidden on mobile if a ticket is selected) */}
+      <div className={`
+        w-full md:w-1/3 md:min-w-[320px] md:max-w-[420px] border-r flex-col
+        ${activeTicketId ? 'hidden md:flex' : 'flex'}
+      `}>
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold mb-4">Unified Inbox</h2>
           
@@ -138,24 +144,38 @@ export default function InteractiveTicketsPage() {
         </div>
       </div>
 
-      {/* RIGHT PANE: Conversation & AI Workspace */}
-      <div className="flex-1 flex flex-col bg-muted/10">
+      {/* RIGHT PANE: Conversation & AI Workspace (Hidden on mobile if NO ticket is selected) */}
+      <div className={`
+        flex-1 flex-col bg-muted/10 
+        ${!activeTicketId ? 'hidden md:flex' : 'flex'}
+      `}>
         {activeTicket ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 border-b flex items-center justify-between px-6 bg-background">
-              <div>
-                <h3 className="font-semibold">{activeTicket.customer}</h3>
-                <p className="text-xs text-muted-foreground">{activeTicket.platform} Message</p>
+            <div className="h-16 border-b flex items-center justify-between px-4 md:px-6 bg-background">
+              <div className="flex items-center gap-3">
+                {/* Mobile Back Button */}
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="md:hidden shrink-0 -ml-2" 
+                  onClick={() => setActiveTicketId(null)}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <div>
+                  <h3 className="font-semibold">{activeTicket.customer}</h3>
+                  <p className="text-xs text-muted-foreground">{activeTicket.platform} Message</p>
+                </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm">Snooze</Button>
+                <Button variant="outline" size="sm" className="hidden sm:flex">Snooze</Button>
                 <Button size="sm">Mark Resolved</Button>
               </div>
             </div>
 
             {/* Chat Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
               
               {/* Clerk AI Summary */}
               <Card className="bg-blue-50/50 border-blue-200">
@@ -175,7 +195,7 @@ export default function InteractiveTicketsPage() {
               <div className="space-y-4">
                 {activeTicket.messages.map((msg, i) => (
                   <div key={i} className={`flex flex-col gap-1 ${msg.sender === 'agent' ? 'items-end' : 'items-start'}`}>
-                    <div className={`p-3 text-sm max-w-[80%] shadow-sm ${
+                    <div className={`p-3 text-sm max-w-[85%] md:max-w-[80%] shadow-sm ${
                       msg.sender === 'agent' 
                         ? 'bg-primary text-primary-foreground rounded-2xl rounded-tr-sm' 
                         : 'bg-background border rounded-2xl rounded-tl-sm'
@@ -199,13 +219,13 @@ export default function InteractiveTicketsPage() {
                 />
                 <div className="flex justify-between items-center p-2 border-t bg-muted/20">
                   <Button onClick={handleAiDraft} variant="ghost" size="sm" className="text-blue-600">
-                    ✨ Draft AI Reply
+                    <span className="hidden sm:inline">✨ Draft AI Reply</span>
+                    <span className="sm:hidden">✨ AI Draft</span>
                   </Button>
                   <Button 
                     size="sm" 
                     disabled={!replyText.trim()}
                     onClick={() => {
-                      // In a real app, this would trigger an API call
                       setReplyText("")
                     }}
                   >
@@ -216,8 +236,8 @@ export default function InteractiveTicketsPage() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            Select a ticket to view the conversation
+          <div className="flex-1 flex items-center justify-center text-muted-foreground p-6 text-center">
+            Select a ticket from the inbox to view the conversation
           </div>
         )}
       </div>

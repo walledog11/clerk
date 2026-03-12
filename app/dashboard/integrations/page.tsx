@@ -93,22 +93,26 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="p-8 w-full max-w-6xl mx-auto space-y-8 overflow-y-auto h-[calc(100vh-4rem)]">
+    // Removed duplicate padding, max-width, and scroll constraints. 
+    // Just using responsive vertical spacing now.
+    <div className="space-y-6 md:space-y-8 w-full">
+      
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Integrations</h1>
-        <p className="text-muted-foreground">
+        {/* Adjusted text sizing for mobile */}
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Integrations</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
           Connect your favorite apps and platforms to route all customer messages into Clerk.
         </p>
       </div>
 
       {/* Integrations Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 md:gap-6">
         {integrations.map((app) => (
           <Card key={app.id} className="flex flex-col">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center p-2 border">
+              <div className="flex items-center gap-3 md:gap-4">
+                <div className="h-10 w-10 md:h-12 md:w-12 rounded-lg bg-muted flex items-center justify-center p-2 border shrink-0">
                   <Image 
                     src={app.logo} 
                     alt={`${app.name} logo`} 
@@ -118,7 +122,7 @@ export default function IntegrationsPage() {
                   />
                 </div>
                 <div>
-                  <CardTitle className="text-xl">{app.name}</CardTitle>
+                  <CardTitle className="text-lg md:text-xl">{app.name}</CardTitle>
                 </div>
               </div>
               <Badge 
@@ -145,7 +149,7 @@ export default function IntegrationsPage() {
                       <Badge 
                         key={idx} 
                         variant="secondary" 
-                        className="font-medium bg-muted/50 border-muted-foreground/20 text-sm py-1"
+                        className="font-medium bg-muted/50 border-muted-foreground/20 text-xs md:text-sm py-1"
                       >
                         {account}
                       </Badge>
@@ -167,13 +171,15 @@ export default function IntegrationsPage() {
             </CardContent>
             
             <CardFooter className="pt-4 border-t mt-auto bg-muted/10">
-              <div className="flex w-full justify-between items-center">
-                <span className="text-sm text-muted-foreground">
+              <div className="flex w-full justify-between items-center gap-4">
+                <span className="text-xs md:text-sm text-muted-foreground line-clamp-1">
                   {app.status === "connected" ? "Active Integration" : "Requires Authentication"}
                 </span>
                 <Button 
                   variant={app.status === "connected" ? "outline" : "default"}
                   onClick={() => toggleConnection(app.id)}
+                  size="sm"
+                  className="shrink-0"
                 >
                   {app.status === "connected" ? "Disconnect" : "Connect"}
                 </Button>
