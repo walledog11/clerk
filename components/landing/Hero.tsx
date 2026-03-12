@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import HeroGraphic from "@/components/ui/heroGraphic";
+import HeroGraphic from "@/components/landing/heroGraphic";
 
 export function Hero() {
   return (

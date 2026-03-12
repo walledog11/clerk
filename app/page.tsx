@@ -6,7 +6,7 @@ import { BuiltFor } from "@/components/landing/BuiltFor";
 import { Pricing } from "@/components/landing/Pricing";
 import { CTA } from "@/components/landing/CTA";
 import { Footer } from "@/components/landing/Footer";
-import { LogoScrollBar } from "@/components/ui/LogoScrollBar";
+import { LogoScrollBar } from "@/components/landing/LogoScrollBar";
 import { WorkSprawl } from "@/components/landing/WorkSprawl";
 import { DotPattern } from "@/components/ui/dot-pattern";
 
