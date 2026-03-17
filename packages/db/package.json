@@ -1,0 +1,19 @@
+{
+  "name": "@clerk/db",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "devDependencies": {
+    "typescript": "latest"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.2",
+    "express": "^5.2.1",
+    "prisma": "6.19.2"
+  }
+}

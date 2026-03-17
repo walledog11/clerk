@@ -1,0 +1,73 @@
+// This is your Prisma schema file.
+// It defines the universal data model for Clerk.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- ENUMS ---
+enum ChannelType {
+  ig_dm
+  email
+  tiktok
+}
+
+enum ThreadStatus {
+  open
+  pending
+  closed
+}
+
+enum SenderType {
+  customer
+  agent
+  ai
+}
+
+// --- MODELS ---
+model Customer {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String?  @db.VarChar(255)
+  platformId String   @unique @map("platform_id") @db.VarChar(255)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  threads    Thread[]
+
+  @@index([platformId])
+  @@map("customers") 
+}
+
+model Thread {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String       @map("customer_id") @db.Uuid
+  channelType ChannelType  @map("channel_type")
+  status      ThreadStatus @default(open)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@index([status])
+  @@map("threads")
+}
+
+model Message {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId    String     @map("thread_id") @db.Uuid
+  senderType  SenderType @map("sender_type")
+  contentText String?    @map("content_text") @db.Text
+  mediaUrl    String?    @map("media_url") @db.Text
+  sentAt      DateTime   @default(now()) @map("sent_at") @db.Timestamptz
+
+  thread      Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@index([sentAt])
+  @@map("messages")
+}
