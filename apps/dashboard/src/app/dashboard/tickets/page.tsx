@@ -23,6 +23,7 @@ export default function InteractiveTicketsPage() {
   const [activeFilter, setActiveFilter] = useState("All")
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null) 
   const [replyText, setReplyText] = useState("")
+  const [isDrafting, setIsDrafting] = useState(false)
 
   // 2. Fetch the live data from PostgreSQL via Next.js API
   const { data: dbThreads, error, isLoading } = useSWR('/api/threads', fetcher, { 
@@ -49,11 +50,11 @@ export default function InteractiveTicketsPage() {
       // If we don't have a name yet, use a shortened version of their ID
       customer: thread.customer?.name || `Shopper_${thread.customer?.platformId.substring(0,5)}`,
       time: lastMessage ? formatTime(lastMessage.sentAt) : 'New',
-      subject: "New Inquiry", // We will build AI categorization for this later
+      subject: thread.tag || "New Inquiry",
       preview: lastMessage?.contentText || "No messages yet.",
-      tag: "Support",
-      tagColor: "text-blue-700 bg-blue-100 border-blue-200",
-      aiSummary: "AI Summary generation pending...", // We will connect OpenAI to this later
+      tag: thread.tag || "Support", // <-- Read the real tag!
+      tagColor: "text-blue-700 bg-blue-100 border-blue-200", // You can write a dynamic color map for this later
+      aiSummary: thread.aiSummary || "Clerk is analyzing this conversation...", // <-- Read the real summary!
       messages: thread.messages.map((msg: any) => ({
         sender: msg.senderType, // 'customer' or 'agent'
         text: msg.contentText,
@@ -69,8 +70,56 @@ export default function InteractiveTicketsPage() {
 
   const activeTicket = liveTickets.find((t: any) => t.id === activeTicketId)
 
-  const handleAiDraft = () => {
-    setReplyText("Hi there! Let me check on that for you right now...")
+  const handleSendMessage = async () => {
+    if (!replyText.trim() || !activeTicketId) return;
+
+    const textToSend = replyText;
+    setReplyText(""); // Instantly clear the text box so it feels fast
+
+    try {
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threadId: activeTicketId,
+          text: textToSend
+        })
+      });
+      
+      // Because SWR is polling every 3 seconds, the UI will automatically 
+      // fetch this new message and pop it onto the screen almost immediately!
+      
+    } catch (error) {
+      console.error("Failed to send message", error);
+    }
+  };
+
+  const handleAiDraft = async () => {
+    if (!activeTicketId) return;
+
+    setIsDrafting(true);
+    setReplyText("Clerk is thinking..."); // Instant visual feedback
+
+    try {
+      const res = await fetch('/api/ai/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: activeTicketId })
+      });
+
+      const data = await res.json();
+
+      if (data.draft) {
+        setReplyText(data.draft);
+      } else {
+        setReplyText("Failed to generate draft. Please try typing manually.");
+      }
+    } catch (error) {
+      console.error("AI Draft Error:", error);
+      setReplyText("");
+    } finally {
+      setIsDrafting(false);
+    }
   }
 
   // Handle Initial Loading State
@@ -248,19 +297,22 @@ export default function InteractiveTicketsPage() {
                 <div className="flex justify-between items-center p-3 bg-slate-50 border-t border-slate-200">
                   <Button 
                     onClick={handleAiDraft} 
+                    disabled={isDrafting}
                     variant="ghost" 
                     size="sm" 
-                    className="text-yellow-700 hover:text-yellow-800 hover:bg-yellow-100 font-bold"
+                    className="text-yellow-700 hover:text-yellow-800 hover:bg-yellow-100 font-bold disabled:opacity-50"
                   >
-                    <Bot className="w-4 h-4 mr-2" />
-                    <span className="hidden sm:inline">Draft with Clerk</span>
+                    <Bot className={`w-4 h-4 mr-2 ${isDrafting ? 'animate-pulse' : ''}`} />
+                    <span className="hidden sm:inline">
+                      {isDrafting ? 'Drafting...' : 'Draft with Clerk'}
+                    </span>
                     <span className="sm:hidden">Draft</span>
                   </Button>
                   
                   <Button 
                     size="sm" 
                     disabled={!replyText.trim()}
-                    onClick={() => setReplyText("")}
+                    onClick={handleSendMessage}
                     className="font-bold bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 px-6"
                   >
                     <span className="hidden sm:inline mr-2">Send</span>

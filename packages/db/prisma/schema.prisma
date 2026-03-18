@@ -49,6 +49,8 @@ model Thread {
   status      ThreadStatus @default(open)
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  aiSummary   String?
+  tag         String?   @default("Support")
 
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   messages    Message[]
