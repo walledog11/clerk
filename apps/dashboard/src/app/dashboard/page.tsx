@@ -1,14 +1,27 @@
-import { Bot, TrendingUp, Clock, Inbox, AlertCircle, CheckCircle2, MessageSquare } from "lucide-react";
+"use client"
 
-const userName = 'Balthazar'
+import { Bot, TrendingUp, Clock, Inbox, AlertCircle, CheckCircle2, MessageSquare } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function DashboardHome() {
+  const { user } = useUser();
+  const name = user?.firstName ?? user?.fullName ?? "User";
+  const greeting = getGreeting();
+
   return (
     <div className="space-y-8 pb-10">
-      
+
       {/* Header */}
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Good morning, {userName}.</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{greeting}, {name}.</h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">Clerk has handled 142 interactions while you were away.</p>
         </div>
       </div>
