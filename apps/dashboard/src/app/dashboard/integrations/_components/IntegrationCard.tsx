@@ -174,7 +174,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
     )}>
 
       {/* Header */}
-      <div className="flex items-center gap-4 p-5 pb-4">
+      <div className="flex items-center gap-4 p-4 pb-3">
         <div className={cn(
           "h-11 w-11 rounded-xl flex items-center justify-center p-2 shrink-0 border transition-colors",
           isConnected ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"
@@ -191,7 +191,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
           ) : (
             <span className="inline-flex items-center gap-1.5">
               <span className={cn("w-2 h-2 rounded-full shrink-0", isConnected ? "bg-green-500" : "bg-slate-300")} />
-              <span className={cn("text-[11px] font-semibold", isConnected ? "text-green-700" : "text-slate-400")}>
+              <span className={cn("text-[11px] font-semibold", isConnected ? "text-green-700" : "text-slate-500")}>
                 {isConnected ? "Connected" : "Not connected"}
               </span>
             </span>
@@ -200,11 +200,11 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
       </div>
 
       {/* Description */}
-      <p className="px-5 pb-4 text-sm text-slate-500 leading-relaxed">{config.description}</p>
+      <p className="px-4 pb-3 text-sm text-slate-500 leading-relaxed">{config.description}</p>
 
       {/* Connected accounts */}
       {isConnected && (
-        <div className="mx-5 mb-4 rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+        <div className="mx-4 mb-3 rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
           {connected.map((integration) => (
             <div key={integration.id} className="flex items-center gap-3 px-4 py-3 bg-slate-50/70">
               <div className="flex-1 min-w-0">
@@ -256,7 +256,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
       )}
 
       {/* Footer */}
-      <div className="mt-auto px-5 py-4 border-t border-slate-100 flex justify-end">
+      <div className="mt-auto px-4 py-3 border-t border-slate-100 flex justify-end">
         {config.connectType === 'email' && (
           <Button
             variant="outline"
@@ -274,7 +274,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
           <a href="/api/integrations/instagram/auth">
             <Button
               size="sm"
-              className="font-semibold h-8 text-xs bg-gradient-to-r from-purple-600 to-pink-500 text-white hover:from-purple-700 hover:to-pink-600 border-0 gap-1"
+              className="font-semibold h-8 text-xs bg-slate-900 hover:bg-slate-700 text-white border-0 gap-1"
             >
               {isConnected ? 'Reconnect' : <><span>Connect</span><ChevronRight className="w-3.5 h-3.5" /></>}
             </Button>

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import useSWR from "swr"
 import { useSearchParams } from "next/navigation"
+import { useUser } from "@clerk/nextjs"
 import { CheckCircle2, Inbox } from "lucide-react"
 import { useThreads } from '@/hooks/useThreads'
 import { formatTime, getCustomerName } from '@/lib/utils'
@@ -12,9 +13,9 @@ import type { Integration } from '@/types'
 import ThreadList from './ThreadList'
 import ConversationView from './ConversationView'
 import ContextPanel from './ContextPanel'
-import type { Thread, Message, Ticket, ChannelType } from '@/types'
+import type { Thread, Message, Ticket, ChannelType, AgentTurn } from '@/types'
 
-function threadToTicket(thread: Thread): Ticket {
+function threadToTicket(thread: Thread, agentName?: string): Ticket {
   const channel = getChannelInfo(thread.channelType)
   const lastMsg = thread.messages.filter(m => m.senderType !== 'note').at(-1)
   return {
@@ -30,11 +31,14 @@ function threadToTicket(thread: Thread): Ticket {
     tagColor: "text-slate-500 bg-slate-100 border-slate-200",
     aiSummary: thread.aiSummary || "Clerk is analyzing this conversation...",
     status: thread.status,
-    messages: thread.messages.map((msg) => ({
-      sender: msg.senderType,
-      text: msg.contentText,
-      time: formatTime(msg.sentAt)
-    }))
+    messages: thread.messages
+      .filter(msg => !(msg.senderType === 'note' && msg.contentText?.startsWith('__clerk_agent__')))
+      .map((msg) => ({
+        sender: msg.senderType,
+        text: msg.contentText,
+        time: formatTime(msg.sentAt),
+        author: msg.senderType === 'note' ? (agentName || 'You') : undefined,
+      }))
   }
 }
 
@@ -43,13 +47,14 @@ interface Props {
 }
 
 export default function TicketsPageClient({ initialOpenThreads }: Props) {
+  const { user } = useUser()
+  const agentName = user?.firstName || user?.fullName || 'You'
   const searchParams = useSearchParams()
   const [activeFilter, setActiveFilter] = useState<ChannelType | null>(null)
   const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open')
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [replyText, setReplyText] = useState("")
-  const [isNote, setIsNote] = useState(false)
   const [isDrafting, setIsDrafting] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -57,6 +62,8 @@ export default function TicketsPageClient({ initialOpenThreads }: Props) {
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkToast, setBulkToast] = useState<string | null>(null)
+  const [agentTurnsByThread, setAgentTurnsByThread] = useState<Record<string, AgentTurn[]>>({})
+  const [agentRunningThread, setAgentRunningThread] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -80,20 +87,72 @@ export default function TicketsPageClient({ initialOpenThreads }: Props) {
           (t.aiSummary ?? '').toLowerCase().includes(q) ||
           t.messages.some(m => m.contentText?.toLowerCase().includes(q))
         )
-        .map(threadToTicket)
+        .map(t => threadToTicket(t, agentName))
     }
     return dbThreads
       .filter(t => !activeFilter || t.channelType === activeFilter)
-      .map(threadToTicket)
-  }, [isSearchMode, searchQuery, openThreads, closedThreads, dbThreads, activeFilter])
+      .map(t => threadToTicket(t, agentName))
+  }, [isSearchMode, searchQuery, openThreads, closedThreads, dbThreads, activeFilter, agentName])
 
   const liveTickets: Ticket[] = isSearchMode
     ? filteredTickets
-    : dbThreads.map(threadToTicket)
+    : dbThreads.map(t => threadToTicket(t, agentName))
 
   const activeTicket = liveTickets.find(t => t.id === activeTicketId)
   const allThreads = isSearchMode ? [...openThreads, ...closedThreads] : dbThreads
   const activeThread = allThreads.find(t => t.id === activeTicketId)
+
+  // Derive persisted agent turns from the thread messages (survive page refresh)
+  const activeAgentTurns = useMemo((): AgentTurn[] => {
+    const dbTurns = (activeThread?.messages ?? [])
+      .filter(m => m.senderType === 'note' && m.contentText?.startsWith('__clerk_agent__'))
+      .map(m => {
+        try { return JSON.parse(m.contentText!.slice('__clerk_agent__'.length)) as AgentTurn }
+        catch { return null }
+      })
+      .filter((t): t is AgentTurn => t !== null)
+    // Overlay in-session error turns (transient, not persisted)
+    const errorTurns = activeTicketId ? (agentTurnsByThread[activeTicketId] ?? []) : []
+    return [...dbTurns, ...errorTurns]
+  }, [activeThread, activeTicketId, agentTurnsByThread])
+
+  const isAgentRunning = agentRunningThread === activeTicketId
+
+  // Only used for transient error turns (not persisted to DB)
+  const handleAgentTurnAdd = useCallback((turn: AgentTurn) => {
+    if (!activeTicketId) return
+    setAgentTurnsByThread(prev => ({
+      ...prev,
+      [activeTicketId]: [...(prev[activeTicketId] ?? []), turn],
+    }))
+  }, [activeTicketId])
+
+  const handleAgentRunningChange = useCallback((running: boolean) => {
+    setAgentRunningThread(running ? activeTicketId : null)
+  }, [activeTicketId])
+
+  const handleAgentComplete = useCallback((turn: AgentTurn) => {
+    if (!activeTicketId) return
+    const mutateFn = activeTab === 'open' ? mutateOpen : mutateClosed
+    const currentThreads = activeTab === 'open' ? openThreads : closedThreads
+    // Optimistically insert the turn into the thread messages so it shows instantly
+    const optimisticMsg: Message = {
+      id: `agent-turn-${Date.now()}`,
+      threadId: activeTicketId,
+      senderType: 'note',
+      contentText: `__clerk_agent__${JSON.stringify(turn)}`,
+      mediaUrl: null,
+      sentAt: new Date().toISOString(),
+    }
+    mutateFn(
+      currentThreads.map(t => t.id === activeTicketId
+        ? { ...t, messages: [...t.messages, optimisticMsg] }
+        : t),
+      false
+    )
+    mutateOpen()
+    mutateClosed()
+  }, [activeTicketId, activeTab, mutateOpen, mutateClosed, openThreads, closedThreads])
 
   // Pre-select thread from ?thread= query param
   useEffect(() => {
@@ -376,10 +435,15 @@ export default function TicketsPageClient({ initialOpenThreads }: Props) {
         {activeTicket && activeThread ? (
           <>
             <ConversationView
+              key={activeTicket.id}
               ticket={activeTicket}
+              agentTurns={activeAgentTurns}
+              isAgentRunning={isAgentRunning}
+              onAgentTurnAdd={handleAgentTurnAdd}
+              onAgentRunningChange={handleAgentRunningChange}
+              onAgentComplete={handleAgentComplete}
               activeTab={isSearchMode ? (activeThread.status === 'closed' ? 'closed' : 'open') : activeTab}
               replyText={replyText}
-              isNote={isNote}
               isDrafting={isDrafting}
               isSending={isSending}
               sendError={sendError}
@@ -390,7 +454,6 @@ export default function TicketsPageClient({ initialOpenThreads }: Props) {
               onReplyChange={text => { setReplyText(text); if (sendError) setSendError(null) }}
               onSend={handleSendMessage}
               onDraft={handleAiDraft}
-              onToggleNote={setIsNote}
             />
             <div className="hidden lg:flex">
               <ContextPanel
@@ -401,7 +464,6 @@ export default function TicketsPageClient({ initialOpenThreads }: Props) {
                 onRefreshSummary={handleRefreshSummary}
                 onTagUpdate={handleTagUpdate}
                 onLinkShopifyCustomer={handleLinkShopifyCustomer}
-                onAgentActionsComplete={() => { mutateOpen(); mutateClosed() }}
               />
             </div>
           </>

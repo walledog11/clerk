@@ -73,15 +73,15 @@ export default function AnalyticsPage() {
         {/* Overview stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Total Tickets', value: totalThreads, icon: <Inbox className="w-4 h-4 text-blue-500" />, bg: 'bg-blue-50' },
-            { label: 'Open', value: openThreads.length, icon: <Inbox className="w-4 h-4 text-amber-500" />, bg: 'bg-amber-50' },
-            { label: 'Resolved', value: closedThreads.length, icon: <CheckCircle2 className="w-4 h-4 text-green-500" />, bg: 'bg-green-50' },
-            { label: 'Total Messages', value: totalMessages, icon: <MessageSquare className="w-4 h-4 text-purple-500" />, bg: 'bg-purple-50' },
+            { label: 'Total Tickets', value: totalThreads, icon: <Inbox className="w-4 h-4 text-blue-500" />, bg: 'bg-blue-50', accent: 'border-t-2 border-t-blue-400' },
+            { label: 'Open', value: openThreads.length, icon: <Inbox className="w-4 h-4 text-amber-500" />, bg: 'bg-amber-50', accent: 'border-t-2 border-t-amber-400' },
+            { label: 'Resolved', value: closedThreads.length, icon: <CheckCircle2 className="w-4 h-4 text-green-500" />, bg: 'bg-green-50', accent: 'border-t-2 border-t-green-400' },
+            { label: 'Total Messages', value: totalMessages, icon: <MessageSquare className="w-4 h-4 text-purple-500" />, bg: 'bg-purple-50', accent: 'border-t-2 border-t-purple-400' },
           ].map(stat => (
-            <div key={stat.label} className="bg-white border border-slate-200 rounded-xl p-4 md:p-5">
-              <div className="flex items-center justify-between mb-2">
+            <div key={stat.label} className={`bg-white border border-slate-200 rounded-xl p-4 md:p-5 ${stat.accent}`}>
+              <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{stat.label}</p>
-                <div className={`w-7 h-7 rounded-lg ${stat.bg} flex items-center justify-center`}>
+                <div className={`w-8 h-8 rounded-lg ${stat.bg} flex items-center justify-center`}>
                   {stat.icon}
                 </div>
               </div>
@@ -137,16 +137,17 @@ export default function AnalyticsPage() {
                 {last7Days.map(day => (
                   <div key={day.date} className="flex items-center gap-3">
                     <span className="text-[11px] text-slate-400 w-14 shrink-0 text-right">{shortDate(day.date)}</span>
-                    <div className="flex-1 flex items-center gap-1 h-6">
+                    <div className="flex-1 flex items-center h-8 bg-slate-50 rounded-md overflow-hidden relative">
                       {day.opened > 0 ? (
                         <div
-                          className="h-full bg-amber-400 rounded-sm transition-all duration-500 flex items-center justify-end pr-1.5"
-                          style={{ width: `${Math.max((day.opened / maxDay) * 100, 4)}%` }}
+                          title={`${day.opened} ticket${day.opened !== 1 ? 's' : ''}`}
+                          className="h-full bg-amber-400 hover:bg-amber-500 transition-all duration-500 flex items-center justify-end pr-2 rounded-md cursor-default"
+                          style={{ width: `${Math.max((day.opened / maxDay) * 100, 6)}%` }}
                         >
-                          <span className="text-[9px] font-bold text-amber-900">{day.opened}</span>
+                          <span className="text-[10px] font-bold text-amber-900">{day.opened}</span>
                         </div>
                       ) : (
-                        <div className="h-full w-1 bg-slate-100 rounded-sm" />
+                        <span className="text-[10px] text-slate-300 pl-2">—</span>
                       )}
                     </div>
                   </div>
@@ -176,13 +177,14 @@ export default function AnalyticsPage() {
               <div className="space-y-3">
                 {byTag.map(item => (
                   <div key={item.tag}>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-medium text-slate-700">{item.tag}</span>
                       <span className="text-xs font-semibold text-slate-500">{item.count}</span>
                     </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-[#1c3b38] rounded-full transition-all duration-500"
+                        title={`${item.count} ticket${item.count !== 1 ? 's' : ''}`}
+                        className="h-full bg-[#1c3b38] rounded-full transition-all duration-500 hover:bg-[#2a5450] cursor-default"
                         style={{ width: `${(item.count / maxTag) * 100}%` }}
                       />
                     </div>
@@ -204,10 +206,11 @@ export default function AnalyticsPage() {
                 return (
                   <div key={item.channel} className="flex flex-col items-center gap-2 flex-1 max-w-[120px]">
                     <span className="text-sm font-bold text-slate-900">{item.count}</span>
-                    <div className="w-full bg-slate-100 rounded-lg overflow-hidden" style={{ height: 80 }}>
+                    <div className="w-full bg-slate-100 rounded-lg overflow-hidden" style={{ height: 120 }}>
                       <div
-                        className="w-full bg-[#1c3b38] rounded-lg transition-all duration-700"
-                        style={{ height: `${(item.count / maxChannel) * 80}px`, marginTop: `${80 - (item.count / maxChannel) * 80}px` }}
+                        title={`${item.count} ticket${item.count !== 1 ? 's' : ''}`}
+                        className="w-full bg-[#1c3b38] hover:bg-[#2a5450] rounded-lg transition-all duration-700 cursor-default"
+                        style={{ height: `${(item.count / maxChannel) * 120}px`, marginTop: `${120 - (item.count / maxChannel) * 120}px` }}
                       />
                     </div>
                     <div className="flex items-center gap-1.5">

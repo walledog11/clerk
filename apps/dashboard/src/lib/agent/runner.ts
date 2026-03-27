@@ -37,6 +37,16 @@ const MAX_ITERATIONS = 10;
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
+export interface ShopifyOrderSummary {
+  id: string;
+  name: string;
+  created_at: string;
+  financial_status: string;
+  fulfillment_status: string | null;
+  total_price: string;
+  items: string[];
+}
+
 export interface AgentContext {
   orgId: string;
   orgName: string;
@@ -55,6 +65,7 @@ export interface AgentContext {
   recentMessages: { senderType: string; contentText: string | null }[];
   openThreadCount: number;
   shopify: { shop: string; accessToken: string } | null;
+  recentOrders: ShopifyOrderSummary[];
 }
 
 export async function buildContext(threadId: string, orgId: string): Promise<AgentContext> {
@@ -95,6 +106,39 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
     }
   }
 
+  // Pre-fetch recent Shopify orders so the agent has order context upfront
+  let recentOrders: ShopifyOrderSummary[] = [];
+  if (shopifyCustomerId && shopifyIntegration?.accessToken) {
+    try {
+      const ordersRes = await fetch(
+        `https://${shopifyIntegration.externalAccountId}/admin/api/2024-01/orders.json?customer_id=${shopifyCustomerId}&status=any&limit=5&fields=id,name,created_at,financial_status,fulfillment_status,total_price,line_items`,
+        { headers: { "X-Shopify-Access-Token": shopifyIntegration.accessToken } }
+      );
+      const ordersData = await ordersRes.json();
+      if (ordersRes.ok && ordersData.orders) {
+        recentOrders = ordersData.orders.map((o: {
+          id: number;
+          name: string;
+          created_at: string;
+          financial_status: string;
+          fulfillment_status: string | null;
+          total_price: string;
+          line_items: { title: string; quantity: number }[];
+        }) => ({
+          id: String(o.id),
+          name: o.name,
+          created_at: o.created_at,
+          financial_status: o.financial_status,
+          fulfillment_status: o.fulfillment_status,
+          total_price: o.total_price,
+          items: o.line_items.map((li) => `${li.quantity}x ${li.title}`),
+        }));
+      }
+    } catch {
+      // best-effort; leave empty
+    }
+  }
+
   return {
     orgId,
     orgName: org?.name ?? "Support",
@@ -119,6 +163,7 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
       shopifyIntegration?.accessToken
         ? { shop: shopifyIntegration.externalAccountId, accessToken: shopifyIntegration.accessToken }
         : null,
+    recentOrders,
   };
 }
 
@@ -209,6 +254,12 @@ function buildSystemPrompt(ctx: AgentContext): string {
 
   const otherOpenThreads = Math.max(0, ctx.openThreadCount - 1);
 
+  const ordersSection = ctx.recentOrders.length > 0
+    ? ctx.recentOrders.map((o) =>
+        `  - ${o.name} (ID: ${o.id}) | financial: ${o.financial_status} | fulfillment: ${o.fulfillment_status ?? "unfulfilled"} | $${parseFloat(o.total_price).toFixed(2)} | items: ${o.items.join(", ")} | placed: ${o.created_at.slice(0, 10)}`
+      ).join("\n")
+    : "  (no orders found)";
+
   return `You are an AI support agent for ${ctx.orgName}. You help support staff take actions on their behalf.
 
 ## Current thread
@@ -223,6 +274,9 @@ function buildSystemPrompt(ctx: AgentContext): string {
 ## Recent conversation
 ${messageHistory || "  (no messages yet)"}
 
+## Customer's recent orders
+${ordersSection}
+
 ## Integrations
 ${shopifyNote}
 ${shopifyCustomerNote}
@@ -230,9 +284,11 @@ ${shopifyCustomerNote}
 ## Instructions
 - Use the available tools to complete the requested task.
 - After completing an action, always call add_internal_note to document what you did.
-- If a task requires information you don't have (e.g. a customer ID), use get_shopify_customer or get_shopify_orders first.
+- When the support agent refers to "this order" or "the order", infer they mean the most recent order listed above unless context makes another order clear.
 - Be precise and only make changes explicitly requested.
-- When done, provide a short plain-text summary of what was accomplished.`;
+- Respond like a knowledgeable coworker giving a quick status update — direct, factual, no fluff.
+- Keep summaries to 1–2 sentences. No bullet lists, no markdown formatting.
+- Never ask if the user has more questions or offer further help. Just state what you found or did and stop.`;
 }
 
 // ── Main agent runner ─────────────────────────────────────────────────────────

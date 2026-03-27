@@ -62,6 +62,14 @@ export interface Thread {
   messages: Message[];
 }
 
+// Agent turn in the notes tab
+export interface AgentTurn {
+  instruction: string
+  actions: { tool: string; result: string }[]
+  summary: string | null
+  error: string | null
+}
+
 // UI-mapped ticket shape used in the tickets page
 export interface Ticket {
   id: string;
@@ -80,5 +88,6 @@ export interface Ticket {
     sender: SenderType;
     text: string | null;
     time: string;
+    author?: string;
   }[];
 }
