@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
-import { useUser } from "@clerk/nextjs"
 import { CheckCircle2, Inbox } from "lucide-react"
 import { useThreads } from '@/hooks/useThreads'
 import { useAgentTurns } from '@/hooks/useAgentTurns'
@@ -20,11 +19,10 @@ const planCache = new Map<string, AgentPlan | null>()
 interface Props {
   initialOpenThreads: Thread[]
   hasShopify: boolean
+  agentName: string
 }
 
-export default function TicketsPageClient({ initialOpenThreads, hasShopify }: Props) {
-  const { user } = useUser()
-  const agentName = user?.firstName || user?.fullName || 'You'
+export default function TicketsPageClient({ initialOpenThreads, hasShopify, agentName }: Props) {
   const searchParams = useSearchParams()
 
   const [activeFilter, setActiveFilter] = useState<ChannelType | null>(null)
@@ -201,6 +199,7 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify }: Pr
             <ConversationView
               key={activeTicket.id}
               ticket={activeTicket}
+              agentName={agentName}
               agentTurns={activeAgentTurns}
               isAgentRunning={isAgentRunning}
               onAgentTurnAdd={handleAgentTurnAdd}

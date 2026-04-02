@@ -27,6 +27,7 @@ const TOOL_LABELS: Record<string, string> = {
 interface Props {
   ticket: Ticket
   activeTab: 'open' | 'closed'
+  agentName: string
   replyText: string
   isDrafting: boolean
   isSending: boolean
@@ -50,6 +51,7 @@ interface Props {
 export default function ConversationView({
   ticket,
   activeTab,
+  agentName,
   replyText,
   isDrafting,
   isSending,
@@ -113,10 +115,11 @@ export default function ConversationView({
 
   const effectiveIsNote = viewTab === 'notes'
 
-  // @clerk detection
+  // @{agentName} detection
+  const triggerPrefix = `@${agentName.toLowerCase()}`
   const trimmed = replyText.trimStart()
-  const isClerkMode = viewTab === 'notes' && trimmed.toLowerCase().startsWith('@clerk')
-  const clerkInstruction = isClerkMode ? trimmed.slice(6).replace(/^ /, '') : ''
+  const isClerkMode = viewTab === 'notes' && trimmed.toLowerCase().startsWith(triggerPrefix)
+  const clerkInstruction = isClerkMode ? trimmed.slice(triggerPrefix.length).replace(/^ /, '') : ''
 
   const handleSwitchToChat = () => {
     setViewTab('chat')
@@ -298,7 +301,7 @@ export default function ConversationView({
                 <div>
                   <p className="text-sm font-semibold text-slate-600">No internal notes yet</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    Add a note, or type <span className="font-mono font-semibold text-violet-600">@clerk</span> to ask the AI agent.
+                    Add a note, or type <span className="font-mono font-semibold text-violet-600">@{agentName.toLowerCase()}</span> to ask the AI agent.
                   </p>
                 </div>
               </>
@@ -332,7 +335,7 @@ export default function ConversationView({
                 {/* User instruction — right aligned */}
                 <div className="flex flex-col gap-1 items-end">
                   <div className="px-4 py-3.5 text-[14px] max-w-[80%] leading-relaxed bg-slate-100 text-slate-700 rounded-md rounded-tr-sm">
-                    <span className="text-violet-600 font-semibold">@clerk</span>{' '}
+                    <span className="text-violet-600 font-semibold">@{agentName.toLowerCase()}</span>{' '}
                     {turn.instruction}
                   </div>
                 </div>
@@ -340,7 +343,7 @@ export default function ConversationView({
                 <div className="flex flex-col gap-1 items-start">
                   <div className="flex items-center gap-1.5 mb-0.5 ml-1">
                     <Bot className="w-3 h-3 text-violet-500" />
-                    <span className="text-[11px] font-semibold text-violet-600">Clerk Agent</span>
+                    <span className="text-[11px] font-semibold text-violet-600">{agentName}</span>
                   </div>
                   <div className="px-4 py-3 max-w-[80%] bg-violet-50 border border-violet-200 rounded-md rounded-tl-sm shadow-sm space-y-2">
                     {turn.error ? (
@@ -381,7 +384,7 @@ export default function ConversationView({
                 {pendingInstruction && (
                   <div className="flex flex-col gap-1 items-end">
                     <div className="px-4 py-3.5 text-[14px] max-w-[80%] leading-relaxed bg-slate-100 text-slate-700 rounded-md rounded-tr-sm">
-                      <span className="text-violet-600 font-semibold">@clerk</span>{' '}
+                      <span className="text-violet-600 font-semibold">@{agentName.toLowerCase()}</span>{' '}
                       {pendingInstruction}
                     </div>
                   </div>
@@ -389,7 +392,7 @@ export default function ConversationView({
                 <div className="flex flex-col gap-1 items-start">
                   <div className="flex items-center gap-1.5 mb-0.5 ml-1">
                     <Bot className="w-3 h-3 text-violet-500" />
-                    <span className="text-[11px] font-semibold text-violet-600">Clerk Agent</span>
+                    <span className="text-[11px] font-semibold text-violet-600">{agentName}</span>
                   </div>
                   <div className="px-4 py-3 bg-violet-50 border border-violet-200 rounded-md rounded-tl-sm shadow-sm">
                     <div className="flex items-center gap-1.5 text-xs text-violet-500">
@@ -407,7 +410,7 @@ export default function ConversationView({
                 {pendingInstruction && (
                   <div className="flex flex-col gap-1 items-end">
                     <div className="px-4 py-3.5 text-[14px] max-w-[80%] leading-relaxed bg-slate-100 text-slate-700 rounded-md rounded-tr-sm">
-                      <span className="text-violet-600 font-semibold">@clerk</span>{' '}
+                      <span className="text-violet-600 font-semibold">@{agentName.toLowerCase()}</span>{' '}
                       {pendingInstruction}
                     </div>
                   </div>
@@ -415,7 +418,7 @@ export default function ConversationView({
                 <div className="flex flex-col gap-1 items-start">
                   <div className="flex items-center gap-1.5 mb-0.5 ml-1">
                     <Bot className="w-3 h-3 text-violet-500" />
-                    <span className="text-[11px] font-semibold text-violet-600">Clerk Agent</span>
+                    <span className="text-[11px] font-semibold text-violet-600">{agentName}</span>
                   </div>
                   <div className="px-4 py-3 bg-violet-50 border border-violet-200 rounded-md rounded-tl-sm shadow-sm">
                     <div className="flex items-center gap-1.5 text-xs text-violet-500">
@@ -448,7 +451,7 @@ export default function ConversationView({
       {activeTab === 'open' && isAutoPlanLoading && (
         <div className="px-5 py-3 border-t border-violet-100 bg-violet-50/50 flex items-center gap-2 shrink-0">
           <Bot className="w-3.5 h-3.5 text-violet-400 animate-pulse shrink-0" />
-          <span className="text-xs text-violet-600 font-medium">Clerk is analyzing this ticket…</span>
+          <span className="text-xs text-violet-600 font-medium">{agentName} is analyzing this ticket…</span>
         </div>
       )}
 
@@ -468,6 +471,7 @@ export default function ConversationView({
       {activeTab === 'open' && (
         <Composer
           customerName={ticket.customer}
+          agentName={agentName}
           value={isClerkMode ? clerkInstruction : replyText}
           isNote={effectiveIsNote}
           isClerkMode={isClerkMode}
@@ -475,7 +479,7 @@ export default function ConversationView({
           isDrafting={isDrafting}
           isSending={isSending || isAgentRunning || isPlanLoading || isAutoPlanLoading}
           error={sendError}
-          onChange={text => onReplyChange(isClerkMode ? '@clerk ' + text : text)}
+          onChange={text => onReplyChange(isClerkMode ? `@${agentName.toLowerCase()} ` + text : text)}
           onClearClerk={() => onReplyChange('')}
           onSend={handleSend}
           onDraft={onDraft}

@@ -4,6 +4,7 @@ import { Bot, Send, Loader2, Lock } from "lucide-react"
 
 interface Props {
   customerName: string
+  agentName?: string
   value: string
   isNote: boolean
   isClerkMode?: boolean
@@ -20,6 +21,7 @@ interface Props {
 
 export default function Composer({
   customerName,
+  agentName = "Clerk",
   value,
   isNote,
   isClerkMode = false,
@@ -49,7 +51,7 @@ export default function Composer({
           {isClerkMode && (
             <span className="inline-flex items-center gap-1 bg-violet-100 text-violet-700 text-[11px] font-semibold px-2.5 py-[5px] rounded-full shrink-0">
               <Bot className="w-3 h-3" />
-              @clerk
+              @{agentName.toLowerCase()}
             </span>
           )}
           <textarea

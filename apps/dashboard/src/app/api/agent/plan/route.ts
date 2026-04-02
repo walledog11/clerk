@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getOrCreateOrg } from "@/lib/org";
 import { handleApiError } from "@/lib/api-errors";
 import { buildContext, planAgent } from "@/lib/agent/runner";
+import { resolveAgentSettings } from "@/lib/agent/settings";
+import type { OrgSettings } from "@/types";
 
 export async function POST(request: Request) {
   try {
@@ -15,8 +17,9 @@ export async function POST(request: Request) {
       );
     }
 
+    const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
     const ctx = await buildContext(threadId, org.id);
-    const plan = await planAgent(ctx, instruction.trim());
+    const plan = await planAgent(ctx, instruction.trim(), settings);
 
     return NextResponse.json(plan);
   } catch (error) {

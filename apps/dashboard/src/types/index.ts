@@ -4,9 +4,39 @@ export type ThreadStatus = "open" | "pending" | "closed";
 export type SenderType = "customer" | "agent" | "ai" | "note";
 
 // Settings stored as JSON on the Organization
+export interface AgentToolPermissions {
+  action: boolean;        // Shopify write ops: refund, cancel, update address, etc.
+  communication: boolean; // send_reply
+  internal: boolean;      // add_internal_note, update_thread_status, update_thread_tag
+  read: boolean;          // get_shopify_customer, get_shopify_orders, get_order_by_name
+}
+
 export interface OrgSettings {
+  // AI draft / summary
   aiContext: string;   // brand name / context fed into AI drafts
   brandVoice: string;  // tone brief appended to AI system prompt
+
+  // Agent identity
+  agentName: string;
+
+  // Default behavior
+  autoPlanOnOpen: boolean;
+  alwaysDraftReply: boolean;
+  defaultInstruction: string;
+
+  // Approval workflow
+  requireApprovalForActions: boolean;
+
+  // Tool permissions
+  toolsEnabled: AgentToolPermissions;
+
+  // Guardrails
+  maxRefundAmount: number | null;  // null = unlimited
+  blockCancellations: boolean;
+  maxIterations: number;
+
+  // Response
+  replyLanguage: string; // "auto" | ISO language name e.g. "English"
 }
 
 // Database models

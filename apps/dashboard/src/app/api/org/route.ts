@@ -30,7 +30,8 @@ export async function PATCH(request: Request) {
       data: {
         ...(name !== undefined && { name }),
         ...(newSettings !== undefined && {
-          settings: { ...currentSettings, ...newSettings },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          settings: JSON.parse(JSON.stringify({ ...currentSettings, ...newSettings })) as any,
         }),
       },
     });

@@ -1,7 +1,8 @@
 import { db } from "@clerk/db"
 import { getOrCreateOrg } from "@/lib/org"
+import { resolveAgentSettings } from "@/lib/agent/settings"
 import TicketsPageClient from "./_components/TicketsPageClient"
-import type { Thread } from "@/types"
+import type { Thread, OrgSettings } from "@/types"
 
 export default async function TicketsPage() {
   const org = await getOrCreateOrg()
@@ -20,6 +21,13 @@ export default async function TicketsPage() {
 
   const initialOpenThreads: Thread[] = JSON.parse(JSON.stringify(openThreadsRaw))
   const hasShopify = integrations.some(i => i.platform === "shopify")
+  const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null)
 
-  return <TicketsPageClient initialOpenThreads={initialOpenThreads} hasShopify={hasShopify} />
+  return (
+    <TicketsPageClient
+      initialOpenThreads={initialOpenThreads}
+      hasShopify={hasShopify}
+      agentName={settings.agentName}
+    />
+  )
 }

@@ -3,7 +3,8 @@ import { anthropic } from "@/lib/anthropic";
 import { AI_MODEL } from "@/lib/ai";
 import type Anthropic from "@anthropic-ai/sdk";
 import { AGENT_TOOLS, TOOL_CATEGORIES, PLAN_STEP_LABELS } from "./tools";
-import type { PlanStep, RawToolCall, AgentPlan } from "@/types";
+import type { PlanStep, RawToolCall, AgentPlan, OrgSettings } from "@/types";
+import { resolveAgentSettings } from "./settings";
 import {
   getShopifyCustomer,
   updateShopifyCustomerInfo,
@@ -35,7 +36,7 @@ import type {
   UpdateThreadTagInput,
 } from "./tools";
 
-const MAX_ITERATIONS = 10;
+const DEFAULT_MAX_ITERATIONS = 10;
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -265,7 +266,8 @@ async function executeTool(
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(ctx: AgentContext): string {
+function buildSystemPrompt(ctx: AgentContext, settings?: OrgSettings): string {
+  const s = resolveAgentSettings(settings);
   const shopifyNote = ctx.shopify
     ? `A Shopify integration is connected (shop: ${ctx.shopify.shop}).`
     : "No Shopify integration is connected — Shopify tools will not work.";
@@ -280,7 +282,19 @@ function buildSystemPrompt(ctx: AgentContext): string {
     ? JSON.stringify(ctx.recentOrders)
     : "[]";
 
-  return `You are an AI support agent for ${ctx.orgName}. You help support staff take actions on their behalf.
+  // Guardrail clauses injected into the instructions section
+  const guardrailClauses: string[] = [];
+  if (s.blockCancellations) {
+    guardrailClauses.push("- Order cancellations are disabled by the workspace owner. Do NOT call cancel_order under any circumstances. Inform the support agent that cancellations must be handled manually.");
+  }
+  if (s.maxRefundAmount !== null && s.maxRefundAmount > 0) {
+    guardrailClauses.push(`- The maximum refund you are authorised to issue is $${s.maxRefundAmount}. If the requested refund exceeds this amount, do NOT proceed — inform the support agent that manual approval is required.`);
+  }
+  const languageClause = s.replyLanguage && s.replyLanguage !== "auto"
+    ? `- Always write customer-facing replies in ${s.replyLanguage}, regardless of the language the customer used.`
+    : "";
+
+  return `You are ${s.agentName}, an AI support agent for ${ctx.orgName}. You help support staff take actions on their behalf.
 
 ## Current thread
 - Thread ID: ${ctx.thread.id}
@@ -309,7 +323,7 @@ ${shopifyCustomerNote}
 - Respond like a knowledgeable coworker giving a quick status update — direct, factual, no fluff.
 - Keep summaries to 1–2 sentences. No bullet lists, no markdown formatting.
 - Never ask if the user has more questions or offer further help. Just state what you found or did and stop.
-- If send_reply returns an error, do NOT change the thread status. Log an internal note describing the failure and report the error back to the support agent so they can act.`;
+- If send_reply returns an error, do NOT change the thread status. Log an internal note describing the failure and report the error back to the support agent so they can act.${guardrailClauses.length > 0 ? "\n" + guardrailClauses.join("\n") : ""}${languageClause ? "\n" + languageClause : ""}`;
 }
 
 // ── Main agent runner ─────────────────────────────────────────────────────────
@@ -319,11 +333,14 @@ export interface AgentResult {
   actionsPerformed: ActionEntry[];
 }
 
-// Convert OpenAI-format tool definitions to Anthropic format
-function toAnthropicTools(): Anthropic.Tool[] {
+// Convert OpenAI-format tool definitions to Anthropic format, filtered by enabled categories
+function toAnthropicTools(settings?: OrgSettings): Anthropic.Tool[] {
+  const s = resolveAgentSettings(settings);
   return AGENT_TOOLS.flatMap((t) => {
     if (t.type !== "function") return [];
     const fn = t.function as { name: string; description?: string; parameters?: unknown };
+    const category = TOOL_CATEGORIES[fn.name];
+    if (category && !s.toolsEnabled[category]) return [];
     return [{
       name: fn.name,
       description: fn.description ?? "",
@@ -373,7 +390,8 @@ function describeTool(name: string, input: unknown): string {
 
 export async function planAgent(
   ctx: AgentContext,
-  instruction: string
+  instruction: string,
+  settings?: OrgSettings
 ): Promise<AgentPlan> {
   const rawHistory = ctx.recentMessages.map((m) => ({
     role: (m.senderType === "agent" || m.senderType === "note")
@@ -403,9 +421,9 @@ export async function planAgent(
   const response = await anthropic.messages.create({
     model: AI_MODEL,
     max_tokens: 1024,
-    system: buildSystemPrompt(ctx),
+    system: buildSystemPrompt(ctx, settings),
     messages,
-    tools: toAnthropicTools(),
+    tools: toAnthropicTools(settings),
   })
 
   const toolUseBlocks = response.content.filter(
@@ -440,9 +458,9 @@ export async function planAgent(
     const response2 = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: 512,
-      system: buildSystemPrompt(ctx),
+      system: buildSystemPrompt(ctx, settings),
       messages: phase2Messages,
-      tools: toAnthropicTools(),
+      tools: toAnthropicTools(settings),
     })
 
     const phase2ToolUse = response2.content.filter(
@@ -468,8 +486,11 @@ export async function planAgent(
 export async function runAgent(
   ctx: AgentContext,
   instruction: string,
-  approvedToolCalls?: RawToolCall[]
+  approvedToolCalls?: RawToolCall[],
+  settings?: OrgSettings
 ): Promise<AgentResult> {
+  const s = resolveAgentSettings(settings);
+  const maxIterations = s.maxIterations > 0 ? s.maxIterations : DEFAULT_MAX_ITERATIONS;
   const actionsPerformed: ActionEntry[] = [];
 
   // Build conversation history as alternating user/assistant turns.
@@ -502,7 +523,7 @@ export async function runAgent(
     { role: "user", content: instruction },
   ];
 
-  const tools = toAnthropicTools();
+  const tools = toAnthropicTools(settings);
 
   // If the caller pre-approved a plan, inject those tool calls and execute them
   // before starting the regular loop so Claude can follow up.
@@ -533,13 +554,13 @@ export async function runAgent(
     messages.push({ role: "user", content: toolResults });
   }
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
+  for (let i = 0; i < maxIterations; i++) {
     console.log(`[agent] iteration ${i} — sending ${messages.length} messages`);
 
     const response = await anthropic.messages.create({
       model: AI_MODEL,
       max_tokens: 1024,
-      system: buildSystemPrompt(ctx),
+      system: buildSystemPrompt(ctx, settings),
       messages,
       tools,
     });

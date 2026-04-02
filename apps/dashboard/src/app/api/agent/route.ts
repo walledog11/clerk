@@ -3,6 +3,8 @@ import { db } from "@clerk/db";
 import { getOrCreateOrg } from "@/lib/org";
 import { handleApiError } from "@/lib/api-errors";
 import { buildContext, runAgent } from "@/lib/agent/runner";
+import { resolveAgentSettings } from "@/lib/agent/settings";
+import type { OrgSettings } from "@/types";
 
 export const AGENT_TURN_PREFIX = "__clerk_agent__";
 
@@ -19,10 +21,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
     const ctx = await buildContext(threadId, org.id);
     console.log("[agent] context — shopify:", ctx.shopify ? ctx.shopify.shop : "NONE", "shopifyCustomerId:", ctx.thread.shopifyCustomerId);
 
-    const result = await runAgent(ctx, instruction.trim(), approvedToolCalls ?? undefined);
+    const result = await runAgent(ctx, instruction.trim(), approvedToolCalls ?? undefined, settings);
     console.log("[agent] result:", JSON.stringify(result));
 
     // Persist the agent turn so it survives page refreshes

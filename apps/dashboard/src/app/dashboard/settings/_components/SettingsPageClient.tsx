@@ -6,9 +6,9 @@ import { useClerk, useUser } from "@clerk/nextjs"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Check, Building2, User, AlertTriangle, Loader2, Blocks, AlertCircle, CheckCircle2, CreditCard } from "lucide-react"
+import { Check, Building2, User, Loader2, Blocks, AlertCircle, CheckCircle2, CreditCard, Bot } from "lucide-react"
 import { fetcher } from "@/lib/fetcher"
-import type { OrgSettings, Integration } from "@/types"
+import type { OrgSettings, Integration, AgentToolPermissions } from "@/types"
 import IntegrationCard, { type PlatformConfig } from "../../integrations/_components/IntegrationCard"
 import SmsCard from "./SmsCard"
 import BillingTab from "./BillingTab"
@@ -20,7 +20,7 @@ interface Props {
   settings: OrgSettings
 }
 
-type Tab = 'workspace' | 'integrations' | 'billing' | 'account'
+type Tab = 'workspace' | 'agent' | 'integrations' | 'billing' | 'account'
 
 // ── Integration configs ────────────────────────────────────────────────────────
 
@@ -98,6 +98,59 @@ function SaveButton({ saving, saved, onClick, disabled }: {
   )
 }
 
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none ${
+        checked ? 'bg-violet-600' : 'bg-slate-200'
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+          checked ? 'translate-x-4' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  )
+}
+
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onChange,
+  badge,
+  badgeColor,
+}: {
+  label: string
+  description: string
+  checked: boolean
+  onChange: (v: boolean) => void
+  badge?: string
+  badgeColor?: string
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-semibold text-slate-800">{label}</p>
+          {badge && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${badgeColor}`}>
+              {badge}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{description}</p>
+      </div>
+      <Toggle checked={checked} onChange={onChange} />
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function SettingsPageClient({ orgName, settings }: Props) {
@@ -126,12 +179,22 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
   const [savedWorkspace, setSavedWorkspace] = useState(false)
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
 
-  // ── AI Behavior state ────────────────────────────────────────────────────────
+  // ── Agent settings state ─────────────────────────────────────────────────────
+  const [agentName, setAgentName] = useState(settings.agentName ?? "Clerk")
   const [aiContext, setAiContext] = useState(settings.aiContext ?? "")
   const [brandVoice, setBrandVoice] = useState(settings.brandVoice ?? "")
-  const [savingAi, setSavingAi] = useState(false)
-  const [savedAi, setSavedAi] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
+  const [autoPlanOnOpen, setAutoPlanOnOpen] = useState(settings.autoPlanOnOpen ?? true)
+  const [alwaysDraftReply, setAlwaysDraftReply] = useState(settings.alwaysDraftReply ?? false)
+  const [defaultInstruction, setDefaultInstruction] = useState(settings.defaultInstruction ?? "")
+  const [requireApprovalForActions, setRequireApprovalForActions] = useState(settings.requireApprovalForActions ?? true)
+  const [toolsEnabled, setToolsEnabled] = useState<AgentToolPermissions>(settings.toolsEnabled ?? { action: true, communication: true, internal: true, read: true })
+  const [maxRefundAmount, setMaxRefundAmount] = useState<string>(settings.maxRefundAmount != null ? String(settings.maxRefundAmount) : "")
+  const [blockCancellations, setBlockCancellations] = useState(settings.blockCancellations ?? false)
+  const [maxIterations, setMaxIterations] = useState<string>(String(settings.maxIterations ?? 10))
+  const [replyLanguage, setReplyLanguage] = useState(settings.replyLanguage ?? "auto")
+  const [savingAgent, setSavingAgent] = useState(false)
+  const [savedAgent, setSavedAgent] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
 
   // ── Danger zone state ────────────────────────────────────────────────────────
   const [confirmClear, setConfirmClear] = useState(false)
@@ -152,7 +215,7 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
     else if (error) setIntBanner({ type: 'error', message: OAUTH_ERROR_MESSAGES[error] ?? 'An unexpected error occurred.' })
   }, [activeTab, searchParams])
 
-  const initials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)
+  const initials = userName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
 
   // ── Shared save helper ───────────────────────────────────────────────────────
   async function patchOrg(
@@ -185,8 +248,25 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
     return patchOrg({ name: workspaceName }, setSavingWorkspace, setSavedWorkspace, setWorkspaceError)
   }
 
-  function saveAi() {
-    return patchOrg({ settings: { aiContext, brandVoice } }, setSavingAi, setSavedAi, setAiError)
+  function saveAgent() {
+    const parsedMax = maxRefundAmount.trim() === "" ? null : Number(maxRefundAmount)
+    const parsedIter = Number(maxIterations)
+    return patchOrg({
+      settings: {
+        agentName: agentName.trim() || "Clerk",
+        aiContext,
+        brandVoice,
+        autoPlanOnOpen,
+        alwaysDraftReply,
+        defaultInstruction,
+        requireApprovalForActions,
+        toolsEnabled,
+        maxRefundAmount: isNaN(parsedMax as number) ? null : parsedMax,
+        blockCancellations,
+        maxIterations: isNaN(parsedIter) || parsedIter < 1 ? 10 : parsedIter,
+        replyLanguage,
+      },
+    }, setSavingAgent, setSavedAgent, setAgentError)
   }
 
   async function clearTickets() {
@@ -238,6 +318,7 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
 
   const NAV_ITEMS = [
     { id: 'workspace' as Tab, label: 'Workspace', icon: Building2 },
+    { id: 'agent' as Tab, label: 'Agent', icon: Bot },
     { id: 'integrations' as Tab, label: 'Integrations', icon: Blocks },
     { id: 'billing' as Tab, label: 'Billing', icon: CreditCard },
     { id: 'account' as Tab, label: 'Account', icon: User },
@@ -297,7 +378,7 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
 
               <div>
                 <h1 className="text-lg font-bold text-slate-900">Workspace</h1>
-                <p className="text-sm text-slate-500 mt-0.5">Manage your workspace name and AI behavior.</p>
+                <p className="text-sm text-slate-500 mt-0.5">Manage your workspace name.</p>
               </div>
 
               {/* Section: General */}
@@ -330,14 +411,38 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
                 </div>
               </div>
 
-              {/* Section: AI Behavior */}
+            </div>
+          )}
+
+          {/* ── AGENT TAB ── */}
+          {activeTab === 'agent' && (
+            <div className="space-y-6 max-w-3xl">
+
+              <div>
+                <h1 className="text-lg font-bold text-slate-900">Agent</h1>
+                <p className="text-sm text-slate-500 mt-0.5">Configure how your AI agent behaves, what it can do, and how it communicates.</p>
+              </div>
+
+              {/* Section: Identity */}
               <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
                   <div>
-                    <h2 className="text-sm font-semibold text-slate-900">AI Behavior</h2>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">Control how Clerk drafts replies and summarizes conversations.</p>
+                    <h2 className="text-sm font-semibold text-slate-900">Identity</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">How the agent presents itself and writes replies.</p>
                   </div>
                   <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Agent name
+                        <span className="ml-1.5 font-normal text-slate-400">· shown in the notes panel and used as the @mention trigger</span>
+                      </label>
+                      <Input
+                        value={agentName}
+                        onChange={e => setAgentName(e.target.value)}
+                        placeholder="Clerk"
+                        className="h-9 text-sm bg-white"
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <label className="block text-xs font-semibold text-slate-700">
                         Brand name
@@ -361,16 +466,198 @@ export default function SettingsPageClient({ orgName, settings }: Props) {
                         placeholder="e.g. Friendly and direct. Never over-apologise. Use plain language."
                         maxLength={200}
                         rows={3}
-                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-yellow-500/20 focus:border-yellow-400 resize-none transition-all"
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 resize-none transition-all"
                       />
                       <p className="text-[11px] text-slate-400 text-right">{brandVoice.length}/200</p>
                     </div>
-                    <div className="flex items-center justify-end gap-3">
-                      {aiError && <p className="text-xs text-red-500">{aiError}</p>}
-                      <SaveButton saving={savingAi} saved={savedAi} onClick={saveAi} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Default Behavior */}
+              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">Default Behavior</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">What the agent does automatically when a ticket is opened.</p>
+                  </div>
+                  <div className="space-y-5">
+                    <ToggleRow
+                      label="Auto-plan on ticket open"
+                      description="Automatically generate an action plan when you open a ticket with an unread customer message."
+                      checked={autoPlanOnOpen}
+                      onChange={setAutoPlanOnOpen}
+                    />
+                    <ToggleRow
+                      label="Always draft a customer reply"
+                      description="Include a draft reply in every plan, even when no actions are needed."
+                      checked={alwaysDraftReply}
+                      onChange={setAlwaysDraftReply}
+                    />
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Default instruction
+                        <span className="ml-1.5 font-normal text-slate-400">· pre-filled in the plan prompt</span>
+                      </label>
+                      <Input
+                        value={defaultInstruction}
+                        onChange={e => setDefaultInstruction(e.target.value)}
+                        placeholder="e.g. Resolve the customer's issue and draft a reply"
+                        className="h-9 text-sm bg-white"
+                      />
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Section: Approval Workflow */}
+              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">Approval Workflow</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">Control when a human must approve before the agent acts.</p>
+                  </div>
+                  <div className="space-y-5">
+                    <ToggleRow
+                      label="Require approval before executing actions"
+                      description="Show a plan card and wait for your confirmation before the agent runs any Shopify or communication actions."
+                      checked={requireApprovalForActions}
+                      onChange={setRequireApprovalForActions}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Tool Permissions */}
+              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">Tool Permissions</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">Choose which categories of tools the agent is allowed to use.</p>
+                  </div>
+                  <div className="space-y-4">
+                    <ToggleRow
+                      label="Actions"
+                      description="Shopify write operations: issue refunds, cancel orders, update shipping addresses, add Shopify notes."
+                      checked={toolsEnabled.action}
+                      onChange={v => setToolsEnabled(p => ({ ...p, action: v }))}
+                      badge="High impact"
+                      badgeColor="text-orange-600 bg-orange-50 border-orange-200"
+                    />
+                    <ToggleRow
+                      label="Communication"
+                      description="Send replies to customers on their channel (email, Instagram DM, etc.)."
+                      checked={toolsEnabled.communication}
+                      onChange={v => setToolsEnabled(p => ({ ...p, communication: v }))}
+                      badge="Customer-facing"
+                      badgeColor="text-blue-600 bg-blue-50 border-blue-200"
+                    />
+                    <ToggleRow
+                      label="Internal"
+                      description="Add internal notes, update ticket status, and update ticket tags."
+                      checked={toolsEnabled.internal}
+                      onChange={v => setToolsEnabled(p => ({ ...p, internal: v }))}
+                      badge="Internal"
+                      badgeColor="text-violet-600 bg-violet-50 border-violet-200"
+                    />
+                    <ToggleRow
+                      label="Read"
+                      description="Fetch Shopify customer profiles and order history. Read-only — no changes are made."
+                      checked={toolsEnabled.read}
+                      onChange={v => setToolsEnabled(p => ({ ...p, read: v }))}
+                      badge="Read-only"
+                      badgeColor="text-slate-600 bg-slate-50 border-slate-200"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Guardrails */}
+              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">Guardrails</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">Hard limits that the agent will never exceed.</p>
+                  </div>
+                  <div className="space-y-5">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Max refund amount
+                        <span className="ml-1.5 font-normal text-slate-400">· leave blank for no limit</span>
+                      </label>
+                      <div className="relative w-48">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                        <Input
+                          value={maxRefundAmount}
+                          onChange={e => setMaxRefundAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                          placeholder="e.g. 50"
+                          className="h-9 text-sm bg-white pl-7"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400">Refunds above this amount will require manual approval.</p>
+                    </div>
+                    <ToggleRow
+                      label="Block order cancellations"
+                      description="Prevent the agent from cancelling orders entirely. Cancellations will require manual handling."
+                      checked={blockCancellations}
+                      onChange={setBlockCancellations}
+                    />
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Max iterations
+                        <span className="ml-1.5 font-normal text-slate-400">· default 10</span>
+                      </label>
+                      <div className="w-32">
+                        <Input
+                          value={maxIterations}
+                          onChange={e => setMaxIterations(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="10"
+                          className="h-9 text-sm bg-white"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-400">Maximum number of tool-calling steps per agent run.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Response */}
+              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
+                <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 sm:gap-8 p-5 sm:p-6">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">Response</h2>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">How the agent formats its customer-facing messages.</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">Reply language</label>
+                      <select
+                        value={replyLanguage}
+                        onChange={e => setReplyLanguage(e.target.value)}
+                        className="h-9 w-56 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 transition-all"
+                      >
+                        <option value="auto">Auto-detect</option>
+                        <option value="English">English</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
+                        <option value="Portuguese">Portuguese</option>
+                        <option value="Italian">Italian</option>
+                        <option value="Japanese">Japanese</option>
+                        <option value="Chinese">Chinese</option>
+                        <option value="Korean">Korean</option>
+                        <option value="Arabic">Arabic</option>
+                      </select>
+                      <p className="text-[11px] text-slate-400">Auto-detect matches the language the customer wrote in.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save bar */}
+              <div className="flex items-center justify-end gap-3 pt-1">
+                {agentError && <p className="text-xs text-red-500">{agentError}</p>}
+                <SaveButton saving={savingAgent} saved={savedAgent} onClick={saveAgent} />
               </div>
 
             </div>
