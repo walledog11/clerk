@@ -17,7 +17,7 @@ function AnimatedNumber({ value, format }: { value: number; format?: (n: number)
   useEffect(() => {
     const controls = animate(count, value, { duration: 0.8, ease: [0.16, 1, 0.3, 1] })
     return () => controls.stop()
-  }, [count, value])
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return <motion.span>{display}</motion.span>
 }
