@@ -81,7 +81,7 @@ export async function GET() {
     let nextInvoice: { date: number; amount: number } | null = null
     if (subscription && subscription.status !== 'canceled') {
       try {
-        const upcoming = await stripe.invoices.retrieveUpcoming({ customer: customerId })
+        const upcoming = await stripe.invoices.createPreview({ customer: customerId })
         nextInvoice = { date: upcoming.next_payment_attempt ?? upcoming.period_end, amount: upcoming.amount_due }
       } catch {
         // No upcoming invoice (e.g. canceled)
