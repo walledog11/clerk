@@ -21,7 +21,7 @@ export async function PUT(
   try {
     const client = getRedis();
     const key = presenceKey(orgId, threadId);
-    await client.zadd(key, 'GT', now, userId);
+    await client.zadd(key, { gt: true }, { score: now, member: userId });
     await client.expire(key, PRESENCE_TTL * 4);
   } catch {}
 

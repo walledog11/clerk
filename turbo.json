@@ -20,7 +20,9 @@
         "STRIPE_WEBHOOK_SECRET",
         "PRICE_ID",
         "ANTHROPIC_API_KEY",
-        "REDIS_URL"
+        "REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN"
       ]
     },
     "dev": {
