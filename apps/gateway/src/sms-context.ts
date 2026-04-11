@@ -55,7 +55,7 @@ export async function updateContext(organizationId: string, phone: string, updat
       lastOrderNumber: next.lastOrderNumber ?? null,
       lastThreadId: next.lastThreadId ?? null,
       history: next.history,
-      pendingPlan: next.pendingPlan ? (next.pendingPlan as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+      pendingPlan: next.pendingPlan ? (next.pendingPlan as object) : Prisma.DbNull,
     },
     create: {
       organizationId,
@@ -63,7 +63,7 @@ export async function updateContext(organizationId: string, phone: string, updat
       lastOrderNumber: next.lastOrderNumber ?? null,
       lastThreadId: next.lastThreadId ?? null,
       history: next.history,
-      pendingPlan: next.pendingPlan ? (next.pendingPlan as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+      pendingPlan: next.pendingPlan ? (next.pendingPlan as object) : Prisma.DbNull,
     },
   });
 }

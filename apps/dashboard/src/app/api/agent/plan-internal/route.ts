@@ -9,7 +9,7 @@
  * Response: { plan, instruction }
  */
 import { NextResponse } from "next/server";
-import { db, type Prisma } from "@clerk/db";
+import { db } from "@clerk/db";
 import { buildContext, planAgent } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
 import { handleApiError } from "@/lib/api-errors";
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
         where: { id: threadId },
         data: {
           cachedPlanMessageId: lastCustomerMessage.id,
-          cachedPlan: plan as unknown as Prisma.InputJsonValue,
+          cachedPlan: plan as object,
         },
       });
     }
