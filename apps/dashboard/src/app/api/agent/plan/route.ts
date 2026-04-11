@@ -48,8 +48,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ instruction, steps: [], rawToolCalls: [] });
     }
 
-    const cachedPlan = thread.cachedPlan as AgentPlan | null;
-    if (thread.cachedPlanMessageId === lastCustomerMessage.id && cachedPlan?.steps?.length) {
+    const cachedPlan = thread?.cachedPlan as AgentPlan | null;
+    if (thread?.cachedPlanMessageId === lastCustomerMessage.id && cachedPlan?.steps?.length) {
       return NextResponse.json(cachedPlan);
     }
 
