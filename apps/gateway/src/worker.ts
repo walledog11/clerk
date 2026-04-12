@@ -20,10 +20,10 @@ if (process.env.SENTRY_DSN) {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Queues (producers) use non-blocking commands — maxRetriesPerRequest left at default (20) so
 // enqueue calls fail fast rather than hanging indefinitely if Redis is unavailable.
-const sharedProducerConn = new IORedis(process.env.REDIS_URL!) as any;
+const sharedProducerConn = new IORedis(process.env.REDIS_URL!, { db: 0 }) as any;
 // Workers use maxRetriesPerRequest: null so they wait for Redis to recover instead of erroring.
 // setMaxListeners raised to accommodate one listener per Worker (5) plus our own error handler.
-const sharedWorkerConn = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null }) as any;
+const sharedWorkerConn = new IORedis(process.env.REDIS_URL!, { maxRetriesPerRequest: null, db: 0 }) as any;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 sharedProducerConn.on('error', (err: Error) => logger.error({ err: err.message }, '[Worker] Redis producer error'));
 sharedWorkerConn.setMaxListeners(20);
