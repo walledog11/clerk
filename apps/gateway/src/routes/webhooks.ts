@@ -20,7 +20,8 @@ const FILLER_PHRASES = [
 const filler = () => FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const redisConnection = new IORedis(process.env.REDIS_URL!, { db: 0 }) as any;
+const _redisUrl = new URL(process.env.REDIS_URL!); _redisUrl.pathname = '/0';
+const redisConnection = new IORedis(_redisUrl.toString(), { db: 0 }) as any;
 const messageQueue = new Queue(QUEUE.INBOUND, { connection: redisConnection });
 
 async function resolveOrganizationId(platform: ChannelType, externalAccountId: string): Promise<string | null> {
