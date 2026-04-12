@@ -3,13 +3,21 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
-  "main": "index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./test-helpers": "./test-helpers.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./test-helpers": {
+      "types": "./dist/test-helpers.d.ts",
+      "default": "./dist/test-helpers.js"
+    }
   },
   "scripts": {
-    "postinstall": "prisma generate --schema=prisma/schema.prisma",
+    "postinstall": "prisma generate --schema=prisma/schema.prisma && tsc",
+    "build": "tsc",
     "db:generate": "prisma generate",
     "db:push": "prisma db push"
   },
