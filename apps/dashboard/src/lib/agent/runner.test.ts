@@ -35,11 +35,12 @@ function toolUse(name: string, input: Record<string, unknown>, id = 'tu_1') {
   return {
     stop_reason: 'tool_use',
     content: [{ type: 'tool_use', id, name, input }],
+    usage: { input_tokens: 10, output_tokens: 5 },
   };
 }
 
 function endTurn(text = 'Done.') {
-  return { stop_reason: 'end_turn', content: [{ type: 'text', text }] };
+  return { stop_reason: 'end_turn', content: [{ type: 'text', text }], usage: { input_tokens: 10, output_tokens: 5 } };
 }
 
 // ── Shared state ──────────────────────────────────────────────────────────────
