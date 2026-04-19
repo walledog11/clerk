@@ -158,6 +158,40 @@
   to   { background-position: 20px 20px; }
 }
 
+/* ── Marketing page design tokens ── */
+:root {
+  --m-ink: #161413;
+  --m-ink-2: #3a3633;
+  --m-paper: #f6f2eb;
+  --m-paper-2: #efe9df;
+  --m-line: rgba(22, 20, 19, 0.10);
+  --m-line-2: rgba(22, 20, 19, 0.06);
+  --m-acid: rgb(60, 158, 57);
+  --m-good: #2f7a4a;
+  --m-serif: 'Instrument Serif', serif;
+  --m-mono: 'JetBrains Mono', monospace;
+}
+
+@keyframes m-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(60, 158, 57, 0.5); }
+  70%  { box-shadow: 0 0 0 10px rgba(60, 158, 57, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(60, 158, 57, 0); }
+}
+
+@keyframes m-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes m-slidein {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes m-blink {
+  50% { opacity: 0; }
+}
+
 /* Custom Scrollbar */
 @layer utilities {
 .custom-scrollbar {

@@ -1,34 +1,42 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Bot } from "lucide-react";
 
 export function Navbar() {
   return (
-    <header className="static top-12 inset-x-0 z-[100] w-full flex justify-center pt-4 px-4 pointer-events-none">
-  
-      <nav className="pointer-events-auto w-full max-w-5xl rounded-full border border-slate-200/60 backdrop-blur-xl bg-white/80 shadow-sm px-6 py-3 flex items-center justify-between transition-all">
-        
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center space-x-2 group">
-            <Bot className="w-5 h-5 text-slate-800 transition-colors group-hover:text-green-500"/>
-            <span className="text-xl font-extrabold text-slate-900 tracking-tight">clerk</span>
-          </Link>
-          
-          <div className="hidden md:flex gap-8 ml-4">
-            <Link href="#features" className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900">Features</Link>
-            <Link href="#how-it-works" className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900">How it Works</Link>
-            <Link href="#pricing" className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900">Pricing</Link>
-          </div>
-        </div>
+    <nav style={{
+      position: "sticky", top: 0, zIndex: 30,
+      background: "var(--m-paper)", borderBottom: "1px solid var(--m-line)",
+      padding: "12px 20px", display: "flex", alignItems: "center", gap: 32,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 17, letterSpacing: "-0.02em", flexShrink: 0 }}>
+        <span style={{ width: 10, height: 10, background: "var(--m-acid)", borderRadius: "50%", display: "inline-block" }} />
+        clerk
+      </div>
 
-        <div className="flex items-center gap-4">
-          <Link href="/login" className="hidden sm:block text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900">Log in</Link>
-          <Button className="rounded-full bg-green-600 text-green-950 hover:bg-green-500 text-sm font-bold shadow-md px-6 py-2 ring-2 ring-green-300/60 hover:ring-green-400/80 transition-all" asChild>
-            <Link href="/signup">Get Started</Link>
-          </Button>
-        </div>
+      <div className="hidden md:flex" style={{ gap: 24, fontSize: 13, color: "var(--m-ink-2)", fontWeight: 500 }}>
+        <Link href="#demo" style={{ color: "inherit", textDecoration: "none" }}>Live demo</Link>
+        <Link href="#channels" style={{ color: "inherit", textDecoration: "none" }}>Channels</Link>
+        <Link href="#pricing" style={{ color: "inherit", textDecoration: "none" }}>Pricing</Link>
+      </div>
 
-      </nav>
-    </header>
+      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        <Link href="/login" className="hidden sm:inline-flex" style={{
+          alignItems: "center", padding: "8px 14px",
+          borderRadius: 999, fontSize: 13, fontWeight: 600,
+          border: "1px solid var(--m-line)", background: "transparent",
+          color: "var(--m-ink)", textDecoration: "none",
+        }}>
+          Sign in
+        </Link>
+        <Link href="/signup" style={{
+          display: "inline-flex", alignItems: "center", padding: "8px 14px",
+          borderRadius: 999, fontSize: 13, fontWeight: 600,
+          background: "var(--m-ink)", color: "var(--m-paper)",
+          border: "1px solid var(--m-ink)", textDecoration: "none",
+          whiteSpace: "nowrap",
+        }}>
+          Start free →
+        </Link>
+      </div>
+    </nav>
   );
 }

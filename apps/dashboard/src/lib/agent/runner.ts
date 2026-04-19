@@ -569,6 +569,12 @@ export async function planAgent(
   // (e.g. search_shopify_products → edit_shopify_order needs the variant_id from the search)
   const readBlocks = blocks1.filter(b => TOOL_CATEGORIES[b.name] === 'read')
   const warnings: string[] = []
+
+  // Always warn if Shopify is connected but no customer is linked on a support thread
+  if (ctx.shopify && !ctx.thread.shopifyCustomerId && !isOperatorMode) {
+    warnings.push("Couldn't find a Shopify customer — verify the correct account is linked before approving.")
+  }
+
   if (readBlocks.length > 0) {
     // Execute reads in parallel to get real results
     const readResultsMap = new Map<string, string>()
@@ -588,7 +594,7 @@ export async function planAgent(
       const lower = result.toLowerCase()
       const isMissing = lower.includes('not found') || lower.includes('no customer') || lower === 'lookup failed'
       if (isMissing) {
-        if (block.name === 'get_shopify_customer' || block.name === 'search_shopify_customers')
+        if ((block.name === 'get_shopify_customer' || block.name === 'search_shopify_customers') && !warnings.some(w => w.includes('Shopify customer')))
           warnings.push("Couldn't find a Shopify customer — verify the correct account is linked before approving.")
         else if (block.name === 'get_shopify_orders' || block.name === 'get_order_by_name')
           warnings.push("No matching order found — confirm the order number with the customer before proceeding.")

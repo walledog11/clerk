@@ -9,7 +9,7 @@ const STATS = [
 function TickerItem({ dim, val, accent }: { dim: string; val: string; accent: string }) {
   return (
     <span style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
-      <span style={{ color: "rgba(255,255,255,0.37)" }}>[{dim}]</span>
+      <span style={{ color: "rgba(255,255,255,0.37)" }}>{dim}</span>
       {val && <span>{val}</span>}
       <span style={{ color: "var(--m-acid)" }}>{accent}</span>
     </span>
@@ -18,20 +18,18 @@ function TickerItem({ dim, val, accent }: { dim: string; val: string; accent: st
 
 export function StatsTicker() {
   return (
-    <div style={{ overflow: "hidden", background: "#161413", borderTop: "1px solid var(--m-line)", borderBottom: "1px solid var(--m-line)" }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 64,
-          alignItems: "center",
-          fontFamily: "var(--m-mono)",
-          fontSize: 13,
-          color: "var(--m-paper)",
-          padding: "24px 0",
-          animation: "m-scroll 40s linear infinite",
-          width: "max-content",
-        }}
-      >
+    <div style={{ overflow: "hidden", overflowX: "hidden", background: "var(--m-ink)", borderTop: "1px solid var(--m-line)", borderBottom: "1px solid var(--m-line)", maxWidth: "100vw" }}>
+      <div style={{
+        display: "flex",
+        gap: 64,
+        alignItems: "center",
+        fontFamily: "var(--m-mono)",
+        fontSize: 13,
+        color: "var(--m-paper)",
+        padding: "24px 28px",
+        animation: "m-scroll 40s linear infinite",
+        width: "max-content",
+      }}>
         {[...STATS, ...STATS].map((s, i) => (
           <TickerItem key={i} {...s} />
         ))}

@@ -1,204 +1,87 @@
-"use client";
-
-import { useState } from "react";
-import { Check, Zap, Bot, Shield, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { motion } from "motion/react";
 import Link from "next/link";
 
 const tiers = [
   {
     name: "Starter",
-    icon: Bot,
-    priceMonthly: 19,
-    priceAnnually: 14,
-    description: "Everything you need to centralize support across your channels.",
-    featuresLabel: "WHAT YOU GET",
-    features: [
-      { text: "Unified inbox (Instagram, Email, SMS)", ai: false },
-      { text: "AI ticket summaries", ai: true },
-      { text: "AI draft replies", ai: true },
-      { text: "Analytics dashboard", ai: false },
-    ],
-    cta: "Start Free Trial",
+    price: "$19",
+    per: "/mo",
+    desc: "For solo founders just getting their DMs under control.",
+    features: ["Unified inbox — IG, email, SMS", "AI drafts every reply", "Up to 500 conversations/mo"],
+    cta: "Start free trial",
     href: "/signup",
-    popular: false,
+    featured: false,
   },
   {
-    name: "Professional",
-    icon: Zap,
-    priceMonthly: 49,
-    priceAnnually: 39,
-    description: "Full agentic capabilities to automate omnichannel support end-to-end.",
-    featuresLabel: "EVERYTHING IN STARTER, PLUS",
-    features: [
-      { text: "All channels (+ Shopify, TikTok coming soon)", ai: false },
-      { text: "AI agent — delegate tasks by instruction", ai: true },
-      { text: "SMS / WhatsApp agent workflows", ai: true },
-      { text: "Shopify order context in every ticket", ai: true },
-      { text: "Team members & role permissions", ai: false },
-      { text: "Activity history & audit log", ai: false },
-    ],
-    cta: "Deploy Agent",
+    name: "Pro · most picked",
+    price: "$49",
+    per: "/mo",
+    desc: "For brands ready to delegate work, not just drafts.",
+    features: ["Everything in Starter", "Shopify actions (refund, address, track)", "SMS agent workflows", "Custom voice training", "2 team seats included"],
+    cta: "Try Pro free →",
     href: "/signup",
-    popular: true,
+    featured: true,
   },
   {
-    name: "Enterprise",
-    icon: Shield,
-    priceMonthly: 129,
-    priceAnnually: 99,
-    description: "Dedicated infrastructure and hands-on support for high-volume brands.",
-    featuresLabel: "EVERYTHING IN PRO, PLUS",
-    features: [
-      { text: "Custom AI instructions & brand voice", ai: true },
-      { text: "Priority support & onboarding", ai: false },
-      { text: "Custom roles & permissions", ai: false },
-      { text: "SLA guarantees", ai: false },
-      { text: "Dedicated success manager", ai: false },
-    ],
-    cta: "Contact Sales",
+    name: "Scale",
+    price: "$129",
+    per: "/mo",
+    desc: "For teams running 100+ tickets a day.",
+    features: ["Everything in Pro", "Unlimited conversations", "Custom AI instructions per channel", "SLA + audit log", "Dedicated onboarding"],
+    cta: "Talk to us",
     href: "mailto:hello@useclerk.co",
-    popular: false,
+    featured: false,
   },
 ];
 
 export function Pricing() {
-  const [annual, setAnnual] = useState(true);
-
   return (
-    <section id="pricing" className="relative w-full py-24 overflow-hidden">
-      <div className="container relative z-10 mx-auto px-4 md:px-6">
-        
-        {/* Header Section */}
-        <div className="flex flex-col items-center text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-widest mb-4 shadow-sm">
-            <Zap className="w-3.5 h-3.5 text-green-500" /> Select Your Agent
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900 leading-[1.1] mb-6">
-            Pricing that scales with your efficiency.
-          </h2>
-          
-          {/* Custom Toggle */}
-          <div className="flex items-center justify-center gap-4 mt-2 bg-white border border-slate-200 p-2 rounded-full shadow-sm">
-            <span className={`text-sm font-bold px-3 transition-colors ${!annual ? "text-slate-900" : "text-slate-400"}`}>
-              Monthly
-            </span>
-            <button
-              onClick={() => setAnnual(!annual)}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors shadow-inner border border-slate-200/50 ${annual ? "bg-amber-400" : "bg-slate-100"}`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-sm transition-transform duration-300 ease-in-out ${
-                  annual ? "translate-x-7" : "translate-x-1"
-                }`}
-              />
-            </button>
-            <div className="flex items-center gap-1.5 px-3">
-              <span className={`text-sm font-bold transition-colors ${annual ? "text-slate-900" : "text-slate-400"}`}>
-                Annually
-              </span>
-              <span className="bg-green-100 text-green-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wide border border-green-200">
-                Save 20%
-              </span>
+    <section id="pricing" style={{ padding: "80px 28px", maxWidth: 1280, margin: "0 auto", borderTop: "1px solid var(--m-line)" }}>
+      <div style={{ fontFamily: "var(--m-mono)", fontSize: 11, color: "var(--m-ink-2)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ width: 24, height: 1, background: "var(--m-ink-2)", display: "inline-block" }} />
+        03 · Pricing
+      </div>
+      <h2 style={{ fontFamily: "var(--m-serif)", fontSize: "clamp(40px, 5vw, 72px)", lineHeight: 0.95, letterSpacing: "-0.02em", maxWidth: "18ch", margin: "0 0 48px" }}>
+        Costs less than{" "}
+        <em style={{ fontStyle: "italic", color: "var(--m-acid)" }}>a part-time CX hire.</em>
+      </h2>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", border: "1px solid var(--m-line)", borderRadius: 12, overflow: "hidden", background: "var(--m-paper-2)" }}>
+        {tiers.map((tier, i) => (
+          <div key={tier.name} style={{
+            padding: "36px 28px",
+            borderRight: i < tiers.length - 1 ? "1px solid var(--m-line)" : "none",
+            position: "relative",
+            background: tier.featured ? "var(--m-ink)" : "transparent",
+            color: tier.featured ? "var(--m-paper)" : "var(--m-ink)",
+          }}>
+            <div style={{ fontFamily: "var(--m-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16, color: tier.featured ? "var(--m-acid)" : "var(--m-ink-2)" }}>
+              {tier.name}
             </div>
+            <div style={{ fontFamily: "var(--m-serif)", fontSize: 64, letterSpacing: "-0.03em", lineHeight: 1, display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
+              {tier.price}
+              <small style={{ fontSize: 14, fontFamily: "inherit", color: tier.featured ? "rgba(255,255,255,0.6)" : "var(--m-ink-2)", fontWeight: 500 }}>{tier.per}</small>
+            </div>
+            <div style={{ fontSize: 13, color: tier.featured ? "rgba(255,255,255,0.7)" : "var(--m-ink-2)", marginBottom: 24, minHeight: 40 }}>{tier.desc}</div>
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", fontSize: 13, lineHeight: 1.7 }}>
+              {tier.features.map(f => (
+                <li key={f} style={{ paddingLeft: 20, position: "relative" }}>
+                  <span style={{ position: "absolute", left: 0, color: "var(--m-acid)", fontWeight: 700 }}>→</span>
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <Link href={tier.href} style={{
+              display: "block", width: "100%", padding: "12px", borderRadius: 8,
+              border: tier.featured ? "none" : "1px solid var(--m-ink)",
+              fontSize: 13, fontWeight: 600, textAlign: "center",
+              background: tier.featured ? "var(--m-acid)" : "transparent",
+              color: tier.featured ? "#fff" : "var(--m-ink)",
+              textDecoration: "none",
+            }}>
+              {tier.cta}
+            </Link>
           </div>
-        </div>
-
-        {/* Pricing Cards Grid */}
-        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto items-center">
-          {tiers.map((tier, index) => {
-            const price = annual ? tier.priceAnnually : tier.priceMonthly;
-
-            return (
-              <motion.div
-                key={tier.name}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.15 }}
-                className={`relative flex flex-col rounded-[2rem] p-8 transition-all duration-300 bg-white ${
-                  tier.popular
-                    ? "border-2 border-green-400 shadow-[0_20px_60px_-15px_rgba(74,222,128,0.25)] lg:-translate-y-4 z-10"
-                    : "border border-slate-200 shadow-sm hover:shadow-md"
-                }`}
-              >
-                {/* Popular Glow Background inside card */}
-                {tier.popular && (
-                  <div className="absolute inset-0 bg-gradient-to-b from-green-50/50 to-transparent rounded-[2rem] pointer-events-none" />
-                )}
-
-                {/* Popular Badge */}
-                {tier.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                    <span className="bg-green-400 text-green-950 text-[10px] font-extrabold px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5" /> Most Popular
-                    </span>
-                  </div>
-                )}
-
-                {/* Tier Header */}
-                <div className="mb-6 relative z-10">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-5 border ${
-                    tier.popular ? 'bg-white border-green-200 shadow-sm' : 'bg-slate-50 border-slate-200'
-                  }`}>
-                    <tier.icon className={`w-6 h-6 ${tier.popular ? 'text-green-500' : 'text-slate-600'}`} />
-                  </div>
-                  <h3 className="text-2xl font-extrabold tracking-tight text-slate-900 mb-2">
-                    {tier.name}
-                  </h3>
-                  <p className="text-sm leading-relaxed text-slate-500 h-10">
-                    {tier.description}
-                  </p>
-                </div>
-
-                {/* Price */}
-                <div className="mb-8 flex items-end gap-1.5 relative z-10">
-                  <span className="text-5xl font-extrabold tracking-tighter text-slate-900">
-                    ${price}
-                  </span>
-                  <span className="text-sm font-semibold mb-1.5 text-slate-500">/mo</span>
-                </div>
-
-                {/* CTA Button */}
-                <Button
-                  className={`w-full rounded-full h-12 text-sm font-bold transition-all mb-8 group relative z-10 ${
-                    tier.popular
-                      ? "bg-green-400 text-green-950 hover:bg-green-500 shadow-md"
-                      : "bg-white border-2 border-slate-200 text-slate-800 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                  asChild
-                >
-                  <Link href={tier.href} className="flex items-center justify-center gap-2">
-                    {tier.cta}
-                    <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                  </Link>
-                </Button>
-
-                <div className="h-px w-full mb-6 bg-slate-100 relative z-10" />
-
-                {/* Features */}
-                <div className="relative z-10">
-                  <p className="text-[10px] font-extrabold tracking-widest uppercase mb-4 text-slate-400">
-                    {tier.featuresLabel}
-                  </p>
-                  <ul className="space-y-4 flex-1">
-                    {tier.features.map((f, i) => (
-                      <li key={i} className="flex items-start gap-3 text-sm">
-                        <div className={`mt-0.5 shrink-0 ${f.ai ? 'text-green-500' : 'text-slate-400'}`}>
-                          {f.ai ? <Zap className="w-4 h-4 fill-green-500/20" /> : <Check className="w-4 h-4" />}
-                        </div>
-                        <span className="font-medium text-slate-700">
-                          {f.text}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+        ))}
       </div>
     </section>
   );
