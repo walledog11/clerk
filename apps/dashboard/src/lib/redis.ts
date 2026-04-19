@@ -1,12 +1,14 @@
 import { Redis } from '@upstash/redis';
+import { getDashboardRedisEnv } from './env';
 
 let redis: Redis | null = null;
 
 export function getRedis(): Redis {
   if (!redis) {
+    const { url, token } = getDashboardRedisEnv();
     redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      url,
+      token,
     });
   }
   return redis;

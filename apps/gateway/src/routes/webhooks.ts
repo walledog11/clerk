@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual, randomUUID } from 'crypto';
 import { db, ChannelType } from '@clerk/db';
 import twilio from 'twilio';
 import { getContext, updateContext, extractOrderNumber, type ToolCall } from '../sms-context.js';
+import { getGatewayDashboardUrl } from '../env.js';
 import logger from '../logger.js';
 import { CHANNEL, QUEUE, JOB, READ_TOOLS, STATUS } from '../constants.js';
 import { getTwilio } from '../message-handlers.js';
@@ -308,7 +309,7 @@ router.post('/twilio', async (req: Request, res: Response) => {
 
     const ctx = await getContext(organizationId, fromNumber);
 
-    const dashboardUrl = process.env.DASHBOARD_INTERNAL_URL || 'http://localhost:3000';
+    const dashboardUrl = getGatewayDashboardUrl();
     const internalSecret = process.env.INTERNAL_API_SECRET;
 
     const normalised = body.toLowerCase().trim();

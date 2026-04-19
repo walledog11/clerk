@@ -3,13 +3,14 @@ import { db, SenderType, ChannelType, Prisma } from '@clerk/db';
 import Anthropic from '@anthropic-ai/sdk';
 import twilio from 'twilio';
 import { updateContext } from './sms-context.js';
+import { getGatewayDashboardUrl } from './env.js';
 import logger from './logger.js';
 import { CHANNEL, STATUS, MODEL, JOB } from './constants.js';
 import type { InboundJobData, ShopifyOrderPayload, AgentPlan, PlanStep } from './types.js';
 
 const FB_GRAPH = 'https://graph.facebook.com/v22.0';
 const MAX_INPUT_LENGTH = 4000;
-const DASHBOARD_URL = process.env.DASHBOARD_INTERNAL_URL ?? 'http://localhost:3000';
+const DASHBOARD_URL = getGatewayDashboardUrl();
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? '';
 
 const INJECTION_PATTERNS = [

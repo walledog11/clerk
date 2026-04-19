@@ -272,7 +272,8 @@ Configurable per org via Settings → Agent tab:
 - `TWILIO_WHATSAPP_NUMBER` — WhatsApp Business number (`whatsapp:+1xxxxxxxxxx`)
 - `TWILIO_WEBHOOK_URL` — production Twilio webhook URL
 - `SHOPIFY_APP_SECRET` — Shopify HMAC webhook verification secret
-- `DASHBOARD_INTERNAL_URL` — Vercel dashboard URL (for plan-internal calls and OAuth callback forwarding in dev)
+- `DASHBOARD_URL` — production dashboard URL used by the gateway for internal API calls
+- `DASHBOARD_INTERNAL_URL` — local dashboard URL used only for dev callback forwarding / local gateway-to-dashboard calls
 - `SENTRY_DSN` — (optional) Sentry error tracking
 
 ## Coding Guidelines

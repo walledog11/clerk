@@ -9,6 +9,7 @@ const TEST_DEFAULTS: Record<string, string> = {
   INTERNAL_API_SECRET: 'test-internal-secret',
   REDIS_URL: 'redis://localhost:6379',
   ANTHROPIC_API_KEY: 'test-anthropic-key',
+  DASHBOARD_URL: 'http://localhost:3000',
   DASHBOARD_INTERNAL_URL: 'http://localhost:3000',
   TWILIO_AUTH_TOKEN: 'test-twilio-token',
   TWILIO_ACCOUNT_SID: 'ACtest',

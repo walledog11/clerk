@@ -11,15 +11,16 @@ import logger from './logger.js';
 import { QUEUE } from './constants.js';
 import { CHANNEL } from './constants.js';
 import type { InboundJobData, AiSummaryJobData } from './types.js';
+import { validateGatewayEnv } from './env.js';
+import { WORKER_HEARTBEAT_INTERVAL_MS, writeWorkerHeartbeat } from './health.js';
 import { handleIgDmJob, handleEmailJob, handleShopifyJob, generateThreadIntelligence, sendWhatsAppPlanNotification, isWithinBusinessHours, sendAutoAck, resolveBusinessHoursSettings } from './message-handlers.js';
 import { createMaintenanceWorkers } from './maintenance-workers.js';
 
-const REQUIRED_ENV = ['INTERNAL_API_SECRET', 'DASHBOARD_INTERNAL_URL', 'ANTHROPIC_API_KEY', 'REDIS_URL', 'DATABASE_URL'] as const;
-for (const key of REQUIRED_ENV) {
-  if (!process.env[key]) {
-    console.error(`[Worker] Missing required env var: ${key} — aborting startup`);
-    process.exit(1);
-  }
+try {
+  validateGatewayEnv();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : '[Worker] Failed startup env validation');
+  process.exit(1);
 }
 
 if (process.env.SENTRY_DSN) {
@@ -41,6 +42,16 @@ const sharedWorkerConn = new IORedis(redisUrlStr, { maxRetriesPerRequest: null }
 sharedProducerConn.on('error', (err: Error) => logger.error({ err: err.message }, '[Worker] Redis producer error'));
 sharedWorkerConn.setMaxListeners(20);
 sharedWorkerConn.on('error', (err: Error) => logger.error({ err: err.message }, '[Worker] Redis worker error'));
+
+const heartbeatTimer = setInterval(() => {
+  writeWorkerHeartbeat(sharedProducerConn).catch((err) => {
+    logger.error({ err: err instanceof Error ? err.message : String(err) }, '[Worker] Failed to write heartbeat');
+  });
+}, WORKER_HEARTBEAT_INTERVAL_MS);
+heartbeatTimer.unref();
+await writeWorkerHeartbeat(sharedProducerConn).catch((err) => {
+  logger.error({ err: err instanceof Error ? err.message : String(err) }, '[Worker] Failed to write startup heartbeat');
+});
 
 const aiSummaryQueue = new Queue(QUEUE.AI_SUMMARY, {
   connection: sharedProducerConn,
@@ -109,6 +120,7 @@ const { workers: maintenanceWorkers, queues: maintenanceQueues } =
 
 async function shutdown() {
   logger.info('[Worker] Shutting down gracefully');
+  clearInterval(heartbeatTimer);
   await Promise.all([messageWorker.close(), aiSummaryWorker.close(), ...maintenanceWorkers.map(w => w.close())]);
   await Promise.all([aiSummaryQueue.close(), ...maintenanceQueues.map(q => q.close())]);
   await Promise.all([
