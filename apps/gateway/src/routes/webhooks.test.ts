@@ -65,7 +65,7 @@ const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET!;
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN!;
 const SHOPIFY_SECRET = process.env.SHOPIFY_APP_SECRET!;
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 const app = createApp();
 
 beforeEach(async () => {
@@ -74,7 +74,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await cleanupTestData(org.id);
+  await cleanupTestData(org?.id);
 });
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ export declare function createTestIntegration(orgId: string, options?: {
     externalAccountId: string;
     fromEmail: string | null;
     accessToken: string | null;
+    refreshToken: string | null;
     tokenExpiresAt: Date | null;
     metadata: import("@prisma/client/runtime/library").JsonValue | null;
 }>;
@@ -60,6 +61,7 @@ export declare function createTestThread(orgId: string, customerId: string, chan
 export declare function createTestMessage(threadId: string, content: string, senderType?: SenderType): Promise<{
     id: string;
     deletedAt: Date | null;
+    rating: number | null;
     threadId: string;
     senderType: import("@prisma/client").$Enums.SenderType;
     contentText: string | null;
@@ -68,4 +70,4 @@ export declare function createTestMessage(threadId: string, content: string, sen
     externalMessageId: string | null;
     sentAt: Date;
 }>;
-export declare function cleanupTestData(orgId: string): Promise<void>;
+export declare function cleanupTestData(orgId?: string | null): Promise<void>;

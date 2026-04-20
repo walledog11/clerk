@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { ChannelType, db } from '@clerk/db';
 import { createTestOrg, createTestIntegration, cleanupTestData, } from '@clerk/db/test-helpers';
 // ─── Hoisted mock state ──────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ const { capturedHandlers, mockAnthropicCreate, mockFetch } = vi.hoisted(() => ({
 vi.mock('ioredis', () => ({
     Redis: vi.fn().mockImplementation(function () {
         this.on = vi.fn().mockReturnThis();
+        this.set = vi.fn().mockResolvedValue('OK');
         this.setMaxListeners = vi.fn();
         this.disconnect = vi.fn();
         this.quit = vi.fn().mockResolvedValue('OK');
@@ -40,9 +41,15 @@ vi.mock('@sentry/node', () => ({
     captureException: vi.fn(),
 }));
 vi.stubGlobal('fetch', mockFetch);
-// Import worker.ts last — by this point all mocks are in place.
-// The module-level code (Worker creation, top-level awaits) runs but is fully mocked.
-await import('./worker.js');
+let shutdownWorkerRuntime = null;
+beforeAll(async () => {
+    const { startWorkerRuntime } = await import('./worker.js');
+    const runtime = await startWorkerRuntime();
+    shutdownWorkerRuntime = () => runtime.shutdown();
+});
+afterAll(async () => {
+    await shutdownWorkerRuntime?.();
+});
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function makeEmailJob(organizationId, overrides = {}) {
     return {
@@ -112,7 +119,7 @@ beforeEach(async () => {
     mockFetch.mockResolvedValue({ ok: false, json: vi.fn(), text: vi.fn().mockResolvedValue('') });
 });
 afterEach(async () => {
-    await cleanupTestData(org.id);
+    await cleanupTestData(org?.id);
 });
 describe('Message worker — email branch', () => {
     it('drops spam emails without creating any DB records', async () => {

@@ -20,7 +20,7 @@ vi.mock("@/lib/agent/api/internal", () => ({
 
 import { POST } from "./route";
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 
 beforeEach(async () => {
   org = await createTestOrg();
@@ -28,9 +28,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  if (org?.id) {
-    await cleanupTestData(org.id);
-  }
+  await cleanupTestData(org?.id);
   delete process.env.INTERNAL_API_SECRET;
   delete process.env.INTERNAL_API_SECRET_PREV;
   vi.clearAllMocks();

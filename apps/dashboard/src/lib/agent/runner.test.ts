@@ -45,7 +45,7 @@ function endTurn(text = 'Done.') {
 
 // ── Shared state ──────────────────────────────────────────────────────────────
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 let thread: Awaited<ReturnType<typeof createTestThread>>;
 
 function makeCtx(overrides: Partial<AgentContext> = {}): AgentContext {
@@ -79,7 +79,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await cleanupTestData(org.id);
+  await cleanupTestData(org?.id);
   vi.resetAllMocks();
 });
 

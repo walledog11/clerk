@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
 import { ChannelType, db } from '@clerk/db';
 import {
   createTestOrg,
@@ -21,6 +21,7 @@ const { capturedHandlers, mockAnthropicCreate, mockFetch } = vi.hoisted(() => ({
 vi.mock('ioredis', () => ({
   Redis: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
     this.on = vi.fn().mockReturnThis();
+    this.set = vi.fn().mockResolvedValue('OK');
     this.setMaxListeners = vi.fn();
     this.disconnect = vi.fn();
     this.quit = vi.fn().mockResolvedValue('OK');
@@ -57,9 +58,17 @@ vi.mock('@sentry/node', () => ({
 
 vi.stubGlobal('fetch', mockFetch);
 
-// Import worker.ts last — by this point all mocks are in place.
-// The module-level code (Worker creation, top-level awaits) runs but is fully mocked.
-await import('./worker.js');
+let shutdownWorkerRuntime: (() => Promise<void>) | null = null;
+
+beforeAll(async () => {
+  const { startWorkerRuntime } = await import('./worker.js');
+  const runtime = await startWorkerRuntime();
+  shutdownWorkerRuntime = () => runtime.shutdown();
+});
+
+afterAll(async () => {
+  await shutdownWorkerRuntime?.();
+});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +138,7 @@ function makeShopifyJob(
 }
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 
 beforeEach(async () => {
   org = await createTestOrg();
@@ -140,7 +149,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await cleanupTestData(org.id);
+  await cleanupTestData(org?.id);
 });
 
 describe('Message worker — email branch', () => {

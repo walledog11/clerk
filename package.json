@@ -11,8 +11,16 @@
     "lint": "npx turbo run lint",
     "db:push": "npx turbo run db:push",
     "db:generate": "npx turbo run db:generate",
-    "test": "npx turbo run test",
-    "test:e2e": "playwright test"
+    "db:migrate:deploy": "npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "npx turbo run test:unit --env-mode=loose",
+    "test:services:up": "node ./scripts/test-services.mjs up",
+    "test:services:down": "node ./scripts/test-services.mjs down",
+    "test:services:status": "node ./scripts/test-services.mjs status",
+    "test:integration": "node ./scripts/test-bootstrap.mjs && npx turbo run test:integration --env-mode=loose",
+    "test:integration:local": "node ./scripts/test-integration-local.mjs",
+    "test:e2e": "node ./scripts/test-bootstrap.mjs && node ./scripts/with-test-env.mjs npx playwright test",
+    "verify:production": "node ./scripts/verify-production.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

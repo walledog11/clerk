@@ -10,8 +10,14 @@ import type { InboundJobData, ShopifyOrderPayload, AgentPlan, PlanStep } from '.
 
 const FB_GRAPH = 'https://graph.facebook.com/v22.0';
 const MAX_INPUT_LENGTH = 4000;
-const DASHBOARD_URL = getGatewayDashboardUrl();
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET ?? '';
+
+function getInternalApiSecret(): string {
+  const secret = process.env.INTERNAL_API_SECRET;
+  if (!secret) {
+    throw new Error('[Gateway] Missing required environment variable: INTERNAL_API_SECRET');
+  }
+  return secret;
+}
 
 const INJECTION_PATTERNS = [
   /ignore (all |previous |prior )?(instructions?|prompts?|rules?|context)/i,
@@ -261,11 +267,11 @@ export async function sendWhatsAppPlanNotification(
   aiSummary: string | null
 ): Promise<void> {
   try {
-    const planRes = await fetch(`${DASHBOARD_URL}/api/agent/plan-internal`, {
+    const planRes = await fetch(`${getGatewayDashboardUrl()}/api/agent/plan-internal`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-internal-secret': INTERNAL_SECRET,
+        'x-internal-secret': getInternalApiSecret(),
       },
       body: JSON.stringify({ orgId: organizationId, threadId }),
     });
@@ -378,11 +384,11 @@ export function isWithinBusinessHours(settings: BusinessHoursSettings): boolean 
 
 export async function sendAutoAck(organizationId: string, threadId: string): Promise<void> {
   try {
-    const res = await fetch(`${DASHBOARD_URL}/api/messages/auto-ack`, {
+    const res = await fetch(`${getGatewayDashboardUrl()}/api/messages/auto-ack`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-internal-secret': INTERNAL_SECRET,
+        'x-internal-secret': getInternalApiSecret(),
       },
       body: JSON.stringify({ threadId }),
     });

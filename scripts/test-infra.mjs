@@ -1,0 +1,114 @@
+import net from 'node:net';
+import { spawn, spawnSync } from 'node:child_process';
+import { getTestEnv } from './with-test-env.mjs';
+
+const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_INTERVAL_MS = 250;
+
+export function resolveTestEnv(baseEnv = process.env) {
+  return getTestEnv(baseEnv);
+}
+
+export function getTestServiceTargets(baseEnv = process.env) {
+  const env = resolveTestEnv(baseEnv);
+  return {
+    postgres: parseTcpTarget('Postgres', env.DATABASE_URL),
+    redis: parseTcpTarget('Redis', env.REDIS_URL),
+  };
+}
+
+function parseTcpTarget(label, connectionString) {
+  const url = new URL(connectionString);
+  return {
+    label,
+    host: url.hostname,
+    port: Number(url.port || defaultPortForProtocol(url.protocol)),
+  };
+}
+
+function defaultPortForProtocol(protocol) {
+  if (protocol.startsWith('postgres')) return 5432;
+  if (protocol.startsWith('redis')) return 6379;
+  throw new Error(`[test-infra] Unsupported protocol: ${protocol}`);
+}
+
+export async function waitForTcpService(target, options = {}) {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    try {
+      await tryConnect(target.host, target.port);
+      return;
+    } catch (error) {
+      lastError = error;
+      await sleep(intervalMs);
+    }
+  }
+
+  const suffix = lastError instanceof Error ? ` Last error: ${lastError.message}` : '';
+  throw new Error(`[test-infra] ${target.label} is not reachable on ${target.host}:${target.port}.${suffix}`);
+}
+
+export async function waitForAllTestServices(baseEnv = process.env, options = {}) {
+  const targets = getTestServiceTargets(baseEnv);
+  await Promise.all([
+    waitForTcpService(targets.postgres, options),
+    waitForTcpService(targets.redis, options),
+  ]);
+}
+
+export function detectDockerCompose() {
+  const modern = spawnSync('docker', ['compose', 'version'], { stdio: 'ignore' });
+  if (modern.status === 0) {
+    return { command: 'docker', baseArgs: ['compose'] };
+  }
+
+  const legacy = spawnSync('docker-compose', ['version'], { stdio: 'ignore' });
+  if (legacy.status === 0) {
+    return { command: 'docker-compose', baseArgs: [] };
+  }
+
+  throw new Error('[test-infra] Docker Compose is not available. Install Docker Desktop or docker-compose.');
+}
+
+export function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: options.stdio ?? 'inherit',
+      env: options.env ?? resolveTestEnv(process.env),
+      cwd: options.cwd ?? process.cwd(),
+    });
+
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`[test-infra] ${command} ${args.join(' ')} exited with code ${code ?? 1}`));
+    });
+  });
+}
+
+function tryConnect(host, port) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect({ host, port });
+
+    socket.once('connect', () => {
+      socket.end();
+      resolve();
+    });
+
+    socket.once('error', (error) => {
+      socket.destroy();
+      reject(error);
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

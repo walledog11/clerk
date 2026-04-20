@@ -32,7 +32,7 @@ vi.mock("@/lib/agent/settings", () => ({
 import { auth } from "@clerk/nextjs/server";
 import { POST } from "./route";
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 
 beforeEach(async () => {
   org = await createTestOrg();
@@ -43,7 +43,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await cleanupTestData(org.id);
+  await cleanupTestData(org?.id);
   vi.clearAllMocks();
 });
 

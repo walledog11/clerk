@@ -35,12 +35,12 @@ This checklist is organized by launch priority rather than implementation phase.
 - [ ] Verify Sentry is wired in both apps for production and that critical failures include enough org/thread/job context to debug incidents.
 
 ### Testing & CI
-- [ ] Stop relying on a live shared Neon database for automated tests. Provision an isolated test database per CI run or switch the test strategy so CI is deterministic.
+- [x] Stop relying on a live shared Neon database for automated tests. Provision an isolated test database per CI run or switch the test strategy so CI is deterministic.
 - [ ] Make `npm test` pass reliably in CI without external network/database fragility.
-- [ ] Add proper setup/teardown for test data so cleanup does not fail when test fixtures were never created.
+- [x] Add proper setup/teardown for test data so cleanup does not fail when test fixtures were never created.
 - [ ] Add a true end-to-end launch flow test: inbound message -> thread appears -> plan generated -> approval -> outbound reply sent.
 - [ ] Unskip and finish the browser E2E for the main support flow, including Clerk auth setup and outbound provider interception.
-- [ ] Keep the webhook ingest E2E, but make it safe and deterministic for CI by isolating its database and environment dependencies.
+- [x] Keep the webhook ingest E2E, but make it safe and deterministic for CI by isolating its database and environment dependencies.
 
 ### Billing & Core External Accounts
 - [ ] Create a Stripe account and obtain a restricted production `STRIPE_SECRET_KEY`.

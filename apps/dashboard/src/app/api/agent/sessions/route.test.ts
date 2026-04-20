@@ -16,7 +16,7 @@ vi.mock("@clerk/nextjs/server", () => ({
 import { auth } from "@clerk/nextjs/server";
 import { GET } from "./route";
 
-let org: Awaited<ReturnType<typeof createTestOrg>>;
+let org!: Awaited<ReturnType<typeof createTestOrg>>;
 
 beforeEach(async () => {
   org = await createTestOrg();
@@ -27,9 +27,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  if (org) {
-    await cleanupTestData(org.id);
-  }
+  await cleanupTestData(org?.id);
   vi.clearAllMocks();
 });
 

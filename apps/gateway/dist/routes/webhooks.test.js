@@ -57,7 +57,7 @@ beforeEach(async () => {
     queueAddSpy.mockClear();
 });
 afterEach(async () => {
-    await cleanupTestData(org.id);
+    await cleanupTestData(org?.id);
 });
 // ---------------------------------------------------------------------------
 // GET /webhooks/meta — Meta verification handshake

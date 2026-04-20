@@ -68,6 +68,7 @@ export async function createTestMessage(
   });
 }
 
-export async function cleanupTestData(orgId: string) {
+export async function cleanupTestData(orgId?: string | null) {
+  if (!orgId) return;
   await db.organization.delete({ where: { id: orgId } }).catch(() => undefined);
 }

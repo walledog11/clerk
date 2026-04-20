@@ -17,13 +17,13 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm run dev -w apps/dashboard',
+      command: 'node ./scripts/with-test-env.mjs npm run dev -w apps/dashboard',
       url: 'http://localhost:3000',
       reuseExistingServer: true,
       timeout: 60_000,
     },
     {
-      command: 'npm run dev -w apps/gateway',
+      command: 'node ./scripts/with-test-env.mjs npm run dev -w apps/gateway',
       url: 'http://localhost:8080',
       reuseExistingServer: true,
       timeout: 60_000,

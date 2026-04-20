@@ -6,6 +6,12 @@ import { rateLimit, tooManyRequests } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
+const RANGE_TO_DAYS = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+} as const;
+
 export async function GET(request: Request) {
   try {
     const org = await getOrCreateOrg();
@@ -14,13 +20,26 @@ export async function GET(request: Request) {
     if (!rl.success) return tooManyRequests(rl.reset);
     const { searchParams } = new URL(request.url);
 
+    const range = searchParams.get('range');
+    const hasExplicitBounds = searchParams.has('from') || searchParams.has('to');
+
     const to = searchParams.get('to') ? new Date(searchParams.get('to')!) : new Date();
-    const from = searchParams.get('from')
-      ? new Date(searchParams.get('from')!)
-      : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    let from: Date;
+    if (searchParams.get('from')) {
+      from = new Date(searchParams.get('from')!);
+    } else if (!hasExplicitBounds && range && range in RANGE_TO_DAYS) {
+      from = new Date(to.getTime() - RANGE_TO_DAYS[range as keyof typeof RANGE_TO_DAYS] * 24 * 60 * 60 * 1000);
+    } else {
+      from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
 
     if (isNaN(to.getTime()) || isNaN(from.getTime())) {
       return NextResponse.json({ error: 'Invalid date range' }, { status: 400 });
+    }
+
+    if (range && !(range in RANGE_TO_DAYS) && !hasExplicitBounds) {
+      return NextResponse.json({ error: 'Invalid range' }, { status: 400 });
     }
 
     const [

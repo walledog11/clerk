@@ -1,11 +1,18 @@
-import { config } from 'dotenv';
 import { vi } from 'vitest';
 
-config({ path: '.env.local' });
+const TEST_DEFAULTS: Record<string, string> = {
+  CLERK_SECRET_KEY: 'sk_test_clerk',
+  OPENAI_API_KEY: 'sk-test-openai',
+  ANTHROPIC_API_KEY: 'test-anthropic-key',
+  INTERNAL_API_SECRET: 'test-internal-secret',
+  POSTMARK_API_KEY: 'test-postmark-key',
+  STRIPE_SECRET_KEY: 'sk_test_stripe',
+  STRIPE_WEBHOOK_SECRET: 'whsec_test_stripe',
+};
 
-// Seed env vars that routes check before calling mocked clients.
-// Tests that explicitly test the missing-key 502 path delete the var themselves.
-if (!process.env.POSTMARK_API_KEY) process.env.POSTMARK_API_KEY = 'test-postmark-key';
+for (const [key, value] of Object.entries(TEST_DEFAULTS)) {
+  if (!process.env[key]) process.env[key] = value;
+}
 
 // Bypass rate limiting in tests — no Redis available in CI
 vi.mock('@/lib/rate-limit', () => ({

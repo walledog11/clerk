@@ -5,9 +5,9 @@ import { useThreads } from "@/hooks/useThreads"
 import { getCustomerName } from "@/lib/utils"
 import { getChannelInfo } from "@/lib/channels"
 import { fetcher } from "@/lib/fetcher"
-import { SENDER_TYPE } from "@/lib/constants"
+import { CHANNEL_TYPE, SENDER_TYPE } from "@/lib/constants"
 import { AGENT_SETTINGS_DEFAULTS } from "@/lib/agent/settings"
-import type { Thread, Integration, OrgSettings } from "@/types"
+import type { Thread, Integration, OrgSettings, KnowledgeBase } from "@/types"
 import type { ViewId, NavView } from "./types"
 import type { ActivityEvent } from "./ActivityFeed"
 
@@ -29,15 +29,12 @@ export function useHomeData({ initialOpenThreads, initialClosedCount }: Options)
 
   const { data: integrations = [], error: integrationsError } = useSWR<Integration[]>('/api/integrations', fetcher)
   const { data: orgData } = useSWR<{ settings: Partial<OrgSettings> }>('/api/org', fetcher)
+  const { data: kbData } = useSWR<{ knowledgeBases: KnowledgeBase[] }>('/api/kb', fetcher, { revalidateOnFocus: false })
+  const { data: phoneData } = useSWR<{ phoneNumber: string | null; phoneVerified: boolean }>('/api/phone', fetcher, { revalidateOnFocus: false })
   const { memberships } = useOrganization({ memberships: { infinite: false, pageSize: 10 } })
 
-  const analyticsFrom = useMemo(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 7)
-    return d.toISOString()
-  }, [])
   const { data: analyticsData } = useSWR<AnalyticsSnapshot>(
-    `/api/analytics?from=${analyticsFrom}&to=${new Date().toISOString()}`,
+    '/api/analytics?range=7d',
     fetcher,
     { refreshInterval: 300_000, revalidateOnFocus: false },
   )
@@ -114,6 +111,9 @@ export function useHomeData({ initialOpenThreads, initialClosedCount }: Options)
   }, [openThreads, closedThreads])
 
   const channelConnected = integrations.length > 0
+  const hasShopify = integrations.some(i => i.platform === CHANNEL_TYPE.SHOPIFY)
+  const hasKbArticle = (kbData?.knowledgeBases ?? []).some(kb => kb.articles.length > 0)
+  const hasVerifiedPhone = phoneData?.phoneVerified ?? false
   const memberCount = memberships?.data?.length ?? 1
   const hasInvitedTeam = memberCount > 1
   const hasSentReply = useMemo(() => (
@@ -132,11 +132,14 @@ export function useHomeData({ initialOpenThreads, initialClosedCount }: Options)
 
   const workflowSteps = useMemo(() => [
     { label: "Connect a channel", href: "/dashboard/settings?tab=integrations", status: (channelConnected ? "done" : "pending") as "done" | "pending" },
+    { label: "Connect Shopify", href: "/dashboard/integrations", status: (hasShopify ? "done" : "pending") as "done" | "pending" },
+    { label: "Configure agent", href: "/dashboard/settings?tab=agent", status: (hasConfiguredAgent ? "done" : "pending") as "done" | "pending" },
+    { label: "Add knowledge base content", href: "/dashboard/kb", status: (hasKbArticle ? "done" : "pending") as "done" | "pending" },
     { label: "Send your first reply", href: "/dashboard/tickets", status: (hasSentReply ? "done" : "pending") as "done" | "pending" },
     { label: "Invite team members", href: "/dashboard/team", status: (hasInvitedTeam ? "done" : "pending") as "done" | "pending" },
+    { label: "Verify phone for notifications", href: "/dashboard/team", status: (hasVerifiedPhone ? "done" : "pending") as "done" | "pending" },
     { label: "Add more channels", href: "/dashboard/settings?tab=integrations", status: (hasMultipleChannels ? "done" : "pending") as "done" | "pending" },
-    { label: "Configure agent", href: "/dashboard/agent", status: (hasConfiguredAgent ? "done" : "pending") as "done" | "pending" },
-  ], [channelConnected, hasSentReply, hasInvitedTeam, hasMultipleChannels, hasConfiguredAgent])
+  ], [channelConnected, hasShopify, hasConfiguredAgent, hasKbArticle, hasSentReply, hasInvitedTeam, hasVerifiedPhone, hasMultipleChannels])
   const workflowDoneCount = workflowSteps.filter(s => s.status === "done").length
 
   const navViews = useMemo<NavView[]>(() => [

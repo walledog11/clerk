@@ -37,6 +37,12 @@
     },
     "test": {
       "outputs": []
+    },
+    "test:unit": {
+      "outputs": []
+    },
+    "test:integration": {
+      "outputs": []
     }
   }
 }

@@ -6,9 +6,11 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node ../../scripts/with-test-env.mjs vitest run --config vitest.unit.config.ts",
+    "test:integration": "node ../../scripts/with-test-env.mjs vitest run --config vitest.integration.config.ts",
+    "test:watch": "node ../../scripts/with-test-env.mjs vitest --config vitest.integration.config.ts",
+    "test:coverage": "node ../../scripts/with-test-env.mjs vitest run --coverage --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",

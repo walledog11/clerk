@@ -37,5 +37,7 @@ export async function createTestMessage(threadId, content, senderType = SenderTy
     });
 }
 export async function cleanupTestData(orgId) {
+    if (!orgId)
+        return;
     await db.organization.delete({ where: { id: orgId } }).catch(() => undefined);
 }
