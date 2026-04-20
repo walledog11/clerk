@@ -113,6 +113,12 @@ export async function startWorkerRuntime() {
     : { workers: [], queues: [] };
 
   const shutdown = async (exitProcess = false) => {
+    const forceExit = setTimeout(() => {
+      logger.warn('[Worker] Graceful shutdown timed out — forcing exit');
+      process.exit(1);
+    }, 25_000);
+    forceExit.unref();
+
     logger.info('[Worker] Shutting down gracefully');
     clearInterval(heartbeatTimer);
     await Promise.all([messageWorker.close(), aiSummaryWorker.close(), ...maintenanceWorkers.map(w => w.close())]);
@@ -121,7 +127,9 @@ export async function startWorkerRuntime() {
       sharedProducerConn.quit().catch(() => sharedProducerConn.disconnect()),
       sharedWorkerConn.quit().catch(() => sharedWorkerConn.disconnect()),
     ]);
+    await db.$disconnect().catch(() => {});
 
+    clearTimeout(forceExit);
     if (exitProcess) process.exit(0);
   };
 
