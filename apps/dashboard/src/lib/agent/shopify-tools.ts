@@ -361,29 +361,32 @@ export async function getOrderTracking(
     });
   }
 
-  // Fetch live tracking events from Trackingmore
-  const trackingmoreKey = process.env.TRACKINGMORE_API_KEY;
-  if (!trackingmoreKey) {
+  // Fetch live tracking events from Ship24
+  const ship24Key = process.env.SHIP24_API_KEY;
+  if (!ship24Key) {
     return JSON.stringify({
       fulfillment_status: fulfillments[0].status,
       tracking_number: trackingNumber,
       tracking_company: carrier ?? null,
       tracking_url: fulfillments[0].tracking_url ?? null,
-      note: "Live tracking unavailable — Trackingmore not configured.",
+      note: "Live tracking unavailable — Ship24 not configured.",
     });
   }
 
-  const tmRes = await fetch("https://api.trackingmore.com/v4/trackings/create", {
+  const s24Res = await fetch("https://api.ship24.com/public/v1/trackers/track", {
     method: "POST",
     headers: {
-      "Tracking-Api-Key": trackingmoreKey,
+      Authorization: `Bearer ${ship24Key}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ tracking_number: trackingNumber, courier_code: carrier ?? undefined }),
+    body: JSON.stringify({
+      trackingNumber,
+      ...(carrier ? { courierCode: [carrier] } : {}),
+    }),
   });
-  const tmData = await tmRes.json();
+  const s24Data = await s24Res.json();
 
-  if (!tmRes.ok || tmData.code !== 200) {
+  if (!s24Res.ok || !s24Data.data) {
     return JSON.stringify({
       fulfillment_status: fulfillments[0].status,
       tracking_number: trackingNumber,
@@ -393,26 +396,27 @@ export async function getOrderTracking(
     });
   }
 
-  type TrackingmoreEvent = {
-    description: string;
-    date: string;
-    location: string;
-    tag: string;
+  type Ship24Event = {
+    status: string | null;
+    occurrenceDatetime: string;
+    location: string | null;
+    statusCode: string | null;
+    statusMilestone: string;
   };
 
-  const tracking = tmData.data ?? {};
-  const events: TrackingmoreEvent[] = (tracking.origin_info?.trackinfo ?? tracking.destination_info?.trackinfo ?? []).slice(0, 10);
+  const shipment = s24Data.data.shipment ?? {};
+  const events: Ship24Event[] = (s24Data.data.events ?? []).slice(0, 10);
 
   return JSON.stringify({
-    status: tracking.delivery_status ?? fulfillments[0].shipment_status ?? fulfillments[0].status,
-    est_delivery_date: tracking.expected_delivery ?? null,
+    status: shipment.statusMilestone ?? fulfillments[0].shipment_status ?? fulfillments[0].status,
+    est_delivery_date: shipment.delivery?.estimatedDeliveryDate ?? null,
     tracking_number: trackingNumber,
     tracking_company: carrier ?? null,
     tracking_url: fulfillments[0].tracking_url ?? null,
     events: events.map((e) => ({
-      message: e.description,
-      status: e.tag,
-      datetime: e.date,
+      message: e.status,
+      status: e.statusCode,
+      datetime: e.occurrenceDatetime,
       location: e.location ?? null,
     })),
   });
