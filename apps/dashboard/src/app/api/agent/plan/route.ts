@@ -6,13 +6,15 @@ import { handleApiError } from "@/lib/api/errors";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { buildAgentPlanCacheRecord, isAgentPlanCacheHit, readAgentPlanCache } from "@/lib/agent/api/plan-cache";
 import { parseAgentPlanBody } from "@/lib/agent/api/validation";
-import { buildContext, planAgent } from "@/lib/agent/runner";
+import { buildContext, hashInstructionForLog, planAgent } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { db } from "@clerk/db";
 import type { OrgSettings } from "@/types";
+import logger from "@/lib/server/logger";
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const org = await getOrCreateOrg();
 
@@ -21,11 +23,27 @@ export async function POST(request: Request) {
 
     const { threadId, instruction, force } = parseAgentPlanBody(await request.json());
     const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
+    const instructionHash = hashInstructionForLog(instruction);
+
+    logger.info({
+      orgId: org.id,
+      threadId,
+      force: Boolean(force),
+      instructionLength: instruction.length,
+      instructionHash,
+    }, "[agent:plan] POST");
 
     const thread = await requireOrgThread(threadId, org.id);
     const lastCustomerMessage = thread.messages[0] ?? null;
 
     if (!lastCustomerMessage) {
+      logger.info({
+        orgId: org.id,
+        threadId,
+        durationMs: Date.now() - startedAt,
+        reason: "no_last_customer_message",
+        instructionHash,
+      }, "[agent:plan] skipped");
       return NextResponse.json({ instruction, steps: [], rawToolCalls: [] });
     }
 
@@ -36,6 +54,14 @@ export async function POST(request: Request) {
       lastCustomerMessageId: lastCustomerMessage.id,
       settings,
     })) {
+      logger.info({
+        orgId: org.id,
+        threadId,
+        durationMs: Date.now() - startedAt,
+        rawToolCallCount: cachedPlan?.plan.rawToolCalls.length ?? 0,
+        visibleStepCount: cachedPlan?.plan.steps.length ?? 0,
+        instructionHash,
+      }, "[agent:plan] cache hit");
       return NextResponse.json(cachedPlan?.plan);
     }
 
@@ -56,6 +82,16 @@ export async function POST(request: Request) {
         }) as object,
       },
     });
+
+    logger.info({
+      orgId: org.id,
+      threadId,
+      durationMs: Date.now() - startedAt,
+      rawToolCallCount: plan.rawToolCalls.length,
+      visibleStepCount: plan.steps.length,
+      warningCount: plan.warnings?.length ?? 0,
+      instructionHash,
+    }, "[agent:plan] response");
 
     return NextResponse.json(plan);
   } catch (error) {

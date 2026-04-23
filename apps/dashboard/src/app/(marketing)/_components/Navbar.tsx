@@ -2,41 +2,28 @@ import Link from "next/link";
 
 export function Navbar() {
   return (
-    <nav style={{
-      position: "sticky", top: 0, zIndex: 30,
-      background: "var(--m-paper)", borderBottom: "1px solid var(--m-line)",
-      padding: "12px 20px", display: "flex", alignItems: "center", gap: 32,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 17, letterSpacing: "-0.02em", flexShrink: 0 }}>
-        <span style={{ width: 10, height: 10, background: "var(--m-acid)", borderRadius: "50%", display: "inline-block" }} />
+    <div className="sticky flex top-3 z-30 justify-center mt-4 mb-2 px-4 pointer-events-none" >
+    <nav className="flex items-center gap-8 rounded-full max-w-5xl w-full py-2.5 px-4 bg-stone-100 border border-solid border-stone-900/10 pointer-events-auto shadow-[0_2px_16px_rgba(0,0,0,0.06)]" >
+      <div className="flex items-center gap-2 font-semibold text-md tracking-tight" >
+        <span className="inline-block w-3 h-3 bg-green-400 rounded-full" />
         clerk
       </div>
 
-      <div className="hidden md:flex" style={{ gap: 24, fontSize: 13, color: "var(--m-ink-2)", fontWeight: 500 }}>
-        <Link href="#demo" style={{ color: "inherit", textDecoration: "none" }}>Live demo</Link>
-        <Link href="#channels" style={{ color: "inherit", textDecoration: "none" }}>Channels</Link>
-        <Link href="#pricing" style={{ color: "inherit", textDecoration: "none" }}>Pricing</Link>
+      <div className="hidden md:flex gap-6 text-sm font-medium text-stone-500">
+        <Link href="#demo" className="text-inherit hover:text-stone-400">Live demo</Link>
+        <Link href="#channels" className="text-inherit hover:text-stone-400">Channels</Link>
+        <Link href="#pricing" className="text-inherit hover:text-stone-400">Pricing</Link>
       </div>
 
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-        <Link href="/login" className="hidden sm:inline-flex" style={{
-          alignItems: "center", padding: "8px 14px",
-          borderRadius: 999, fontSize: 13, fontWeight: 600,
-          border: "1px solid var(--m-line)", background: "transparent",
-          color: "var(--m-ink)", textDecoration: "none",
-        }}>
+      <div className="ml-auto flex gap-3 items-center">
+        <Link href="/login" className="hidden sm:inline-flex items-center py-2 px-4 rounded-full text-sm font-semibold border border-solid border-stone-500 text-stone-900 hover:text-stone-300 hover:border-stone-400 transition-colors" >
           Sign in
         </Link>
-        <Link href="/signup" style={{
-          display: "inline-flex", alignItems: "center", padding: "8px 14px",
-          borderRadius: 999, fontSize: 13, fontWeight: 600,
-          background: "var(--m-ink)", color: "var(--m-paper)",
-          border: "1px solid var(--m-ink)", textDecoration: "none",
-          whiteSpace: "nowrap",
-        }}>
+        <Link href="/signup" className="inline-flex items-center py-2 px-4 rounded-full text-sm font-semibold bg-stone-900 text-stone-100 border border-solid border-stone-500">
           Start free →
         </Link>
       </div>
     </nav>
+    </div>
   );
 }

@@ -227,9 +227,9 @@ function ProposedPlan({ conv }: { conv: Conv }) {
     search: { background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.9)" },
   };
   return (
-    <div style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 13px", borderBottom: "1px solid rgba(255,255,255,0.10)" }}>
-        <span style={{ fontSize: 12, color: "var(--m-paper)", fontWeight: 500 }}>Proposed plan</span>
+    <div className="bg-white/[0.05] border border-solid border-white/[0.1] overflow-hidden rounded-xl" >
+      <div className="flex align-center justify-between py-2 px-3 border-b border-b-solid border-b-white/[0.10]" >
+        <span className="text-xs text-stone-200 font-medium" >Proposed plan</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
           <span>{checked} of {steps.length} steps</span>
           <span style={{ cursor: "pointer", display: "inline-flex" }}><RefreshIcon /></span>
@@ -251,7 +251,7 @@ function ProposedPlan({ conv }: { conv: Conv }) {
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 marginTop: 1, flexShrink: 0,
               }}>
-                {isChecked && <span style={{ color: "var(--m-paper)" }}><CheckIcon /></span>}
+                {isChecked && <span className="text-stone-100"><CheckIcon /></span>}
               </span>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
@@ -259,7 +259,7 @@ function ProposedPlan({ conv }: { conv: Conv }) {
                     {kind === "shopify" ? <ShopifyIcon /> : kind === "reply" ? <ReplyIcon /> : <SearchIcon />}
                     {kind === "shopify" ? "Shopify" : kind === "reply" ? "Reply" : "Lookup"}
                   </span>
-                  <span style={{ color: "var(--m-paper)", fontSize: 12, fontWeight: 500 }}>{step.label}</span>
+                  <span className="text-xs font-medium text-stone-100">{step.label}</span>
                 </div>
                 {kind === "reply" && (
                   <div style={{ borderLeft: "2px solid #4a90e2", paddingLeft: 7, fontStyle: "italic", color: "rgba(255,255,255,0.78)", fontSize: 11, lineHeight: 1.4, marginTop: 2 }}>
@@ -271,9 +271,9 @@ function ProposedPlan({ conv }: { conv: Conv }) {
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 7, padding: "11px 13px", borderTop: "1px solid rgba(255,255,255,0.10)" }}>
-        <button style={{ background: "var(--m-good)", color: "#0d0c0b", fontWeight: 600, fontSize: 12, padding: "7px 13px", borderRadius: 7, border: 0, cursor: "pointer", fontFamily: "inherit" }}>Run plan</button>
-        <button style={{ background: "transparent", color: "var(--m-paper)", border: "1px solid rgba(255,255,255,0.20)", fontSize: 12, padding: "7px 13px", borderRadius: 7, cursor: "pointer", fontFamily: "inherit" }}>Dismiss</button>
+      <div className="flex gap-[7px] border-t border-solid border-white/10 px-[13px] py-[11px]">
+        <button className="cursor-pointer rounded-[7px] border-0 bg-green-700 px-[13px] py-[7px] text-xs font-semibold text-stone-950 [font-family:inherit]">Run plan</button>
+        <button className="cursor-pointer rounded-[7px] border border-solid border-white/20 bg-transparent px-[13px] py-[7px] text-xs text-stone-100 [font-family:inherit]">Dismiss</button>
       </div>
     </div>
   );
@@ -328,7 +328,7 @@ function DemoCard() {
   }, [activeId]);
 
   return (
-    <div style={{ margin: "10px", background: "var(--m-ink)", color: "var(--m-paper)", borderRadius: 18, overflow: "hidden", boxShadow: "0 30px 80px -20px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,.08)" }}>
+    <div className="bg-stone-900 text-stone-100" style={{ margin: "10px", borderRadius: 18, overflow: "hidden", boxShadow: "0 30px 80px -20px rgba(0,0,0,0.25), 0 4px 12px rgba(0,0,0,.08)" }}>
       {/* Browser chrome */}
       <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,0.08)", fontSize: 12 }}>
         <div style={{ display: "flex", gap: 5 }}>
@@ -336,7 +336,7 @@ function DemoCard() {
         </div>
         <span style={{ fontFamily: "var(--m-mono)", color: "rgba(255,255,255,0.5)", fontSize: 11 }}>clerk.app/inbox</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.56)", fontSize: 11 }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--m-acid)", display: "inline-block", animation: "m-pulse 1.8s ease infinite" }} />
+          <span className="inline-block h-1.5 w-1.5 animate-[m-pulse_1.8s_ease_infinite] rounded-full bg-green-600" />
           live demo · interact with anything
         </span>
       </div>
@@ -353,15 +353,15 @@ function DemoCard() {
           <div style={{ overflowY: "auto" }} className="no-scrollbar">
             {tickets.map(t => (
               <div key={t.id} onClick={() => setActiveId(t.id)} style={{ padding: "11px 15px", borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", position: "relative", background: t.id === activeId ? "rgba(255,255,255,0.07)" : "transparent", animation: t.isNew ? "m-slidein 0.5s ease" : undefined }}>
-                {t.id === activeId && <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, background: "var(--m-acid)" }} />}
+                {t.id === activeId && <span className="absolute bottom-0 left-0 top-0 w-0.5 bg-green-600" />}
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4, fontSize: 12 }}>
                   <ChBadge ch={t.ch} />
-                  <span style={{ fontWeight: 500, color: "var(--m-paper)", fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                  <span className="flex-1 truncate text-xs font-medium text-stone-100">{t.name}</span>
                   <span style={{ color: "rgba(255,255,255,0.38)", fontSize: 11, flexShrink: 0 }}>{t.time}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{t.preview}</div>
                 <div style={{ marginTop: 5, display: "flex", gap: 4 }}>
-                  <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 3, background: t.status === "live" ? "rgba(60,158,57,0.2)" : "rgba(255,255,255,0.1)", color: t.status === "live" ? "var(--m-acid)" : "rgba(255,255,255,0.7)", fontFamily: "var(--m-mono)" }}>{t.status}</span>
+                  <span className={`rounded-[3px] px-1.5 py-0.5 text-[10px] [font-family:var(--m-mono)] ${t.status === "live" ? "bg-green-600/20 text-green-600" : "bg-white/10 text-white/70"}`}>{t.status}</span>
                   <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", fontFamily: "var(--m-mono)" }}>{t.tag}</span>
                 </div>
               </div>
@@ -374,14 +374,14 @@ function DemoCard() {
           <div style={{ padding: "11px 17px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 30, height: 30, borderRadius: "50%", background: conv.avBg, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 600, fontSize: 12, flexShrink: 0 }}>{conv.av}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "var(--m-paper)", fontSize: 13 }}>{active.name}</div>
+              <div className="text-[13px] font-semibold text-stone-100">{active.name}</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{conv.chLine}</div>
             </div>
-            <button style={{ fontSize: 11, padding: "5px 10px", borderRadius: 6, background: "rgba(255,255,255,0.1)", color: "var(--m-paper)", border: 0, cursor: "pointer", fontFamily: "inherit" }}>Resolve</button>
+            <button className="cursor-pointer rounded-md border-0 bg-white/10 px-2.5 py-[5px] text-[11px] text-stone-100 [font-family:inherit]">Resolve</button>
           </div>
           <div style={{ overflowY: "auto", padding: "20px 20px", display: "flex", flexDirection: "column", gap: 11 }} className="no-scrollbar">
             {conv.msgs.map((m, i) => (
-              <div key={i} style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: 12, fontSize: 13, lineHeight: 1.5, alignSelf: m.dir === "in" ? "flex-start" : "flex-end", background: m.dir === "in" ? "rgba(255,255,255,0.1)" : "var(--m-paper)", color: m.dir === "in" ? "var(--m-paper)" : "var(--m-ink)", borderBottomLeftRadius: m.dir === "in" ? 4 : 12, borderBottomRightRadius: m.dir === "out" ? 4 : 12 }}>
+              <div key={i} className={m.dir === "in" ? "bg-white/10 text-stone-100" : "bg-stone-100 text-stone-900"} style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: 12, fontSize: 13, lineHeight: 1.5, alignSelf: m.dir === "in" ? "flex-start" : "flex-end", borderBottomLeftRadius: m.dir === "in" ? 4 : 12, borderBottomRightRadius: m.dir === "out" ? 4 : 12 }}>
                 {m.text}
                 <span style={{ fontSize: 10, display: "block", marginTop: 4, color: m.dir === "in" ? "rgba(255,255,255,0.38)" : "rgba(22,20,19,0.5)" }}>{m.ts}</span>
               </div>
@@ -391,19 +391,19 @@ function DemoCard() {
             </div>
           </div>
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "12px 15px" }}>
-            <div style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--m-acid)", borderRadius: 10, padding: "11px 13px" }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--m-acid)", fontWeight: 600, marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--m-acid)", display: "inline-block", animation: "m-pulse 1.8s ease infinite" }} />
+            <div className="border border-solid border-green-600 bg-white/[0.06]" style={{ borderRadius: 10, padding: "11px 13px" }}>
+              <div className="mb-[5px] flex items-center gap-[5px] text-[10px] font-semibold uppercase tracking-[0.12em] text-green-600">
+                <span className="inline-block h-[5px] w-[5px] animate-[m-pulse_1.8s_ease_infinite] rounded-full bg-green-600" />
                 Clerk drafted a reply
               </div>
-              <div style={{ fontSize: 13, lineHeight: 1.5, color: "var(--m-paper)", minHeight: 32, maxHeight: 72, overflowY: "auto" }} className="no-scrollbar">
+              <div style={{ minHeight: 32, maxHeight: 72, overflowY: "auto" }} className="no-scrollbar text-[13px] leading-[1.5] text-stone-100">
                 {draftText}
-                <span style={{ display: "inline-block", width: 2, height: 13, background: "var(--m-acid)", animation: "m-blink 1s step-end infinite", verticalAlign: "middle", marginLeft: 2 }} />
+                <span className="ml-0.5 inline-block h-[13px] w-0.5 animate-[m-blink_1s_step-end_infinite] bg-green-600 align-middle" />
               </div>
               <div style={{ display: "flex", gap: 7, marginTop: 10, alignItems: "center" }}>
                 <span style={{ marginRight: "auto", fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{conv.used}</span>
-                <button style={{ fontSize: 11, padding: "5px 10px", borderRadius: 5, background: "rgba(255,255,255,0.1)", color: "var(--m-paper)", border: 0, cursor: "pointer", fontFamily: "inherit" }}>Edit</button>
-                <button onClick={handleApprove} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 5, background: "var(--m-acid)", color: "#fff", border: 0, cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>Approve &amp; send →</button>
+                <button className="cursor-pointer rounded-[5px] border-0 bg-white/10 px-2.5 py-[5px] text-[11px] text-stone-100 [font-family:inherit]">Edit</button>
+                <button onClick={handleApprove} className="cursor-pointer rounded-[5px] border-0 bg-green-600 px-2.5 py-[5px] text-[11px] font-semibold text-white [font-family:inherit]">Approve &amp; send →</button>
               </div>
             </div>
           </div>
@@ -413,7 +413,7 @@ function DemoCard() {
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr", overflow: "hidden" }}>
           <div style={{ padding: "13px 15px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
             <span>Context</span>
-            <span style={{ fontFamily: "var(--m-mono)", color: "var(--m-acid)", fontSize: 11 }}>● live</span>
+            <span className="text-[11px] text-green-600 [font-family:var(--m-mono)]">● live</span>
           </div>
           <div style={{ overflowY: "auto", padding: "14px 14px", display: "flex", flexDirection: "column", gap: 14 }} className="no-scrollbar">
             {/* Customer */}
@@ -422,7 +422,7 @@ function DemoCard() {
               {[["name", conv.ctx.name],["contact", conv.ctx.email],["history", conv.ctx.tier]].map(([k, v]) => (
                 <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11 }}>{k}</span>
-                  <span style={{ fontFamily: "var(--m-mono)", fontSize: 11, color: "var(--m-paper)", textAlign: "right", maxWidth: "60%" }}>{v}</span>
+                  <span className="max-w-[60%] text-right text-[11px] text-stone-100 [font-family:var(--m-mono)]">{v}</span>
                 </div>
               ))}
             </div>
@@ -430,8 +430,8 @@ function DemoCard() {
             <div>
               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.5)", marginBottom: 7, fontWeight: 600 }}>Order</div>
               <div style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: 10 }}>
-                <div style={{ fontFamily: "var(--m-mono)", color: "var(--m-acid)", fontSize: 12, fontWeight: 500 }}>{conv.ctx.orderId}</div>
-                <div style={{ color: "var(--m-paper)", fontSize: 13, marginTop: 5 }}>{conv.ctx.orderName}</div>
+                <div className="text-xs font-medium text-green-600 [font-family:var(--m-mono)]">{conv.ctx.orderId}</div>
+                <div className="mt-[5px] text-[13px] text-stone-100">{conv.ctx.orderName}</div>
                 <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, marginTop: 3 }}>{conv.ctx.orderMeta}</div>
               </div>
             </div>
@@ -446,37 +446,37 @@ function MobileDemoCard() {
   const conv = CONVS["t1"];
   const draftText = useTypewriter(conv.draft);
   return (
-    <div style={{ margin: "10px", background: "var(--m-ink)", color: "var(--m-paper)", borderRadius: 14, overflow: "hidden", boxShadow: "0 20px 50px -10px rgba(0,0,0,0.3)" }}>
+    <div className="bg-stone-900 text-stone-100" style={{ margin: "10px", borderRadius: 14, overflow: "hidden", boxShadow: "0 20px 50px -10px rgba(0,0,0,0.3)" }}>
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.08)", fontSize: 11 }}>
         <div style={{ display: "flex", gap: 5 }}>{[0,1,2].map(i => <span key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "inline-block" }} />)}</div>
         <span style={{ fontFamily: "var(--m-mono)", color: "rgba(255,255,255,0.5)", fontSize: 10 }}>clerk.app/inbox</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, color: "rgba(255,255,255,0.5)", fontSize: 10 }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--m-acid)", display: "inline-block", animation: "m-pulse 1.8s ease infinite" }} />
+          <span className="inline-block h-[5px] w-[5px] animate-[m-pulse_1.8s_ease_infinite] rounded-full bg-green-600" />
           live
         </span>
       </div>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ width: 28, height: 28, borderRadius: "50%", background: conv.avBg, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 600, fontSize: 11, flexShrink: 0 }}>S</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, color: "var(--m-paper)", fontSize: 13 }}>sarah_styles</div>
+          <div className="text-[13px] font-semibold text-stone-100">sarah_styles</div>
           <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)" }}>Instagram DM · returns</div>
         </div>
-        <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.1)", color: "var(--m-paper)" }}>Resolve</span>
+        <span className="rounded px-2 py-[3px] text-[10px] text-stone-100 bg-white/10">Resolve</span>
       </div>
       <div style={{ padding: "14px 14px 6px", display: "flex", flexDirection: "column", gap: 9 }}>
         {conv.msgs.map((m, i) => (
-          <div key={i} style={{ maxWidth: "82%", padding: "9px 12px", borderRadius: 10, fontSize: 13, lineHeight: 1.45, alignSelf: "flex-start", background: "rgba(255,255,255,0.1)", color: "var(--m-paper)", borderBottomLeftRadius: 3 }}>{m.text}</div>
+          <div key={i} className="bg-white/10 text-stone-100" style={{ maxWidth: "82%", padding: "9px 12px", borderRadius: 10, fontSize: 13, lineHeight: 1.45, alignSelf: "flex-start", borderBottomLeftRadius: 3 }}>{m.text}</div>
         ))}
       </div>
       <div style={{ padding: "8px 14px 14px" }}>
-        <div style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--m-acid)", borderRadius: 9, padding: "10px 12px" }}>
-          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--m-acid)", fontWeight: 600, marginBottom: 4 }}>✦ Clerk drafted a reply</div>
-          <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--m-paper)" }}>
-            {draftText}<span style={{ display: "inline-block", width: 2, height: 12, background: "var(--m-acid)", animation: "m-blink 1s step-end infinite", verticalAlign: "middle", marginLeft: 2 }} />
+        <div className="border border-solid border-green-600 bg-white/[0.06]" style={{ borderRadius: 9, padding: "10px 12px" }}>
+          <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-green-600">✦ Clerk drafted a reply</div>
+          <div className="text-xs leading-[1.5] text-stone-100">
+            {draftText}<span className="ml-0.5 inline-block h-3 w-0.5 animate-[m-blink_1s_step-end_infinite] bg-green-600 align-middle" />
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
-            <button style={{ fontSize: 11, padding: "5px 9px", borderRadius: 5, background: "rgba(255,255,255,0.1)", color: "var(--m-paper)", border: 0, fontFamily: "inherit" }}>Edit</button>
-            <button style={{ fontSize: 11, padding: "5px 9px", borderRadius: 5, background: "var(--m-acid)", color: "#fff", border: 0, fontWeight: 600, fontFamily: "inherit" }}>Approve →</button>
+            <button className="rounded-[5px] border-0 bg-white/10 px-[9px] py-[5px] text-[11px] text-stone-100 [font-family:inherit]">Edit</button>
+            <button className="rounded-[5px] border-0 bg-green-600 px-[9px] py-[5px] text-[11px] font-semibold text-white [font-family:inherit]">Approve →</button>
           </div>
         </div>
       </div>

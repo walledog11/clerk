@@ -43,6 +43,13 @@ function endTurn(text = 'Done.') {
   return { stop_reason: 'end_turn', content: [{ type: 'text', text }], usage: { input_tokens: 10, output_tokens: 5 } };
 }
 
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+  });
+}
+
 // ── Shared state ──────────────────────────────────────────────────────────────
 
 let org!: Awaited<ReturnType<typeof createTestOrg>>;
@@ -80,6 +87,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await cleanupTestData(org?.id);
+  vi.unstubAllGlobals();
   vi.resetAllMocks();
 });
 
@@ -227,6 +235,58 @@ describe('runAgent', () => {
     expect(result.actionsPerformed.map(a => a.tool)).toEqual(
       expect.arrayContaining(['update_thread_tag', 'add_internal_note'])
     );
+  });
+
+  it('answers simple operator order-status requests without an LLM loop', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({
+        customers: [
+          { id: 10368767590720, first_name: 'Tiffany', last_name: 'Johnson', email: 'tfhut23993@yahoo.com', phone: null },
+          { id: 10368746160448, first_name: 'John', last_name: 'Smith', email: 'jrsmith2822@yahoo.com', phone: null },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        orders: [{
+          id: 7108594991424,
+          name: '#PG1003',
+          created_at: '2026-04-03T16:14:11-07:00',
+          financial_status: 'pending',
+          fulfillment_status: null,
+          current_total_price: '149.90',
+          currency: 'USD',
+          line_items: [
+            { id: 17213578772800, variant_id: 51536929915200, title: 'Pencil Half Zip', quantity: 1, fulfillable_quantity: 1, current_quantity: 1, fulfillment_status: null },
+            { id: 17238938583360, variant_id: 51536929947968, title: 'Pencil Half Zip', quantity: 1, fulfillable_quantity: 1, current_quantity: 1, fulfillment_status: null },
+          ],
+        }],
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runAgent(
+      makeCtx({
+        shopify: { shop: 'test-store.myshopify.com', accessToken: 'shpat_test' },
+        thread: {
+          id: thread.id,
+          status: 'open',
+          channelType: 'dashboard_agent',
+          tag: 'Support',
+          aiSummary: null,
+          shopifyCustomerId: null,
+        },
+      }),
+      "What is the status on John's order?"
+    );
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(result.actionsPerformed.map((action) => action.tool)).toEqual([
+      'search_shopify_customers',
+      'get_shopify_orders',
+    ]);
+    expect(result.summary).toContain("John Smith's latest order #PG1003");
+    expect(result.summary).toContain('pending payment');
+    expect(result.summary).toContain('has not shipped yet');
+    expect(result.summary).toContain('2x Pencil Half Zip');
   });
 
   it('executes pre-approved tool calls before starting the main loop', async () => {

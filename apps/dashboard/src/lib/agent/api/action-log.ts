@@ -1,16 +1,18 @@
 import { db } from "@clerk/db";
-import { AGENT_TURN_PREFIX, isAgentTurnContent } from "@/lib/agent/turn-content";
+import { AGENT_TURN_PREFIX } from "@/lib/agent/turn-content";
 import { TOOL_LABELS } from "@/lib/agent/tools";
 import {
   decodeActionLogCursor,
   encodeActionLogCursor,
   parseAgentTurn,
   toActionLogEntry,
+  extractAgentTurnsFromMessages,
   type ActionLogCursor,
 } from "@/lib/agent/api/turns";
 import type { ActionLogEntry, AgentTurn } from "@/types";
 
 export { isAgentTurnContent } from "@/lib/agent/turn-content";
+export { extractAgentTurnsFromMessages, excludeAgentTurnMessages } from "@/lib/agent/api/turns";
 
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_BATCH_SIZE = 100;
@@ -20,21 +22,6 @@ export const agentTurnMessageFilter = {
   senderType: "note" as const,
   contentText: { startsWith: AGENT_TURN_PREFIX },
 };
-
-type MessageWithAgentTurn = {
-  id: string;
-  contentText: string | null;
-};
-
-export function extractAgentTurnsFromMessages<T extends MessageWithAgentTurn>(messages: T[]): AgentTurn[] {
-  return messages
-    .map((message) => parseAgentTurn(message.contentText))
-    .filter((turn): turn is AgentTurn => turn !== null);
-}
-
-export function excludeAgentTurnMessages<T extends MessageWithAgentTurn>(messages: T[]): T[] {
-  return messages.filter((message) => !isAgentTurnContent(message.contentText));
-}
 
 export async function listAgentActionLogEntries(params: {
   orgId: string;
@@ -134,7 +121,6 @@ export async function listAllAgentActionLogEntries(params: {
 
   // Export uses cursor-based pagination so Settings and Activity share the same source of truth.
   // We step through the entire action log in bounded chunks rather than querying raw notes again.
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const page = await listAgentActionLogEntries({
       orgId: params.orgId,

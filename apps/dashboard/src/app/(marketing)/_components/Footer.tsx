@@ -2,24 +2,12 @@ import Link from "next/link";
 
 export function Footer() {
   return (
-    <div style={{
-      padding: "28px 28px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      flexWrap: "wrap",
-      gap: 12,
-      fontSize: 12,
-      color: "rgba(255,255,255,0.5)",
-      background: "var(--m-ink)",
-      borderTop: "1px solid rgba(255,255,255,0.08)",
-      fontFamily: "var(--m-mono)",
-    }}>
+    <div className="flex justify-between align-center flex-wrap gap-5 text-xs px-4 py-4 border-t border-t-solid border-t-white/[0.08] [font-family:var(--m-mono)] text-white/[0.5] bg-stone-900" >
       <div>clerk · made for shopkeepers</div>
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-        <Link href="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy</Link>
-        <Link href="/terms" style={{ color: "inherit", textDecoration: "none" }}>Terms</Link>
-        <a href="mailto:hello@useclerk.co" style={{ color: "inherit", textDecoration: "none" }}>Contact</a>
+      <div className="flex gap-4 flex-wrap" >
+        <Link href="/privacy" className="inherit">Privacy</Link>
+        <Link href="/terms" className="inherit">Terms</Link>
+        <a href="mailto:hello@useclerk.co" className="inherit">Contact</a>
       </div>
     </div>
   );

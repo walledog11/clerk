@@ -283,3 +283,4 @@ Configurable per org via Settings → Agent tab:
 - Prefer editing existing files over creating new ones
 - Read files before modifying them
 - Target user is a solo Shopify merchant or small team — UI and features should optimize for simplicity and speed, not power-user complexity
+- Use Tailwind styling instead of style properties

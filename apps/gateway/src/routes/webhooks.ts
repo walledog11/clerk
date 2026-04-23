@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { Queue, type ConnectionOptions } from 'bullmq';
 import { Redis as IORedis } from 'ioredis';
 import { createHmac, timingSafeEqual, randomUUID } from 'crypto';
-import { db, ChannelType } from '@clerk/db';
+import { db, type DbChannelType } from '@clerk/db';
 import twilio from 'twilio';
 import { getContext, updateContext, extractOrderNumber, type ToolCall } from '../sms-context.js';
 import { getGatewayDashboardUrl } from '../env.js';
@@ -44,7 +44,7 @@ function getRateLimitRedis(): IORedis {
   return _rateLimitRedis;
 }
 
-async function resolveOrganizationId(platform: ChannelType, externalAccountId: string): Promise<string | null> {
+async function resolveOrganizationId(platform: DbChannelType, externalAccountId: string): Promise<string | null> {
   const integration = await db.integration.findFirst({
     where: { platform, externalAccountId },
     select: { organizationId: true },

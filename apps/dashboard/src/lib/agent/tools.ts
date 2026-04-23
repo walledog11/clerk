@@ -181,7 +181,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_shopify_orders",
-      description: "Fetch the most recent Shopify orders for a customer (up to 5).",
+      description: "Fetch the most recent Shopify orders for a customer (up to 5), including financial status, fulfillment status, and line item IDs, variant IDs, quantities, and fulfillment quantities. Use this first for basic order-status questions; if fulfillment_status is null, the order has not shipped yet and you usually do not need get_order_tracking.",
       parameters: {
         type: "object",
         properties: {
@@ -252,7 +252,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "get_order_tracking",
       description:
-        "Fetch live fulfillment and tracking details for a Shopify order. Returns tracking number, carrier, shipment status, estimated delivery date, and the full scan event timeline (including exceptions like return to sender, delivery attempt failed, weather delay, etc.). Use this whenever a customer asks where their order is (WISMO) or reports a delivery problem.",
+        "Fetch live fulfillment and tracking details for a Shopify order. Returns tracking number, carrier, shipment status, estimated delivery date, and the full scan event timeline (including exceptions like return to sender, delivery attempt failed, weather delay, etc.). Use this only when an order is already fulfilled or partially fulfilled, or when someone explicitly needs tracking details such as tracking numbers, carrier scans, delivery events, or delivery exceptions. Do not use it for unfulfilled orders or basic status checks that can be answered from get_shopify_orders.",
       parameters: {
         type: "object",
         properties: {
@@ -349,7 +349,7 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "edit_shopify_order",
       description:
-        "Add, remove, or swap a line item on an existing Shopify order using the Order Editing API. To add an item: provide variant_id and quantity. To remove an item (customer wants it gone): provide only remove_variant_id — get the variant_id from the orders context, no search needed. To swap size/color: provide variant_id (new) and remove_variant_id (old). At least one of variant_id or remove_variant_id must be provided.",
+        "Add, remove, or swap a line item on an existing Shopify order using the Order Editing API. To add an item: provide variant_id and quantity. To remove an item: provide only remove_variant_id from the orders context, no search needed. To swap size/color: provide variant_id (new) and remove_variant_id (old). At least one of variant_id or remove_variant_id must be provided.",
       parameters: {
         type: "object",
         properties: {

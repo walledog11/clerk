@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { AGENT_TURN_PREFIX } from "@/lib/agent/turn-content";
+import { AGENT_TURN_PREFIX, isAgentTurnContent } from "@/lib/agent/turn-content";
 import { TOOL_LABELS } from "@/lib/agent/tools";
 import type { ActionLogEntry, AgentTurn } from "@/types";
 
@@ -41,6 +41,21 @@ export function decodeActionLogCursor(cursor: string): ActionLogCursor | null {
   } catch {
     return null;
   }
+}
+
+type MessageWithAgentTurn = {
+  id: string;
+  contentText: string | null;
+};
+
+export function extractAgentTurnsFromMessages<T extends MessageWithAgentTurn>(messages: T[]): AgentTurn[] {
+  return messages
+    .map((message) => parseAgentTurn(message.contentText))
+    .filter((turn): turn is AgentTurn => turn !== null);
+}
+
+export function excludeAgentTurnMessages<T extends MessageWithAgentTurn>(messages: T[]): T[] {
+  return messages.filter((message) => !isAgentTurnContent(message.contentText));
 }
 
 export function toActionLogEntry(

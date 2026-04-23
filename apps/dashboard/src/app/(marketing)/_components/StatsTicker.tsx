@@ -8,28 +8,18 @@ const STATS = [
 
 function TickerItem({ dim, val, accent }: { dim: string; val: string; accent: string }) {
   return (
-    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
-      <span style={{ color: "rgba(255,255,255,0.37)" }}>{dim}</span>
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="text-white/40">{dim}</span>
       {val && <span>{val}</span>}
-      <span style={{ color: "var(--m-acid)" }}>{accent}</span>
+      <span className="text-green-600">{accent}</span>
     </span>
   );
 }
 
 export function StatsTicker() {
   return (
-    <div style={{ overflow: "hidden", overflowX: "hidden", background: "var(--m-ink)", borderTop: "1px solid var(--m-line)", borderBottom: "1px solid var(--m-line)", maxWidth: "100vw" }}>
-      <div style={{
-        display: "flex",
-        gap: 64,
-        alignItems: "center",
-        fontFamily: "var(--m-mono)",
-        fontSize: 13,
-        color: "var(--m-paper)",
-        padding: "24px 28px",
-        animation: "m-scroll 40s linear infinite",
-        width: "max-content",
-      }}>
+    <div className="max-w-[100vw] overflow-hidden border-y border-solid border-stone-900/10 bg-stone-900">
+      <div className="flex w-max animate-[m-scroll_40s_linear_infinite] items-center gap-16 px-7 py-6 text-[13px] text-stone-100 [font-family:var(--m-mono)]">
         {[...STATS, ...STATS].map((s, i) => (
           <TickerItem key={i} {...s} />
         ))}

@@ -34,14 +34,14 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   return (
     <div
       onClick={() => setOpen(!open)}
-      style={{ padding: "24px 0", borderTop: "1px solid var(--m-line)", cursor: "pointer" }}
+      className="cursor-pointer border-t border-solid border-stone-900/10 py-6"
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "var(--m-serif)", fontSize: "clamp(18px, 3vw, 24px)", letterSpacing: "-0.01em" }}>
+      <div className="flex items-center justify-between text-[clamp(18px,3vw,24px)] tracking-[-0.01em] [font-family:var(--m-serif)]">
         <span>{q}</span>
-        <span style={{ fontFamily: "var(--m-mono)", fontSize: 18, fontWeight: 400, transition: "transform 0.2s", transform: open ? "rotate(45deg)" : "none", flexShrink: 0, marginLeft: 16 }}>+</span>
+        <span className={`ml-4 shrink-0 text-lg font-normal transition-transform duration-200 [font-family:var(--m-mono)] ${open ? "rotate-45" : ""}`}>+</span>
       </div>
       {open && (
-        <div style={{ fontSize: 14, color: "var(--m-ink-2)", lineHeight: 1.6, marginTop: 12, maxHeight: 200, overflow: "hidden" }}>
+        <div className="mt-3 max-h-[200px] overflow-hidden text-sm leading-[1.6] text-stone-700">
           {a}
         </div>
       )}
@@ -51,21 +51,21 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 
 export function FAQ() {
   return (
-    <section style={{ padding: "80px 28px", maxWidth: 1280, margin: "0 auto", borderTop: "1px solid var(--m-line)", textAlign: "center" }}>
-      <div style={{ fontFamily: "var(--m-mono)", fontSize: 11, color: "var(--m-ink-2)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16, display: "flex", alignItems: "center", gap: 10, justifyContent: "center" }}>
-        <span style={{ width: 24, height: 1, background: "var(--m-ink-2)", display: "inline-block" }} />
+    <section className="mx-auto max-w-7xl border-t border-solid border-stone-900/10 px-7 py-20 text-center">
+      <div className="mb-4 flex items-center justify-center gap-2.5 text-[11px] uppercase tracking-[0.15em] text-stone-700 [font-family:var(--m-mono)]">
+        <span className="inline-block h-px w-6 bg-stone-700" />
         04 · Honest questions
       </div>
-      <h2 style={{ fontFamily: "var(--m-serif)", fontSize: "clamp(40px, 5vw, 72px)", lineHeight: 0.95, letterSpacing: "-0.02em", maxWidth: "18ch", margin: "0 auto 48px" }}>
+      <h2 className="mx-auto mb-12 max-w-[18ch] text-[clamp(40px,5vw,72px)] leading-[0.95] tracking-[-0.02em] [font-family:var(--m-serif)]">
         Things people ask{" "}
-        <em style={{ fontStyle: "italic", color: "var(--m-acid)" }}>before they trust an AI.</em>
+        <em className="italic text-green-600">before they trust an AI.</em>
       </h2>
 
-      <div style={{ maxWidth: 780, margin: "0 auto", textAlign: "left" }}>
+      <div className="mx-auto max-w-[780px] text-left">
         {faqs.map(item => (
           <FaqItem key={item.q} {...item} />
         ))}
-        <div style={{ borderTop: "1px solid var(--m-line)" }} />
+        <div className="border-t border-solid border-stone-900/10" />
       </div>
     </section>
   );

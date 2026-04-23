@@ -1,4 +1,4 @@
-import type { ChannelType } from '@clerk/db';
+import type { DbChannelType } from '@clerk/db';
 
 declare module 'http' {
   interface IncomingMessage {
@@ -48,6 +48,6 @@ export interface AiSummaryJobData {
   threadId: string;
   organizationId: string;
   customerName: string | null;
-  channelType: ChannelType;
+  channelType: DbChannelType;
   traceId?: string;
 }

@@ -35,49 +35,42 @@ const tiers = [
 
 export function Pricing() {
   return (
-    <section id="pricing" style={{ padding: "80px 28px", maxWidth: 1280, margin: "0 auto", borderTop: "1px solid var(--m-line)" }}>
-      <div style={{ fontFamily: "var(--m-mono)", fontSize: 11, color: "var(--m-ink-2)", textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ width: 24, height: 1, background: "var(--m-ink-2)", display: "inline-block" }} />
+    <section id="pricing" className="mx-auto max-w-7xl border-t border-solid border-stone-900/10 px-7 py-20">
+      <div className="mb-4 flex items-center gap-2.5 text-[11px] uppercase tracking-[0.15em] text-stone-700 [font-family:var(--m-mono)]">
+        <span className="inline-block h-px w-6 bg-stone-700" />
         03 · Pricing
       </div>
-      <h2 style={{ fontFamily: "var(--m-serif)", fontSize: "clamp(40px, 5vw, 72px)", lineHeight: 0.95, letterSpacing: "-0.02em", maxWidth: "18ch", margin: "0 0 48px" }}>
+      <h2 className="mb-12 max-w-[18ch] text-[clamp(40px,5vw,72px)] leading-[0.95] tracking-[-0.02em] [font-family:var(--m-serif)]">
         Costs less than{" "}
-        <em style={{ fontStyle: "italic", color: "var(--m-acid)" }}>a part-time CX hire.</em>
+        <em className="italic text-green-600">a part-time CX hire.</em>
       </h2>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", border: "1px solid var(--m-line)", borderRadius: 12, overflow: "hidden", background: "var(--m-paper-2)" }}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] overflow-hidden rounded-xl border border-solid border-stone-900/10 bg-stone-200">
         {tiers.map((tier, i) => (
-          <div key={tier.name} style={{
-            padding: "36px 28px",
-            borderRight: i < tiers.length - 1 ? "1px solid var(--m-line)" : "none",
-            position: "relative",
-            background: tier.featured ? "var(--m-ink)" : "transparent",
-            color: tier.featured ? "var(--m-paper)" : "var(--m-ink)",
-          }}>
-            <div style={{ fontFamily: "var(--m-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", marginBottom: 16, color: tier.featured ? "var(--m-acid)" : "var(--m-ink-2)" }}>
+          <div
+            key={tier.name}
+            className={`relative px-7 py-9 ${i < tiers.length - 1 ? "border-r border-solid border-stone-900/10" : ""} ${tier.featured ? "bg-stone-900 text-stone-100" : "text-stone-900"}`}
+          >
+            <div className={`mb-4 text-[11px] uppercase tracking-[0.15em] [font-family:var(--m-mono)] ${tier.featured ? "text-green-600" : "text-stone-700"}`}>
               {tier.name}
             </div>
-            <div style={{ fontFamily: "var(--m-serif)", fontSize: 64, letterSpacing: "-0.03em", lineHeight: 1, display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
+            <div className="mb-2 flex items-baseline gap-1.5 text-[64px] leading-none tracking-[-0.03em] [font-family:var(--m-serif)]">
               {tier.price}
-              <small style={{ fontSize: 14, fontFamily: "inherit", color: tier.featured ? "rgba(255,255,255,0.6)" : "var(--m-ink-2)", fontWeight: 500 }}>{tier.per}</small>
+              <small className={`text-sm font-medium ${tier.featured ? "text-white/60" : "text-stone-700"}`}>{tier.per}</small>
             </div>
-            <div style={{ fontSize: 13, color: tier.featured ? "rgba(255,255,255,0.7)" : "var(--m-ink-2)", marginBottom: 24, minHeight: 40 }}>{tier.desc}</div>
-            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", fontSize: 13, lineHeight: 1.7 }}>
+            <div className={`mb-6 min-h-10 text-[13px] ${tier.featured ? "text-white/70" : "text-stone-700"}`}>{tier.desc}</div>
+            <ul className="mb-7 list-none p-0 text-[13px] leading-[1.7]">
               {tier.features.map(f => (
-                <li key={f} style={{ paddingLeft: 20, position: "relative" }}>
-                  <span style={{ position: "absolute", left: 0, color: "var(--m-acid)", fontWeight: 700 }}>→</span>
+                <li key={f} className="relative pl-5">
+                  <span className="absolute left-0 font-bold text-green-600">→</span>
                   {f}
                 </li>
               ))}
             </ul>
-            <Link href={tier.href} style={{
-              display: "block", width: "100%", padding: "12px", borderRadius: 8,
-              border: tier.featured ? "none" : "1px solid var(--m-ink)",
-              fontSize: 13, fontWeight: 600, textAlign: "center",
-              background: tier.featured ? "var(--m-acid)" : "transparent",
-              color: tier.featured ? "#fff" : "var(--m-ink)",
-              textDecoration: "none",
-            }}>
+            <Link
+              href={tier.href}
+              className={`block w-full rounded-lg p-3 text-center text-[13px] font-semibold no-underline ${tier.featured ? "bg-green-600 text-white" : "border border-solid border-stone-900 text-stone-900"}`}
+            >
               {tier.cta}
             </Link>
           </div>

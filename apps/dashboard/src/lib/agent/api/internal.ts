@@ -1,6 +1,7 @@
 import { db } from "@clerk/db";
 import { BadRequestError } from "@/lib/api/errors";
 import { requireOrgThread } from "@/lib/agent/api/auth";
+import { SHOPIFY_API_VERSION } from "@/lib/agent/shopify-tools";
 import logger from "@/lib/server/logger";
 
 interface ResolveInternalAgentThreadParams {
@@ -30,7 +31,7 @@ export async function resolveInternalAgentThread(params: ResolveInternalAgentThr
     const orderName = params.orderNumber.startsWith("#") ? params.orderNumber : `#${params.orderNumber}`;
 
     const orderRes = await fetch(
-      `https://${shop}/admin/api/2024-01/orders.json?name=${encodeURIComponent(orderName)}&status=any&fields=id,name,email,customer&limit=1`,
+      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/orders.json?name=${encodeURIComponent(orderName)}&status=any&fields=id,name,email,customer&limit=1`,
       { headers: { "X-Shopify-Access-Token": token } }
     );
 

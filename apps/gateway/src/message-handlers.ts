@@ -1,5 +1,5 @@
 import type { Job, Queue } from 'bullmq';
-import { db, SenderType, ChannelType, Prisma } from '@clerk/db';
+import { db, SenderType, Prisma, type DbChannelType } from '@clerk/db';
 import Anthropic from '@anthropic-ai/sdk';
 import twilio from 'twilio';
 import { updateContext } from './sms-context.js';
@@ -104,7 +104,7 @@ interface ProcessMessageOptions {
 async function processInboundMessage(
   organizationId: string,
   platformId: string,
-  channelType: ChannelType,
+  channelType: DbChannelType,
   messageText: string,
   aiSummaryQueue: Queue,
   { customerName = null, profilePicUrl = null, initialTag = null, externalMessageId = null, traceId = null, attachments = [] }: ProcessMessageOptions = {}
@@ -230,7 +230,7 @@ export async function generateThreadIntelligence(threadId: string) {
   }
 }
 
-function formatPlanMessage(customerName: string | null, channelType: ChannelType, summary: string, steps: PlanStep[]): string {
+function formatPlanMessage(customerName: string | null, channelType: DbChannelType, summary: string, steps: PlanStep[]): string {
   const channel = channelType === CHANNEL.IG_DM ? 'Instagram DM' : channelType.charAt(0).toUpperCase() + channelType.slice(1);
   const actionableSteps = steps.filter(s => s.category !== 'read');
 
@@ -263,7 +263,7 @@ export async function sendWhatsAppPlanNotification(
   organizationId: string,
   threadId: string,
   customerName: string | null,
-  channelType: ChannelType,
+  channelType: DbChannelType,
   aiSummary: string | null
 ): Promise<void> {
   try {

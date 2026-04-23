@@ -11,6 +11,7 @@ export default defineConfig({
     include: [
       'src/lib/agent/api/action-log.test.ts',
       'src/lib/agent/api/validation.test.ts',
+      'src/lib/agent/prompting.test.ts',
       'src/hooks/useConversationAgentFlow.test.ts',
       'src/app/dashboard/tickets/_components/conversation/utils/conversationViewUtils.test.ts',
     ],

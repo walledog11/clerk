@@ -4,19 +4,28 @@ import { handleApiError } from "@/lib/api/errors";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { executeAgentTurn } from "@/lib/agent/api/execution";
 import { parseAgentRouteBody } from "@/lib/agent/api/validation";
+import { hashInstructionForLog } from "@/lib/agent/runner";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import type { OrgSettings } from "@/types";
 import logger from "@/lib/server/logger";
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const org = await getOrCreateOrg();
 
     const rl = await rateLimit(`agent:${org.id}`, 10, 60);
     if (!rl.success) return tooManyRequests(rl.reset);
     const { threadId, instruction, approvedToolCalls } = parseAgentRouteBody(await request.json());
+    const instructionHash = hashInstructionForLog(instruction);
     await requireOrgThread(threadId, org.id);
-    logger.info({ orgId: org.id, threadId, approvedToolCalls: approvedToolCalls?.length ?? 0 }, "[agent] POST");
+    logger.info({
+      orgId: org.id,
+      threadId,
+      approvedToolCalls: approvedToolCalls?.length ?? 0,
+      instructionLength: instruction.length,
+      instructionHash,
+    }, "[agent] POST");
 
     const result = await executeAgentTurn({
       orgId: org.id,
@@ -26,7 +35,14 @@ export async function POST(request: Request) {
       approvedToolCalls: approvedToolCalls ?? undefined,
       persistAuditNote: true,
     });
-    logger.info({ orgId: org.id, threadId, actionCount: result.actionsPerformed.length }, "[agent] result");
+    logger.info({
+      orgId: org.id,
+      threadId,
+      durationMs: Date.now() - startedAt,
+      actionCount: result.actionsPerformed.length,
+      approvedToolCalls: approvedToolCalls?.length ?? 0,
+      instructionHash,
+    }, "[agent] result");
 
     return NextResponse.json(result);
   } catch (error) {

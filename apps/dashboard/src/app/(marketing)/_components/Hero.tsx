@@ -2,83 +2,34 @@ import Link from "next/link";
 
 export function Hero() {
   return (
-    <section style={{
-      padding: "48px 28px 24px",
-      maxWidth: 1280, margin: "0 auto",
-      textAlign: "center",
-    }}>
-      {/* Eyebrow */}
-      <div style={{
-        display: "inline-flex", alignItems: "center", gap: 10,
-        padding: "6px 14px", border: "1px solid var(--m-line)",
-        borderRadius: 999, fontSize: 12, fontWeight: 500,
-        background: "var(--m-paper-2)", marginBottom: 32,
-      }}>
-        <span style={{
-          width: 6, height: 6, borderRadius: "50%", background: "var(--m-acid)",
-          display: "inline-block",
-          animation: "m-pulse 1.8s ease infinite",
-        }} />
-        Watching Sarah&apos;s DMs in real-time
-      </div>
-
+    <section className="pt-20 px-10 pb-12 max-w-3xl mx-auto text-center" >
+      
       {/* Headline */}
-      <h1 style={{
-        fontFamily: "var(--m-serif)",
-        fontWeight: 400,
-        fontSize: "clamp(48px, 7vw, 108px)",
-        lineHeight: 0.92,
-        letterSpacing: "-0.03em",
-        margin: "0 0 24px",
-        maxWidth: "14ch",
-        marginLeft: "auto",
-        marginRight: "auto",
-      }}>
+      <h1 className="mx-auto mb-6 mt-0 max-w-[14ch] [font-family:var(--m-serif)] font-normal text-[clamp(48px,7vw,108px)] leading-[0.92] tracking-[-0.03em]">
         Your DMs answered themselves{" "}
-        <em style={{ fontStyle: "italic", color: "var(--m-acid)" }}>while you slept.</em>
+        <em className="font-italic text-green-700" >while you slept.</em>
       </h1>
 
       {/* Subtitle */}
-      <p style={{
-        fontSize: 19, lineHeight: 1.45, color: "var(--m-ink-2)",
-        maxWidth: "52ch", margin: "0 auto 36px", fontWeight: 400,
-      }}>
+      <p className="text-md text-stone-800 leading-relaxed max-w-[52ch] mx-auto mb-6" >
         Clerk is an AI support agent for Shopify brands. It reads every Instagram DM, email, and SMS — drafts replies that actually sound like you, and only sends after you tap approve.
       </p>
 
       {/* CTAs */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8, justifyContent: "center", flexWrap: "wrap" }}>
-        <Link href="/signup" style={{
-          display: "inline-flex", alignItems: "center", gap: 8,
-          padding: "9px 20px", borderRadius: 999, fontSize: 13, fontWeight: 600,
-          background: "var(--m-ink)", color: "var(--m-paper)",
-          border: "1px solid var(--m-ink)", textDecoration: "none",
-        }}>
+      <div className="flex flex-wrap gap-5 align-center mb-3 justify-center" >
+        <Link href="/signup" className="inline-flex align-center gap-3 py-2 px-4 rounded-full text-white text-sm bg-slate-900 font-semibold border border-solid border-black " >
           Start free — 14 days
         </Link>
-        <Link href="#demo" style={{
-          display: "inline-flex", alignItems: "center", gap: 8,
-          padding: "9px 16px", borderRadius: 999, fontSize: 13, fontWeight: 600,
-          border: "1px solid var(--m-line)", background: "transparent",
-          color: "var(--m-ink)", textDecoration: "none",
-        }}>
+        <Link href="#demo" className="inline-flex align-center gap-3 py-2 px-4 rounded-full text-sm font-semibold border border-solid border-stone-900/10 text-stone-900 " >
           ▶ Watch a 90s walkthrough
         </Link>
       </div>
 
       {/* Meta row */}
-      <div style={{
-        display: "flex", gap: 24, fontSize: 12, color: "var(--m-ink-2)",
-        marginTop: 24, flexWrap: "wrap", justifyContent: "center",
-      }}>
+      <div className="flex flex-wrap justify-center gap-14 text-sm text-slate-800 mt-7" >
         {["No credit card", "Connect Shopify in 2 min", "Cancel any time"].map((item) => (
-          <span key={item} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{
-              width: 14, height: 14, borderRadius: "50%",
-              background: "#2f7a4a", color: "#fff",
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              fontSize: 8, flexShrink: 0,
-            }}>✓</span>
+          <span key={item} className="inline-flex items-center gap-1.5">
+            <span className="inline-flex align-center justify-center text-xs w-4 h-4 rounded-full bg-green-700 text-white" >✓</span>
             {item}
           </span>
         ))}

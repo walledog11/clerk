@@ -1,4 +1,4 @@
-import { db, ChannelType, SenderType } from './index.js';
+import { db, ChannelType, SenderType, type DbChannelType, type DbSenderType } from './index.js';
 import { randomUUID } from 'crypto';
 
 export async function createTestOrg() {
@@ -14,7 +14,7 @@ export async function createTestOrg() {
 export async function createTestIntegration(
   orgId: string,
   options: {
-    platform?: ChannelType;
+    platform?: DbChannelType;
     externalAccountId?: string;
     accessToken?: string | null;
     fromEmail?: string | null;
@@ -44,7 +44,7 @@ export async function createTestCustomer(
 export async function createTestThread(
   orgId: string,
   customerId: string,
-  channel: ChannelType,
+  channel: DbChannelType,
   options: { tag?: string } = {},
 ) {
   return db.thread.create({
@@ -61,7 +61,7 @@ export async function createTestThread(
 export async function createTestMessage(
   threadId: string,
   content: string,
-  senderType: SenderType = SenderType.customer,
+  senderType: DbSenderType = SenderType.customer,
 ) {
   return db.message.create({
     data: { threadId, contentText: content, senderType },
