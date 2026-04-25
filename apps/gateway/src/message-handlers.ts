@@ -52,6 +52,30 @@ export function getTwilio(): { client: TwilioInstance; from: string } | null {
   return _twilioClient && _twilioFrom ? { client: _twilioClient, from: _twilioFrom } : null;
 }
 
+async function lookupShopifyCustomerName(organizationId: string, email: string): Promise<string | null> {
+  const integration = await db.integration.findFirst({
+    where: { organizationId, platform: 'shopify' },
+    select: { accessToken: true, externalAccountId: true },
+  });
+  if (!integration?.accessToken || !integration.externalAccountId) return null;
+
+  try {
+    const res = await fetch(
+      `https://${integration.externalAccountId}/admin/api/2024-01/customers/search.json?query=email:${encodeURIComponent(email)}&limit=1&fields=first_name,last_name`,
+      { headers: { 'X-Shopify-Access-Token': integration.accessToken } }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { customers?: Array<{ first_name?: string | null; last_name?: string | null }> };
+    const c = data.customers?.[0];
+    if (!c) return null;
+    const name = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim();
+    return name || null;
+  } catch (err) {
+    logger.warn({ err, email }, '[Worker] Shopify name lookup failed');
+    return null;
+  }
+}
+
 function sanitizeUserInput(text: string): string {
   if (!text) return text;
   return text
@@ -494,7 +518,7 @@ export async function handleEmailJob(job: Job<InboundJobData>, aiSummaryQueue: Q
   try {
     const existingCustomer = await db.customer.findUnique({
       where: { organizationId_platformId: { organizationId, platformId: senderEmail! } },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     const hasOpenThread = existingCustomer
@@ -512,8 +536,21 @@ export async function handleEmailJob(job: Job<InboundJobData>, aiSummaryQueue: Q
       }
     }
 
+    const emailLocal = senderEmail!.split('@')[0];
+    const existingNameIsEmailLike = !existingCustomer?.name
+      || existingCustomer.name === senderEmail
+      || existingCustomer.name === emailLocal;
+
+    let resolvedName: string | null = senderName?.trim() || null;
+    if (!resolvedName && existingNameIsEmailLike) {
+      resolvedName = await lookupShopifyCustomerName(organizationId, senderEmail!);
+    }
+    if (!resolvedName && !existingCustomer) {
+      resolvedName = emailLocal;
+    }
+
     await processInboundMessage(organizationId, senderEmail!, CHANNEL.EMAIL, stripQuotedReply(body!), aiSummaryQueue, {
-      customerName: senderName || senderEmail!.split('@')[0],
+      customerName: resolvedName,
       initialTag: subject!.substring(0, 50),
       externalMessageId: job.data.inboundMessageId,
       traceId,

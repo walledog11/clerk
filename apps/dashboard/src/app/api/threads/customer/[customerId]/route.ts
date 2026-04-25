@@ -17,6 +17,11 @@ export async function GET(
     if (!rl.success) return tooManyRequests(rl.reset);
 
     const { customerId } = await params;
+    const { searchParams } = new URL(request.url);
+    const limitParam = Number(searchParams.get('limit'));
+    const limit = Number.isInteger(limitParam) && limitParam > 0
+      ? Math.min(limitParam, 25)
+      : undefined;
 
     const threads = await db.thread.findMany({
       where: {
@@ -35,6 +40,7 @@ export async function GET(
         },
       },
       orderBy: { updatedAt: 'desc' },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json({ threads });

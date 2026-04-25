@@ -1,0 +1,217 @@
+import type Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "@/lib/ai/anthropic";
+import { AI_MODEL } from "@/lib/ai";
+import logger from "@/lib/server/logger";
+import type { OrgSettings, RawToolCall } from "@/types";
+import { resolveAgentSettings } from "./settings";
+import { TOOL_CATEGORIES } from "./tools";
+import { buildSystemPrompt } from "./prompt";
+import { selectToolNamesForInstruction, isOperatorChannel } from "./intent";
+import { toAnthropicTools } from "./tools/adapter";
+import { executeTool } from "./tools/executor";
+import { buildMessageHistory } from "./message-history";
+import { summarizeApprovedDashboardActions, tryRunOperatorOrderStatusFastPath } from "./fast-paths/order-status";
+import type { ActionEntry, AgentContext, AgentResult } from "./types";
+import { createModelUsageMetrics, hashInstructionForLog, recordModelUsage } from "./usage";
+
+const DEFAULT_MAX_ITERATIONS = 10;
+const TOKEN_BUDGET = 20_000;
+
+function inputKeys(input: unknown): string[] {
+  return input && typeof input === "object" ? Object.keys(input) : [];
+}
+
+function inputChars(input: unknown): number {
+  return JSON.stringify(input ?? null).length;
+}
+
+function canExecuteBatchInParallel(toolNames: readonly string[]): boolean {
+  return toolNames.every((name) => TOOL_CATEGORIES[name] === "read");
+}
+
+function shouldSkipAfterFailedReply(toolName: string, actionsPerformed: ActionEntry[]): boolean {
+  if (toolName !== "update_thread_status") return false;
+  return actionsPerformed.some((action) => (
+    action.tool === "send_reply" && action.result.toLowerCase().startsWith("error:")
+  ));
+}
+
+export async function runAgent(
+  ctx: AgentContext,
+  instruction: string,
+  approvedToolCalls?: RawToolCall[],
+  settings?: OrgSettings
+): Promise<AgentResult> {
+  const startedAt = Date.now();
+  const usageTotals = createModelUsageMetrics();
+  const executedToolCalls: string[] = [];
+  const instructionHash = hashInstructionForLog(instruction);
+  const s = resolveAgentSettings(settings);
+  const maxIterations = s.maxIterations > 0 ? s.maxIterations : DEFAULT_MAX_ITERATIONS;
+  const actionsPerformed: ActionEntry[] = [];
+  const operatorMode = isOperatorChannel(ctx.thread.channelType);
+  const history = operatorMode ? ctx.recentMessages.slice(-4) : ctx.recentMessages;
+  const messages = buildMessageHistory(history, instruction);
+
+  const finish = (result: AgentResult, outcome: string): AgentResult => {
+    logger.info({
+      orgId: ctx.orgId,
+      threadId: ctx.thread.id,
+      channelType: ctx.thread.channelType,
+      outcome,
+      durationMs: Date.now() - startedAt,
+      modelCalls: usageTotals.modelCalls,
+      usageTotals,
+      approvedToolCallCount: approvedToolCalls?.length ?? 0,
+      executedToolCallCount: executedToolCalls.length,
+      executedToolCalls,
+      actionCount: result.actionsPerformed.length,
+      summaryChars: result.summary.length,
+      instructionHash,
+    }, "[agent] run complete");
+    return result;
+  };
+
+  const executeToolCall = async (toolCall: { id: string; name: string; input: unknown }) => {
+    logger.info({
+      orgId: ctx.orgId,
+      threadId: ctx.thread.id,
+      tool: toolCall.name,
+      inputKeys: inputKeys(toolCall.input),
+      inputChars: inputChars(toolCall.input),
+    }, "[agent] tool call");
+
+    let result: string;
+    if (shouldSkipAfterFailedReply(toolCall.name, actionsPerformed)) {
+      result = "Error: skipped status update because send_reply failed.";
+    } else {
+      try {
+        result = await executeTool(toolCall.name, toolCall.input, ctx, settings);
+      } catch (err) {
+        result = `Error: tool "${toolCall.name}" threw - ${err instanceof Error ? err.message : String(err)}`;
+        logger.error({ err, tool: toolCall.name }, "[agent] tool error");
+      }
+    }
+
+    logger.info({
+      orgId: ctx.orgId,
+      threadId: ctx.thread.id,
+      tool: toolCall.name,
+      resultChars: result.length,
+      isError: result.toLowerCase().startsWith("error:"),
+    }, "[agent] tool result");
+    executedToolCalls.push(toolCall.name);
+    actionsPerformed.push({ tool: toolCall.name, result });
+    return {
+      type: "tool_result" as const,
+      tool_use_id: toolCall.id,
+      content: result,
+    };
+  };
+
+  const executeToolCalls = async (toolCalls: { id: string; name: string; input: unknown }[]) => {
+    if (canExecuteBatchInParallel(toolCalls.map((toolCall) => toolCall.name))) {
+      return Promise.all(toolCalls.map(executeToolCall));
+    }
+
+    const results: Awaited<ReturnType<typeof executeToolCall>>[] = [];
+    for (const toolCall of toolCalls) {
+      results.push(await executeToolCall(toolCall));
+    }
+    return results;
+  };
+
+  if (!approvedToolCalls?.length) {
+    const fastResult = await tryRunOperatorOrderStatusFastPath(ctx, instruction, settings, actionsPerformed);
+    if (fastResult) {
+      logger.info({ actionCount: fastResult.actionsPerformed.length }, "[agent] fast order-status result");
+      executedToolCalls.push(...fastResult.actionsPerformed.map(action => action.tool));
+      return finish(fastResult, "fast_order_status");
+    }
+  }
+
+  const tools = toAnthropicTools(settings, selectToolNamesForInstruction(ctx, instruction));
+
+  if (approvedToolCalls && approvedToolCalls.length > 0) {
+    const executableToolCalls = ctx.thread.channelType === "dashboard_agent"
+      ? approvedToolCalls.filter((tc) => TOOL_CATEGORIES[tc.name] === "action")
+      : approvedToolCalls;
+
+    if (ctx.thread.channelType === "dashboard_agent" && executableToolCalls.length === 0) {
+      return finish({
+        summary: "No approved dashboard action was available to execute.",
+        actionsPerformed,
+      }, "approved_dashboard_actions_empty");
+    }
+
+    messages.push({
+      role: "assistant",
+      content: executableToolCalls.map((tc) => ({
+        type: "tool_use" as const,
+        id: tc.id,
+        name: tc.name,
+        input: tc.input as Record<string, unknown>,
+      })),
+    });
+
+    const toolResults = await executeToolCalls(executableToolCalls);
+    messages.push({ role: "user", content: toolResults });
+
+    return finish({
+      summary: summarizeApprovedDashboardActions(actionsPerformed),
+      actionsPerformed,
+    }, ctx.thread.channelType === "dashboard_agent" ? "approved_dashboard_actions" : "approved_plan_actions");
+  }
+
+  const systemPrompt = buildSystemPrompt(ctx, settings);
+
+  for (let i = 0; i < maxIterations; i += 1) {
+    logger.info({ iteration: i, messageCount: messages.length }, "[agent] iteration start");
+
+    const response = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages,
+      tools,
+      ...(operatorMode && i === 0 && tools.length > 0 ? { tool_choice: { type: "any" } } : {}),
+    });
+
+    const toolUseBlocks = response.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+    );
+    const usage = recordModelUsage(usageTotals, response);
+    logger.info({
+      iteration: i,
+      stopReason: response.stop_reason,
+      tools: toolUseBlocks.map(b => b.name),
+      usage,
+      totalTokens: usageTotals.totalTokens,
+    }, "[agent] iteration end");
+
+    messages.push({ role: "assistant", content: response.content });
+
+    if (response.stop_reason === "max_tokens") {
+      return finish({ summary: "Agent response was cut off - the request may be too complex. Try breaking it into smaller steps.", actionsPerformed }, "max_tokens");
+    }
+
+    if (usageTotals.totalTokens >= TOKEN_BUDGET) {
+      return finish({ summary: "Agent stopped - this request required too many steps. Please try a more specific instruction.", actionsPerformed }, "token_budget");
+    }
+
+    if (response.stop_reason === "end_turn" || toolUseBlocks.length === 0) {
+      const textBlock = response.content.find(
+        (b): b is Anthropic.TextBlock => b.type === "text"
+      );
+      return finish({ summary: textBlock?.text ?? "Done.", actionsPerformed }, "end_turn");
+    }
+
+    const toolResults = await executeToolCalls(toolUseBlocks);
+    messages.push({ role: "user", content: toolResults });
+  }
+
+  return finish({
+    summary: "Reached maximum steps without completing the task.",
+    actionsPerformed,
+  }, "max_iterations");
+}

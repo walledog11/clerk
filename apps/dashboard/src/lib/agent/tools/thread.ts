@@ -9,7 +9,7 @@ import type {
   SendEmailInput,
   UpdateThreadStatusInput,
   UpdateThreadTagInput,
-} from "./tools";
+} from "./registry";
 
 interface ThreadContext {
   threadId: string;

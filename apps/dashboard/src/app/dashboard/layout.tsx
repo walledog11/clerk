@@ -6,6 +6,7 @@ import DashboardHeader from "./_components/DashboardHeader";
 import HelpPanel from "./_components/help/HelpPanel";
 import AgentPanelRoot from "./_components/agent-panel/AgentPanelRoot";
 import { AgentPanelProvider } from "./_components/agent-panel/AgentPanelContext";
+import { CommandPaletteProvider } from "./_components/CommandPaletteContext";
 import { getOrCreateOrg } from "@/lib/server/org";
 import { resolveAgentSettings } from "@/lib/agent/settings";
 import { db } from "@clerk/db";
@@ -73,11 +74,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <HelpProvider>
       <AgentPanelProvider>
+      <CommandPaletteProvider>
       <div className="dark flex flex-col h-screen bg-background font-sans overflow-hidden">
         <NotificationBar notifications={notifications} />
         <NavProgressBar />
         <DashboardSidebar>
-          <DashboardHeader />
+          
           <div className="flex-1 overflow-hidden flex min-h-0">
             <div className="flex-1 overflow-hidden flex flex-col min-w-0">
               {children}
@@ -87,6 +89,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </DashboardSidebar>
       </div>
+      </CommandPaletteProvider>
       </AgentPanelProvider>
     </HelpProvider>
   );

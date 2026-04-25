@@ -11,17 +11,16 @@ interface Props {
   clerkInstruction: string
   isAutoPlanLoading: boolean
   isClerkMode: boolean
-  isNoteMode: boolean
   isPlanExecuting: boolean
   isRegenerating: boolean
-  onAddNote: () => void
-  onCancelNote: () => void
+  noteCount: number
   onChange: (text: string) => void
   onClearClerk: () => void
   onPlanApprove: (approvedToolCalls: RawToolCall[]) => void
   onPlanDismiss: () => void
   onPlanRegenerate: () => void
   onSend: (isNote: boolean) => void
+  onViewTabChange: (tab: "chat" | "notes") => void
   pendingPlan: AgentPlan | null
   composer: {
     customerName: string
@@ -42,17 +41,16 @@ export default function ConversationComposerArea({
   clerkInstruction,
   isAutoPlanLoading,
   isClerkMode,
-  isNoteMode,
   isPlanExecuting,
   isRegenerating,
-  onAddNote,
-  onCancelNote,
+  noteCount,
   onChange,
   onClearClerk,
   onPlanApprove,
   onPlanDismiss,
   onPlanRegenerate,
   onSend,
+  onViewTabChange,
   pendingPlan,
   composer,
   viewTab,
@@ -97,11 +95,10 @@ export default function ConversationComposerArea({
           shopifyCustomerId={composer.shopifyCustomerId}
           customerPlatformId={composer.customerPlatformId}
           value={isClerkMode ? clerkInstruction : composer.replyText}
-          isNote={false}
           isClerkMode={isClerkMode}
-          isNoteMode={viewTab === "notes" && isNoteMode}
-          hideToggle={true}
-          placeholder={viewTab === "notes" && !isClerkMode ? `Message team… or @${agentName.toLowerCase()} for AI` : undefined}
+          viewTab={viewTab}
+          noteCount={noteCount}
+          onViewTabChange={onViewTabChange}
           isDrafting={composer.isDrafting}
           isSending={composer.isSending || isAutoPlanLoading}
           error={composer.sendError}
@@ -109,8 +106,6 @@ export default function ConversationComposerArea({
           onClearClerk={onClearClerk}
           onSend={onSend}
           onDraft={composer.onDraft}
-          onAddNote={viewTab === "notes" ? onAddNote : undefined}
-          onCancelNote={viewTab === "notes" ? onCancelNote : undefined}
         />
       </div>
     </>

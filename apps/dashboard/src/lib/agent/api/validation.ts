@@ -102,6 +102,14 @@ export function parseAgentRouteBody(body: unknown) {
   };
 }
 
+export function parseAgentAskBody(body: unknown) {
+  const candidate = requireObject(body);
+  return {
+    threadId: requireNonEmptyString(candidate.threadId, "threadId"),
+    instruction: requireTrimmedInstruction(candidate.instruction),
+  };
+}
+
 export function parseAgentChatBody(body: unknown) {
   const candidate = requireObject(body);
   return {

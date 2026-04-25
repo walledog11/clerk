@@ -3,8 +3,9 @@
 import { useState, type RefObject } from "react"
 import { useFillerPhrase } from "@/hooks/useFillerPhrase"
 import { useThreadPresence } from "@/hooks/useThreadPresence"
-import { useConversationAgentFlow } from "@/hooks/useConversationAgentFlow"
+import { useConversationAgentFlow } from "../../_hooks/useConversationAgentFlow"
 import ConversationHeader from "./ConversationHeader"
+import ConversationSummaryBar from "./ConversationSummaryBar"
 import PresenceBanner from "./PresenceBanner"
 import ChatTimeline from "./timeline/ChatTimeline"
 import NotesTimeline from "./timeline/NotesTimeline"
@@ -39,6 +40,9 @@ interface Props {
   initialPlan?: AgentPlan | null
   onPlanCached: (plan: AgentPlan | null) => void
   onOpenContext?: () => void
+  aiSummary: string | null
+  isSummaryRefreshing: boolean
+  onRefreshSummary: () => void
   failedMessages?: FailedMessage[]
   onRetry?: (id: string) => void
 }
@@ -69,11 +73,13 @@ export default function ConversationView({
   initialPlan,
   onPlanCached,
   onOpenContext,
+  aiSummary,
+  isSummaryRefreshing,
+  onRefreshSummary,
   failedMessages = [],
   onRetry,
 }: Props) {
   const [viewTab, setViewTab] = useState<'chat' | 'notes'>('chat')
-  const [isNoteMode, setIsNoteMode] = useState(false)
 
   const { displayMessages, noteCount } = partitionConversationMessages(ticket.messages, viewTab)
   const {
@@ -103,7 +109,8 @@ export default function ConversationView({
     onAgentRunningChange,
     onAgentComplete,
     onPlanCached,
-    onNoteModeReset: () => setIsNoteMode(false),
+    onPrivateAnswerStart: () => setViewTab('notes'),
+    onNoteModeReset: () => setViewTab('chat'),
   })
 
   const planPhrase = useFillerPhrase([
@@ -134,8 +141,15 @@ export default function ConversationView({
         onReopen={onReopen}
         onOpenContext={onOpenContext}
       />
+      <ConversationSummaryBar
+        summary={aiSummary}
+        isRefreshing={isSummaryRefreshing}
+        onRefresh={onRefreshSummary}
+      />
 
-      <ConversationTabs noteCount={noteCount} value={viewTab} onValueChange={setViewTab} />
+      {activeTab === 'closed' && (
+        <ConversationTabs noteCount={noteCount} value={viewTab} onValueChange={setViewTab} />
+      )}
       <PresenceBanner presenceCount={presenceCount} />
 
       {/* Messages */}
@@ -170,17 +184,16 @@ export default function ConversationView({
           clerkInstruction={clerkInstruction}
           isAutoPlanLoading={isAutoPlanLoading}
           isClerkMode={isClerkMode}
-          isNoteMode={isNoteMode}
           isPlanExecuting={isPlanExecuting}
           isRegenerating={isRegenerating}
-          onAddNote={() => setIsNoteMode(true)}
-          onCancelNote={() => setIsNoteMode(false)}
+          noteCount={noteCount}
           onChange={text => onReplyChange(isClerkMode ? `@${agentName.toLowerCase()} ` + text : text)}
           onClearClerk={() => onReplyChange('')}
           onPlanApprove={handlePlanApprove}
           onPlanDismiss={handlePlanDismiss}
           onPlanRegenerate={handlePlanRegenerate}
           onSend={handleSend}
+          onViewTabChange={setViewTab}
           pendingPlan={pendingPlan}
           composer={{
             customerName: ticket.customer,

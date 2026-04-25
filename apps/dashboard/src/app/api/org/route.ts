@@ -5,10 +5,23 @@ import { getOrCreateOrg } from '@/lib/server/org';
 import { handleApiError } from '@/lib/api/errors';
 import type { OrgSettings } from '@/types';
 
+function resolvePlanName(priceId: string | null): string {
+  if (!priceId) return 'Free';
+  if (priceId === process.env.PRICE_ID_STARTER) return 'Starter';
+  if (priceId === process.env.PRICE_ID_PRO || priceId === process.env.PRICE_ID) return 'Pro';
+  return 'Paid';
+}
+
 export async function GET() {
   try {
     const org = await getOrCreateOrg();
-    return NextResponse.json({ id: org.id, name: org.name, settings: org.settings ?? {} });
+    return NextResponse.json({
+      id: org.id,
+      name: org.name,
+      settings: org.settings ?? {},
+      planName: resolvePlanName(org.stripePriceId),
+      stripeStatus: org.stripeStatus,
+    });
   } catch (error) {
     return handleApiError(error, 'Org GET', 'Failed to fetch org');
   }

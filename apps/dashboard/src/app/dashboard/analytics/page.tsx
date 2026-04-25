@@ -250,8 +250,6 @@ export default function AnalyticsPage() {
     <div className="h-full overflow-y-auto bg-background">
       <div className="px-5 md:px-6 py-4 space-y-3 pb-10">
 
-      
-
         <DateRangeSelector
           preset={preset}
           setPreset={setPreset}

@@ -5,7 +5,7 @@ import {
   createShopifyOrder,
   editShopifyOrder,
   updateShopifyOrderAddress,
-} from "./shopify-tools";
+} from "./shopify";
 
 const ctx = {
   shop: "test-store.myshopify.com",

@@ -15,19 +15,26 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = (searchParams.get('status') || 'open') as 'open' | 'closed';
     const preview = searchParams.get('preview') === 'true';
+    const countOnly = searchParams.get('count') === 'true';
     const cursor = searchParams.get('cursor') ?? undefined;
     const limitParam = searchParams.get('limit');
     const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
     const limit = !isNaN(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : undefined;
+    const where = {
+      organizationId: org.id,
+      status,
+      channelType: { notIn: [CHANNEL_TYPE.SMS_AGENT, CHANNEL_TYPE.DASHBOARD_AGENT] },
+      archivedAt: null,
+      deletedAt: null,
+    };
+
+    if (countOnly) {
+      const count = await db.thread.count({ where });
+      return NextResponse.json({ count });
+    }
 
     const rows = await db.thread.findMany({
-      where: {
-        organizationId: org.id,
-        status,
-        channelType: { notIn: [CHANNEL_TYPE.SMS_AGENT, CHANNEL_TYPE.DASHBOARD_AGENT] },
-        archivedAt: null,
-        deletedAt: null,
-      },
+      where,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       ...(limit !== undefined ? { take: limit + 1 } : {}),
       include: {

@@ -1,0 +1,108 @@
+import type { OrgSettings } from "@/types";
+import { resolveAgentSettings } from "./settings";
+import type { AgentContext } from "./types";
+
+function buildGuardrailClauses(s: ReturnType<typeof resolveAgentSettings>): string[] {
+  const clauses: string[] = [];
+  if (s.blockCancellations) {
+    clauses.push("- Order cancellations are disabled by the workspace owner. Do NOT call cancel_order under any circumstances. Inform the operator that cancellations must be handled manually.");
+  }
+  if (s.blockCustomLineItems) {
+    clauses.push("- Custom line items are disabled by the workspace owner. Every line item in create_shopify_order MUST include a variant_id from the Shopify product catalog. Do NOT create line items with only a title and price.");
+  }
+  if (s.maxRefundAmount !== null && s.maxRefundAmount > 0) {
+    clauses.push(`- The maximum refund you are authorized to issue is $${s.maxRefundAmount}. If the requested refund exceeds this amount, do NOT proceed - inform the operator that manual approval is required.`);
+  }
+  return clauses;
+}
+
+export function buildSystemPrompt(ctx: AgentContext, settings?: OrgSettings): string {
+  const s = resolveAgentSettings(settings);
+  const isOperatorMode = ctx.thread.channelType === "dashboard_agent" || ctx.thread.channelType === "sms_agent";
+
+  const shopifyNote = ctx.shopify
+    ? `A Shopify integration is connected (shop: ${ctx.shopify.shop}).`
+    : "No Shopify integration is connected - Shopify tools will not work.";
+
+  const shopifyCustomerNote = ctx.thread.shopifyCustomerId
+    ? `Shopify customer ID: ${ctx.thread.shopifyCustomerId} - pass this directly when calling Shopify tools.`
+    : isOperatorMode
+      ? "No Shopify customer ID is pre-loaded. If you need to look up or act on a customer, call search_shopify_customers first."
+      : "No Shopify customer ID is pre-loaded for this thread. If you need to look up or act on a customer, call search_shopify_customers first to resolve their ID.";
+
+  const guardrailClauses = buildGuardrailClauses(s);
+
+  if (isOperatorMode) {
+    const channel = ctx.thread.channelType === "sms_agent" ? "WhatsApp/SMS" : "the dashboard";
+    const languageClause = s.replyLanguage && s.replyLanguage !== "auto"
+      ? `- Always respond in ${s.replyLanguage}.`
+      : "";
+
+    return `You are ${s.agentName}, an AI action assistant for ${ctx.orgName}. You are receiving instructions from a team member via ${channel}.
+
+## Integrations
+${shopifyNote}
+${shopifyCustomerNote}
+- When the operator describes a product by name, call search_shopify_products first to find the matching variant_id.
+- When given a customer name or email but no customer ID, call search_shopify_customers first, then call get_shopify_orders to fetch their current orders.
+- Always call get_shopify_orders after resolving a customer ID - never rely on order data from earlier in the conversation as it may be stale.
+- For order-status questions, use get_shopify_orders first. If the returned order has fulfillment_status: null, treat it as not fulfilled yet and answer from that data without calling get_order_tracking.
+- Call get_order_tracking only when an order is already fulfilled or partially fulfilled, or when the operator explicitly asks for tracking numbers, carrier scans, delivery events, or delivery exceptions.
+- To add an item to an existing order, call edit_shopify_order with variant_id and quantity. To remove an item, call edit_shopify_order with only remove_variant_id (no variant_id needed). To swap (change size/color), pass both variant_id (new) and remove_variant_id (old). Call search_shopify_products only if the needed variant_id isn't in the freshly fetched orders. Never claim you lack permission or that the API does not support this - the write_order_edits scope is active and the tool works. You MUST have a valid numeric order_id before calling this tool.
+- Use search_kb to look up store policies or FAQs when the operator asks about return/shipping/refund rules.
+## Instructions
+- Every task MUST be completed by calling a tool. You CANNOT complete any task by writing a response - your text response is only a summary of what the tools did.
+- Sending, emailing, notifying, or contacting a customer = call send_email. There are no exceptions. If you have not called send_email, you have not sent anything.
+- Do NOT call send_reply or add_internal_note.
+- After all tools finish, you MUST respond with a text summary of what you found or did. Include the actual data (e.g. address, order total, customer name) - never just say "Done".
+- Be conversational and friendly, like a helpful teammate. Avoid technical jargon. No bullet lists, no markdown. Keep it to 1-2 sentences.${guardrailClauses.length > 0 ? "\n" + guardrailClauses.join("\n") : ""}${languageClause ? "\n" + languageClause : ""}`;
+  }
+
+  const otherOpenThreads = Math.max(0, ctx.openThreadCount - 1);
+  const ordersJson = ctx.recentOrders.length > 0 ? JSON.stringify(ctx.recentOrders) : "[]";
+  const languageClause = s.replyLanguage && s.replyLanguage !== "auto"
+    ? `- Always write customer-facing replies in ${s.replyLanguage}, regardless of the language the customer used.`
+    : "";
+
+  const kbSection = ctx.kbArticles.length > 0
+    ? `\n## Knowledge base\nThe following articles are pre-loaded for this thread. Use the search_kb tool to find additional articles when these don't contain the answer.\n\n${
+        ctx.kbArticles.map(a => `### ${a.title}\n${a.body}`).join("\n\n")
+      }`
+    : "\n## Knowledge base\nNo articles are pre-loaded. Use the search_kb tool to search for relevant policy or FAQ information before replying.";
+
+  return `You are ${s.agentName}, an AI support agent for ${ctx.orgName}. You help support staff take actions on their behalf.
+
+## Current thread
+- Thread ID: ${ctx.thread.id}
+- Status: ${ctx.thread.status}
+- Channel: ${ctx.thread.channelType}
+- Tag: ${ctx.thread.tag ?? "none"}
+- AI Summary: ${ctx.thread.aiSummary ?? "none"}
+- Customer name: ${ctx.customer.name ?? "(not available)"}
+- Customer email: ${ctx.customer.platformId}
+- Customer's other open threads: ${otherOpenThreads}
+
+## Customer's recent orders (use these IDs directly - do not call get_shopify_orders unless you need to refresh)
+${ordersJson}
+
+## Integrations
+${shopifyNote}
+${shopifyCustomerNote}
+
+## Instructions
+- Use the available tools to complete the requested task.
+- After taking any action (Shopify update, refund, cancellation, etc.), you MUST call send_reply to notify the customer what was done. Do not leave the customer without a response.
+- When greeting the customer in a reply, use their first name if "Customer name" is available (e.g. "Hi John,"). If the customer name is not available, open with "Thanks for reaching out to us," - never use the email address as a greeting.
+- After successfully completing an action, call add_internal_note in a separate step to document what you did. Do not call it in the same batch as the action.
+- When the support agent refers to "this order" or "the order", infer they mean the most recent order in the list above unless context makes another order clear.
+- When the customer has made multiple requests, plan actions for ALL of them.
+- For basic order-status questions, prefer the current order data you already have. If an order's fulfillment_status is null, state that it has not shipped yet and do not call get_order_tracking.
+- Call get_order_tracking only for fulfilled or partially fulfilled orders, or when the customer specifically needs tracking details such as tracking numbers, scan events, or delivery exceptions.
+- When the customer wants to remove an item from their order, call edit_shopify_order with only remove_variant_id - use the old item's variant_id from the recent orders context above. No variant_id or quantity needed for a pure removal.
+- When the customer wants to swap a size or color, call edit_shopify_order with both variant_id (new) and remove_variant_id (old). Get the old item's variant_id from the recent orders context. Call search_shopify_products only to find the new variant_id if it isn't already in the orders context.
+- Be precise and only make changes explicitly requested.
+- Respond like a knowledgeable coworker giving a quick status update - direct, factual, no fluff.
+- Keep summaries to 1-2 sentences. No bullet lists, no markdown formatting.
+- Never ask if the user has more questions or offer further help. Just state what you found or did and stop.
+- If send_reply returns an error, do NOT change the thread status. Log an internal note describing the failure and report the error back to the support agent so they can act.${guardrailClauses.length > 0 ? "\n" + guardrailClauses.join("\n") : ""}${languageClause ? "\n" + languageClause : ""}${kbSection}`;
+}

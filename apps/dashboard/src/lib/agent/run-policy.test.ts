@@ -1,0 +1,112 @@
+import { describe, expect, it, vi } from "vitest";
+import { AGENT_SETTINGS_DEFAULTS } from "./settings";
+import type { AgentContext } from "./runner";
+
+const { mockCreate, mockSendReply, mockUpdateThreadStatus } = vi.hoisted(() => ({
+  mockCreate: vi.fn(),
+  mockSendReply: vi.fn(),
+  mockUpdateThreadStatus: vi.fn(),
+}));
+
+vi.mock("@/lib/ai/anthropic", () => ({
+  anthropic: { messages: { create: mockCreate } },
+}));
+
+vi.mock("@/lib/server/logger", () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock("@/lib/agent/tools/thread", () => ({
+  addInternalNote: vi.fn().mockResolvedValue("Note added."),
+  sendReply: mockSendReply,
+  sendEmail: vi.fn().mockResolvedValue("Email sent."),
+  updateThreadStatus: mockUpdateThreadStatus,
+  updateThreadTag: vi.fn().mockResolvedValue("Tag updated."),
+}));
+
+import { runAgent } from "./runner";
+
+function makeCtx(overrides: Partial<AgentContext> = {}): AgentContext {
+  return {
+    orgId: "org_1",
+    orgName: "Test Store",
+    customer: { name: "Jane", platformId: "jane@test.com" },
+    recentMessages: [{ senderType: "customer", contentText: "Help me" }],
+    openThreadCount: 1,
+    shopify: { shop: "test-store.myshopify.com", accessToken: "shpat_test" },
+    recentOrders: [],
+    kbArticles: [],
+    thread: {
+      id: "thread_1",
+      status: "open",
+      channelType: "dashboard_agent",
+      tag: "Support",
+      aiSummary: null,
+      shopifyCustomerId: null,
+    },
+    ...overrides,
+  };
+}
+
+function toolUseBatch() {
+  return {
+    stop_reason: "tool_use",
+    content: [
+      { type: "tool_use", id: "tu_1", name: "send_reply", input: { text: "Done." } },
+      { type: "tool_use", id: "tu_2", name: "update_thread_status", input: { status: "closed" } },
+    ],
+    usage: { input_tokens: 10, output_tokens: 5 },
+  };
+}
+
+function endTurn(text = "Done.") {
+  return {
+    stop_reason: "end_turn",
+    content: [{ type: "text", text }],
+    usage: { input_tokens: 10, output_tokens: 5 },
+  };
+}
+
+describe("runAgent policy enforcement", () => {
+  it("blocks pre-approved cancellations when cancellations are disabled", async () => {
+    const result = await runAgent(
+      makeCtx(),
+      "Cancel order",
+      [{ id: "pre_1", name: "cancel_order", input: { order_id: "123" } }],
+      { ...AGENT_SETTINGS_DEFAULTS, blockCancellations: true }
+    );
+
+    expect(result.actionsPerformed).toEqual([
+      {
+        tool: "cancel_order",
+        result: "Error: order cancellations are disabled by the workspace owner.",
+      },
+    ]);
+    expect(result.summary).toBe("Error: order cancellations are disabled by the workspace owner.");
+  });
+
+  it("runs mixed non-read tool calls in order", async () => {
+    let replyFinished = false;
+    mockCreate
+      .mockResolvedValueOnce(toolUseBatch())
+      .mockResolvedValueOnce(endTurn("All done."));
+    mockSendReply.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      replyFinished = true;
+      return "Reply sent.";
+    });
+    mockUpdateThreadStatus.mockImplementation(async () => (
+      replyFinished ? "Status updated after reply." : "Status updated before reply."
+    ));
+
+    const result = await runAgent(makeCtx({ thread: { ...makeCtx().thread, channelType: "email" } }), "Reply and close");
+
+    expect(result.actionsPerformed.map((action) => action.result)).toEqual([
+      "Reply sent.",
+      "Status updated after reply.",
+    ]);
+  });
+});

@@ -154,6 +154,7 @@ export interface Thread {
   aiSummary: string | null;
   tag: string | null;
   shopifyCustomerId: string | null;
+  cachedPlan: unknown | null;
   customer: Customer;
   messages: Message[];
 }
@@ -210,6 +211,7 @@ export interface Ticket {
   aiSummary: string;
   status: ThreadStatus;
   lastCustomerMessageAt: string | null;
+  hasPlan: boolean;
   messages: {
     sender: SenderType;
     text: string | null;

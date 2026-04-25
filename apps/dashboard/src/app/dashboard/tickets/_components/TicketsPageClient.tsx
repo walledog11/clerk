@@ -1,19 +1,20 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { CheckCircle2, Inbox } from "lucide-react"
 import useSWR from 'swr'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { usePaginatedThreads } from '@/hooks/useThreads'
-import { useAgentTurns } from '@/hooks/useAgentTurns'
-import { useTicketActions } from '@/hooks/useTicketActions'
-import { useTicketSelection } from '@/hooks/useTicketSelection'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useAgentTurns } from '../_hooks/useAgentTurns'
+import { usePaginatedThreads } from '../_hooks/usePaginatedThreads'
+import { useTicketActions } from '../_hooks/useTicketActions'
+import { useTicketSelection } from '../_hooks/useTicketSelection'
 import { threadToTicket } from '../_lib/thread-to-ticket'
 import { fetcher } from '@/lib/api/fetcher'
-import ThreadList from './ThreadList'
+import ThreadList from './thread-list/ThreadList'
 import ConversationView from './conversation/ConversationView'
-import ContextPanel from './ContextPanel'
+import ContextPanel from './context-panel/ContextPanel'
 import type { Thread, Ticket, ChannelType, AgentPlan } from '@/types'
 
 // Module-level cache — persists across navigation for the browser session
@@ -33,21 +34,27 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showContextDrawer, setShowContextDrawer] = useState(false)
+  const [refreshingSummaryId, setRefreshingSummaryId] = useState<string | null>(null)
+  const summaryRequestsRef = useRef(new Set<string>())
+  const isDesktopContext = useMediaQuery('(min-width: 1280px)')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const { threads: openThreads, isLoading: openLoading, error, mutate: mutateOpen, loadMore: loadMoreOpen, hasMore: hasMoreOpen, isLoadingMore: isLoadingMoreOpen } = usePaginatedThreads('open', initialOpenThreads)
   const { threads: closedThreads, isLoading: closedLoading, mutate: mutateClosed, loadMore: loadMoreClosed, hasMore: hasMoreClosed, isLoadingMore: isLoadingMoreClosed } = usePaginatedThreads('closed')
   const isSearchMode = searchQuery.length >= 2
-  const dbThreads = isSearchMode ? [] : (activeTab === 'open' ? openThreads : closedThreads)
+  const dbThreads = useMemo(
+    () => isSearchMode ? [] : (activeTab === 'open' ? openThreads : closedThreads),
+    [activeTab, closedThreads, isSearchMode, openThreads],
+  )
   const isLoading = activeTab === 'open' ? openLoading : closedLoading
 
-  const { data: searchData, isLoading: isSearchLoading } = useSWR<{ threads: Thread[] }>(
+  const { data: searchData, isLoading: isSearchLoading, mutate: mutateSearch } = useSWR<{ threads: Thread[] }>(
     isSearchMode ? `/api/search?q=${encodeURIComponent(searchQuery)}` : null,
     fetcher,
     { keepPreviousData: true },
   )
-  const searchThreads = searchData?.threads ?? []
+  const searchThreads = useMemo(() => searchData?.threads ?? [], [searchData?.threads])
 
   const filteredTickets: Ticket[] = useMemo(() => {
     if (isSearchMode) {
@@ -82,11 +89,11 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
   const {
     replyText, setReplyText,
     isDrafting, isSending, sendError, setSendError,
-    isRefreshingSummary, toast,
+    toast,
     failedMessages, handleRetry,
     handleSendMessage, handleResolve, handleReopen,
-    handleAiDraft, handleLinkShopifyCustomer, handleTagUpdate,
-    handleRefreshSummary, handleBulkClose, handleBulkArchive, handleBulkTag,
+    handleAiDraft, handleLinkShopifyCustomer,
+    handleBulkClose, handleBulkArchive, handleBulkTag,
   } = useTicketActions({
     activeTicketId,
     activeTab,
@@ -129,6 +136,55 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeTicket?.messages?.length, activeTicketId])
+
+  const patchThreadSummary = useCallback(async (threadId: string, summary: string | null) => {
+    const updateThread = (thread: Thread): Thread =>
+      thread.id === threadId ? { ...thread, aiSummary: summary } : thread
+
+    await Promise.all([
+      mutateOpen([...(openThreads.map(updateThread))], false),
+      mutateClosed([...(closedThreads.map(updateThread))], false),
+      mutateSearch(
+        current => current
+          ? { ...current, threads: current.threads.map(updateThread) }
+          : current,
+        { revalidate: false },
+      ),
+    ])
+  }, [closedThreads, mutateClosed, mutateOpen, mutateSearch, openThreads])
+
+  const handleRefreshSummary = useCallback(async (threadId: string) => {
+    if (refreshingSummaryId === threadId) return
+    setRefreshingSummaryId(threadId)
+
+    try {
+      const res = await fetch('/api/ai/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data?.error || `Server error: ${res.status}`)
+      }
+
+      await patchThreadSummary(threadId, data.summary ?? null)
+    } catch (err) {
+      summaryRequestsRef.current.delete(threadId)
+      console.error('Failed to refresh summary', err)
+    } finally {
+      setRefreshingSummaryId(current => current === threadId ? null : current)
+    }
+  }, [patchThreadSummary, refreshingSummaryId])
+
+  useEffect(() => {
+    if (!activeThread || activeThread.aiSummary || activeThread.messages.length === 0) return
+    if (summaryRequestsRef.current.has(activeThread.id)) return
+
+    summaryRequestsRef.current.add(activeThread.id)
+    handleRefreshSummary(activeThread.id)
+  }, [activeThread, handleRefreshSummary])
 
   const handleTabChange = (tab: 'open' | 'closed') => {
     setActiveTab(tab)
@@ -238,6 +294,9 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               planRevisionKey={planCacheKey}
               initialPlan={cachedPlan}
               onPlanCached={(plan) => { if (planCacheKey) planCache.set(planCacheKey, plan) }}
+              aiSummary={activeThread.aiSummary}
+              isSummaryRefreshing={refreshingSummaryId === activeThread.id}
+              onRefreshSummary={() => handleRefreshSummary(activeThread.id)}
               replyText={replyText}
               isDrafting={isDrafting}
               isSending={isSending}
@@ -254,17 +313,15 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               onDraft={handleAiDraft}
             />
             {/* Desktop context panel */}
-            <div className="hidden xl:flex">
-              <ContextPanel
-                thread={activeThread}
-                hasShopify={hasShopify}
-                aiSummary={activeTicket.aiSummary}
-                isRefreshingSummary={isRefreshingSummary}
-                onRefreshSummary={handleRefreshSummary}
-                onTagUpdate={handleTagUpdate}
-                onLinkShopifyCustomer={handleLinkShopifyCustomer}
-              />
-            </div>
+            {isDesktopContext && (
+              <div className="hidden xl:flex">
+                <ContextPanel
+                  thread={activeThread}
+                  hasShopify={hasShopify}
+                  onLinkShopifyCustomer={handleLinkShopifyCustomer}
+                />
+              </div>
+            )}
 
             {/* Mobile/tablet context sheet */}
             <Sheet open={showContextDrawer} onOpenChange={setShowContextDrawer}>
@@ -279,10 +336,6 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
                   <ContextPanel
                     thread={activeThread}
                     hasShopify={hasShopify}
-                    aiSummary={activeTicket.aiSummary}
-                    isRefreshingSummary={isRefreshingSummary}
-                    onRefreshSummary={handleRefreshSummary}
-                    onTagUpdate={handleTagUpdate}
                     onLinkShopifyCustomer={handleLinkShopifyCustomer}
                   />
                 </div>

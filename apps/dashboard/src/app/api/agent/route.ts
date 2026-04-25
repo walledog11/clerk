@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { BadRequestError, handleApiError } from "@/lib/api/errors";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { executeAgentTurn } from "@/lib/agent/api/execution";
+import { isAgentPlanCacheHit, readAgentPlanCache } from "@/lib/agent/api/plan-cache";
 import { parseAgentRouteBody } from "@/lib/agent/api/validation";
 import { hashInstructionForLog } from "@/lib/agent/runner";
+import { resolveAgentSettings } from "@/lib/agent/settings";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import type { OrgSettings } from "@/types";
 import logger from "@/lib/server/logger";
@@ -18,7 +20,34 @@ export async function POST(request: Request) {
     if (!rl.success) return tooManyRequests(rl.reset);
     const { threadId, instruction, approvedToolCalls } = parseAgentRouteBody(await request.json());
     const instructionHash = hashInstructionForLog(instruction);
-    await requireOrgThread(threadId, org.id);
+    const thread = await requireOrgThread(threadId, org.id);
+    const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
+
+    if (!approvedToolCalls?.length) {
+      throw new BadRequestError("Agent execution requires an approved plan");
+    }
+
+    const cachedPlan = readAgentPlanCache(thread.cachedPlan);
+    const lastCustomerMessage = thread.messages[0] ?? null;
+    const currentPlan = isAgentPlanCacheHit({
+      cache: cachedPlan,
+      instruction,
+      lastCustomerMessageId: lastCustomerMessage?.id ?? null,
+      settings,
+    }) ? cachedPlan?.plan : null;
+    const approvedCallsMatchPlan = approvedToolCalls.every((approved) => {
+      const planned = currentPlan?.rawToolCalls.find((toolCall) => toolCall.id === approved.id);
+      return Boolean(
+        planned &&
+        planned.name === approved.name &&
+        JSON.stringify(planned.input ?? null) === JSON.stringify(approved.input ?? null)
+      );
+    });
+
+    if (!currentPlan || !approvedCallsMatchPlan) {
+      throw new BadRequestError("Approved tool calls must come from the current reviewed plan");
+    }
+
     logger.info({
       orgId: org.id,
       threadId,
@@ -31,8 +60,8 @@ export async function POST(request: Request) {
       orgId: org.id,
       threadId,
       instruction,
-      orgSettings: org.settings as Partial<OrgSettings> | null,
-      approvedToolCalls: approvedToolCalls ?? undefined,
+      orgSettings: settings,
+      approvedToolCalls,
       persistAuditNote: true,
     });
     logger.info({

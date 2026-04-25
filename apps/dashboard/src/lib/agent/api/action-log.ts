@@ -1,5 +1,5 @@
 import { db } from "@clerk/db";
-import { AGENT_TURN_PREFIX } from "@/lib/agent/turn-content";
+import { AGENT_TURN_PREFIX } from "@/lib/agent/tools/turn-content";
 import { TOOL_LABELS } from "@/lib/agent/tools";
 import {
   decodeActionLogCursor,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/agent/api/turns";
 import type { ActionLogEntry, AgentTurn } from "@/types";
 
-export { isAgentTurnContent } from "@/lib/agent/turn-content";
+export { isAgentTurnContent } from "@/lib/agent/tools/turn-content";
 export { extractAgentTurnsFromMessages, excludeAgentTurnMessages } from "@/lib/agent/api/turns";
 
 const DEFAULT_PAGE_SIZE = 50;

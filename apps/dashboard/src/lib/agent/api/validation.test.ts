@@ -3,11 +3,22 @@ import { BadRequestError } from "@/lib/api/errors";
 import { encodeActionLogCursor } from "@/lib/agent/api/turns";
 import {
   parseActionLogCursorQuery,
+  parseAgentAskBody,
   parseAgentInternalBody,
   parseAgentRouteBody,
 } from "@/lib/agent/api/validation";
 
 describe("agent api validation", () => {
+  it("parses composer ask payloads", () => {
+    expect(parseAgentAskBody({
+      threadId: "thread_123",
+      instruction: "  What should I say?  ",
+    })).toEqual({
+      threadId: "thread_123",
+      instruction: "What should I say?",
+    });
+  });
+
   it("parses approved tool calls for the agent route", () => {
     const parsed = parseAgentRouteBody({
       threadId: "thread_123",

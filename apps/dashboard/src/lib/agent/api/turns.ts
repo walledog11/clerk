@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { AGENT_TURN_PREFIX, isAgentTurnContent } from "@/lib/agent/turn-content";
+import { AGENT_TURN_PREFIX, isAgentTurnContent } from "@/lib/agent/tools/turn-content";
 import { TOOL_LABELS } from "@/lib/agent/tools";
 import type { ActionLogEntry, AgentTurn } from "@/types";
 

@@ -21,8 +21,8 @@ vi.mock('@/lib/ai/anthropic', () => ({
   anthropic: { messages: { create: mockCreate } },
 }));
 
-vi.mock('@/lib/agent/thread-tools', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/agent/thread-tools')>();
+vi.mock('@/lib/agent/tools/thread', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/agent/tools/thread')>();
   return { ...actual, sendReply: mockSendReply };
 });
 
@@ -289,15 +289,14 @@ describe('runAgent', () => {
     expect(result.summary).toContain('2x Pencil Half Zip');
   });
 
-  it('executes pre-approved tool calls before starting the main loop', async () => {
-    mockCreate.mockResolvedValueOnce(endTurn('Pre-run complete.'));
-
+  it('executes pre-approved tool calls without starting another model loop', async () => {
     const result = await runAgent(
       makeCtx(),
       'Execute plan',
       [{ id: 'pre_1', name: 'add_internal_note', input: { text: 'Pre-approved note' } }]
     );
 
+    expect(mockCreate).not.toHaveBeenCalled();
     expect(result.actionsPerformed).toHaveLength(1);
     expect(result.actionsPerformed[0].tool).toBe('add_internal_note');
 

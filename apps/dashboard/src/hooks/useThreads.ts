@@ -1,12 +1,10 @@
 import useSWR from "swr";
-import useSWRInfinite from "swr/infinite";
 import { useEffect, useState, useCallback } from "react";
 import { fetcher } from "@/lib/api/fetcher";
 import type { Thread } from "@/types";
 
-const PAGINATED_LIMIT = 25;
-
 type ThreadsPage = { threads: Thread[]; nextCursor: string | null };
+type ThreadCount = { count: number };
 
 function useIsDocumentVisible() {
   const [isVisible, setIsVisible] = useState(
@@ -63,68 +61,20 @@ export function useThreads(
   };
 }
 
-// Paginated — for the tickets list; uses cursor-based infinite loading
-export function usePaginatedThreads(
-  status: 'open' | 'closed' = 'open',
-  initialData?: Thread[],
-  preview = false,
-) {
+export const useOpenThreads = () => useThreads('open', undefined, true, true);
+
+export function useOpenThreadCountQuery(enabled = true) {
   const isVisible = useIsDocumentVisible();
-  const baseInterval = status === 'open' ? 15000 : 60000;
-
-  const getKey = (pageIndex: number, previousPageData: ThreadsPage | null) => {
-    if (previousPageData && !previousPageData.nextCursor) return null;
-    const base = `/api/threads?status=${status}&limit=${PAGINATED_LIMIT}${preview ? '&preview=true' : ''}`;
-    if (pageIndex === 0) return base;
-    return `${base}&cursor=${previousPageData!.nextCursor}`;
-  };
-
-  const fbData: ThreadsPage[] | undefined = initialData
-    ? [{ threads: initialData, nextCursor: null }]
-    : undefined;
-
-  const { data: pages, error, isLoading, size, setSize, mutate: swrMutate } = useSWRInfinite<ThreadsPage>(
-    getKey,
+  const { data, error, isLoading, mutate } = useSWR<ThreadCount>(
+    enabled ? '/api/threads?status=open&count=true' : null,
     fetcher,
-    {
-      refreshInterval: isVisible ? baseInterval : 0,
-      fallbackData: fbData,
-      revalidateFirstPage: true,
-    }
+    { refreshInterval: isVisible ? 15000 : 0 }
   );
 
-  const threads: Thread[] = pages?.flatMap(p => p.threads) ?? [];
-  const lastPage = pages?.[pages.length - 1];
-  const hasMore = !!(lastPage?.nextCursor);
-  const isLoadingMore = size > (pages?.length ?? 0);
-
-  const loadMore = useCallback(() => setSize(s => s + 1), [setSize]);
-
-  const mutate = useCallback(async (updater?: Thread[], revalidate = true): Promise<Thread[] | undefined> => {
-    if (updater === undefined) {
-      const result = await swrMutate();
-      return result?.flatMap(p => p.threads);
-    }
-    const result = await swrMutate(
-      (currentPages = []) => currentPages.map(page => ({
-        ...page,
-        threads: page.threads.map(t => updater.find(u => u.id === t.id) ?? t),
-      })),
-      revalidate
-    );
-    return result?.flatMap(p => p.threads);
-  }, [swrMutate]);
-
   return {
-    threads,
+    count: data?.count ?? 0,
     isLoading,
     error,
     mutate,
-    loadMore,
-    hasMore,
-    isLoadingMore,
   };
 }
-
-export const useOpenThreads = () => useThreads('open', undefined, true, true);
-

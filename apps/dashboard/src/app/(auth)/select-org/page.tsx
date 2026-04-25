@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import AuthShell from "../_components/AuthShell";
 import { OrgAvatar } from "@/components/OrgAvatar";
+import { formatRole } from "@/lib/format/role";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -51,15 +52,6 @@ const highlights = [
     description: "Spin up a new workspace when you need a separate brand or operation.",
   },
 ];
-
-function formatRole(role?: string | null) {
-  if (!role) return "Member";
-
-  return role
-    .replace(/^org:/, "")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
 
 export default function SelectOrgPage() {
   const { isLoaded, userMemberships, setActive } = useOrganizationList({

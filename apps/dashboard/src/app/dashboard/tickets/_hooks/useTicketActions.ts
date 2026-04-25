@@ -34,7 +34,6 @@ export function useTicketActions({
   const [sendError, setSendError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [failedMessages, setFailedMessages] = useState<FailedMessage[]>([])
-  const [isRefreshingSummary, setIsRefreshingSummary] = useState(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -160,32 +159,16 @@ export function useTicketActions({
       t.id === activeTicketId ? { ...t, shopifyCustomerId: customerId } : t
     ), false)
     try {
-      await fetch(`/api/threads/${activeTicketId}`, {
+      const res = await fetch(`/api/threads/${activeTicketId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopifyCustomerId: customerId }),
       })
+      if (!res.ok) throw new Error(`Server error: ${res.status}`)
     } catch (err) {
       console.error('Failed to link Shopify customer', err)
-      mutateFn()
-    }
-  }, [activeTicketId, dbThreads, getMutate])
-
-  const handleTagUpdate = useCallback(async (tag: string) => {
-    if (!activeTicketId) return
-    const mutateFn = getMutate()
-    await mutateFn(dbThreads.map(t =>
-      t.id === activeTicketId ? { ...t, tag: tag || null } : t
-    ), false)
-    try {
-      await fetch(`/api/threads/${activeTicketId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tag }),
-      })
-    } catch (err) {
-      console.error('Failed to update tag', err)
-      mutateFn()
+      await mutateFn()
+      throw err
     }
   }, [activeTicketId, dbThreads, getMutate])
 
@@ -228,37 +211,6 @@ export function useTicketActions({
       mutateFn()
     }
   }, [failedMessages, getMutate, getCurrentThreads])
-
-  const handleRefreshSummary = useCallback(async () => {
-    if (!activeTicketId) return
-    setIsRefreshingSummary(true)
-    try {
-      const response = await fetch('/api/ai/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId: activeTicketId }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        console.error('Clerk Error:', data.error)
-        setSendError(`AI Error: ${data.error || 'Check the console'}`)
-        return
-      }
-      const mutateFn = getMutate()
-      if (data.summary) {
-        await mutateFn(dbThreads.map(t =>
-          t.id === activeTicketId ? { ...t, aiSummary: data.summary } : t
-        ), false)
-      } else {
-        mutateFn()
-      }
-    } catch (err) {
-      console.error('Network error:', err)
-      setSendError('Network error: Failed to reach the AI endpoint.')
-    } finally {
-      setIsRefreshingSummary(false)
-    }
-  }, [activeTicketId, dbThreads, getMutate])
 
   const handleBulkClose = useCallback(async (selectedIds: string[]) => {
     if (selectedIds.length === 0) return
@@ -323,7 +275,6 @@ export function useTicketActions({
     isSending,
     sendError,
     setSendError,
-    isRefreshingSummary,
     toast,
     failedMessages,
     handleSendMessage,
@@ -332,8 +283,6 @@ export function useTicketActions({
     handleReopen,
     handleAiDraft,
     handleLinkShopifyCustomer,
-    handleTagUpdate,
-    handleRefreshSummary,
     handleBulkClose,
     handleBulkArchive,
     handleBulkTag,

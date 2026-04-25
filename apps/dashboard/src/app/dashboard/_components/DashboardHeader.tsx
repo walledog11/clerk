@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, HelpCircle, Search, UserPlus } from "lucide-react";
-import CommandPalette from "./CommandPalette";
+import { useCommandPalette } from "./CommandPaletteContext";
 import { useHelp } from "./help/HelpContext";
 import { useOpenThreadCount } from "./DashboardSidebar";
 import { useUser, useOrganization } from "@clerk/nextjs";
@@ -22,22 +21,11 @@ import {
 export default function DashboardHeader() {
   const pathname = usePathname();
   const router = useRouter();
-  const [cmdOpen, setCmdOpen] = useState(false);
+  const { open: openCmd } = useCommandPalette();
   const { isOpen: isHelpOpen, openHelp, closeHelp } = useHelp();
   const openCount = useOpenThreadCount();
   const { user } = useUser();
   const { memberships } = useOrganization({ memberships: { infinite: false, pageSize: 5 } });
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCmdOpen(o => !o);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const otherMembers = (memberships?.data ?? [] as OrganizationMembershipResource[])
     .filter((m: OrganizationMembershipResource) => m.publicUserData?.userId !== user?.id)
@@ -50,8 +38,6 @@ export default function DashboardHeader() {
 
   return (
     <>
-      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-
       {/* Desktop-only header */}
       <div className="hidden md:grid md:grid-cols-[1fr_auto_1fr] items-center border-b border-border px-4 h-12 shrink-0 bg-background/80 backdrop-blur-sm">
 
@@ -62,7 +48,7 @@ export default function DashboardHeader() {
 
         {/* Center: search trigger */}
         <button
-          onClick={() => setCmdOpen(true)}
+          onClick={openCmd}
           className="flex items-center gap-2 w-100 px-4 py-1.5 rounded-full border border-white/[0.10] bg-white/[0.05] hover:bg-white/[0.08] hover:border-white/[0.15] transition-all text-white/30 hover:text-white/50"
         >
           <Search className="w-3.5 h-3.5 shrink-0" />

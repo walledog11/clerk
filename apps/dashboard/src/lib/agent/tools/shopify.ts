@@ -14,4 +14,4 @@ export {
   addShopifyCustomerNote,
   SHOPIFY_API_VERSION,
   type ShopifyContext,
-} from "./shopify";
+} from "../shopify";

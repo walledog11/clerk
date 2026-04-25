@@ -3,7 +3,7 @@ import { db } from '@clerk/db';
 import { getOrCreateOrg } from '@/lib/server/org';
 import logger from '@/lib/server/logger';
 
-const CUSTOMER_FIELDS = 'id,first_name,last_name,email,phone,note,orders_count,total_spent,default_address';
+const CUSTOMER_FIELDS = 'id,first_name,last_name,email,phone,note,orders_count,total_spent,currency,created_at,default_address';
 
 export async function GET(request: Request) {
   try {
@@ -11,6 +11,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     const customerId = searchParams.get('customerId');
+    const parsedOrderLimit = Number.parseInt(searchParams.get('orderLimit') ?? '5', 10);
+    const orderLimit = Number.isFinite(parsedOrderLimit)
+      ? Math.min(Math.max(parsedOrderLimit, 0), 5)
+      : 5;
 
     if (!email && !customerId) {
       return NextResponse.json({ error: 'Missing email or customerId' }, { status: 400 });
@@ -34,6 +38,10 @@ export async function GET(request: Request) {
         `https://${shop}/admin/api/2024-01/customers/${customerId}.json?fields=${CUSTOMER_FIELDS}`,
         { headers: { 'X-Shopify-Access-Token': token } }
       );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return NextResponse.json({ error: 'shopify_error', details: errData }, { status: res.status });
+      }
       const data = await res.json();
       customer = data.customer ?? null;
     } else {
@@ -41,6 +49,10 @@ export async function GET(request: Request) {
         `https://${shop}/admin/api/2024-01/customers/search.json?query=email:${encodeURIComponent(email!)}&fields=${CUSTOMER_FIELDS}`,
         { headers: { 'X-Shopify-Access-Token': token } }
       );
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        return NextResponse.json({ error: 'shopify_error', details: errData }, { status: res.status });
+      }
       const data = await res.json();
       customer = (data.customers ?? [])[0] ?? null;
     }
@@ -49,12 +61,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ customer: null, orders: [] });
     }
 
-    const ordersRes = await fetch(
-      `https://${shop}/admin/api/2024-01/orders.json?customer_id=${customer.id}&status=any&limit=5&fields=id,name,created_at,financial_status,fulfillment_status,total_price,line_items`,
-      { headers: { 'X-Shopify-Access-Token': token } }
-    );
-    const ordersData = await ordersRes.json();
-    const orders: ShopifyOrder[] = ordersData.orders ?? [];
+    await persistCustomerName(org.id, customer);
+
+    let orders: ShopifyOrder[] = [];
+    if (orderLimit > 0) {
+      const ordersRes = await fetch(
+        `https://${shop}/admin/api/2024-01/orders.json?customer_id=${customer.id}&status=any&limit=${orderLimit}&fields=id,name,created_at,fulfillment_status,total_price,currency,line_items`,
+        { headers: { 'X-Shopify-Access-Token': token } }
+      );
+      if (!ordersRes.ok) {
+        const errData = await ordersRes.json().catch(() => ({}));
+        return NextResponse.json({ error: 'shopify_error', details: errData }, { status: ordersRes.status });
+      }
+      const ordersData = await ordersRes.json();
+      const rawOrders: ShopifyOrder[] = ordersData.orders ?? [];
+      orders = await addProductImagesToOrders(rawOrders, shop, token);
+    }
 
     return NextResponse.json({ customer, orders, shop });
 
@@ -134,13 +156,15 @@ export async function PATCH(request: Request) {
 
 interface ShopifyCustomer {
   id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
   phone: string | null;
   note: string | null;
   orders_count: number;
   total_spent: string;
+  currency?: string | null;
+  created_at: string;
   default_address: ShopifyAddress | null;
 }
 
@@ -157,8 +181,86 @@ interface ShopifyOrder {
   id: number;
   name: string;
   created_at: string;
-  financial_status: string;
   fulfillment_status: string | null;
   total_price: string;
-  line_items: { title: string; quantity: number }[];
+  currency?: string | null;
+  line_items: ShopifyLineItem[];
+}
+
+interface ShopifyLineItem {
+  title: string;
+  quantity: number;
+  product_id: number | null;
+  variant_title: string | null;
+  sku: string | null;
+  image?: string | null;
+}
+
+interface ShopifyProductImage {
+  src: string;
+}
+
+interface ShopifyProduct {
+  id: number;
+  images: ShopifyProductImage[];
+}
+
+async function persistCustomerName(organizationId: string, shopifyCustomer: ShopifyCustomer) {
+  const email = shopifyCustomer.email?.trim();
+  if (!email) return;
+
+  const fullName = `${shopifyCustomer.first_name ?? ''} ${shopifyCustomer.last_name ?? ''}`.trim();
+  if (!fullName) return;
+
+  try {
+    const local = await db.customer.findFirst({
+      where: { organizationId, platformId: { equals: email, mode: 'insensitive' } },
+      select: { id: true, name: true, platformId: true },
+    });
+    if (!local) return;
+
+    const emailLocal = local.platformId.split('@')[0];
+    const isEmailLike = !local.name || local.name === local.platformId || local.name === emailLocal;
+    if (!isEmailLike) return;
+
+    await db.customer.update({ where: { id: local.id }, data: { name: fullName } });
+  } catch (err) {
+    logger.warn({ err, organizationId, email }, '[Shopify Customer GET] Failed to persist customer name');
+  }
+}
+
+async function addProductImagesToOrders(orders: ShopifyOrder[], shop: string, token: string) {
+  const productIds = Array.from(new Set(
+    orders.flatMap(order => order.line_items.map(item => item.product_id).filter((id): id is number => typeof id === 'number'))
+  ));
+
+  if (productIds.length === 0) return orders;
+
+  try {
+    const productsRes = await fetch(
+      `https://${shop}/admin/api/2024-01/products.json?ids=${productIds.join(',')}&fields=id,images`,
+      { headers: { 'X-Shopify-Access-Token': token } }
+    );
+
+    if (!productsRes.ok) return orders;
+
+    const productsData = await productsRes.json();
+    const productImageById = new Map<number, string | null>(
+      ((productsData.products ?? []) as ShopifyProduct[]).map(product => [
+        product.id,
+        product.images?.[0]?.src ?? null,
+      ])
+    );
+
+    return orders.map(order => ({
+      ...order,
+      line_items: order.line_items.map(item => ({
+        ...item,
+        image: item.product_id ? productImageById.get(item.product_id) ?? null : null,
+      })),
+    }));
+  } catch (err) {
+    logger.warn({ err }, '[Shopify Customer GET] Failed to fetch product images');
+    return orders;
+  }
 }

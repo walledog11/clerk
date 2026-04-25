@@ -1,7 +1,7 @@
 import { getChannelInfo } from "@/lib/messaging/channels";
 import { getCustomerName } from "@/lib/messaging/customer-name";
-import { formatTime } from "@/lib/format/date";
-import { isAgentTurnContent } from "@/lib/agent/turn-content";
+import { formatTime, formatTicketAge } from "@/lib/format/date";
+import { isAgentTurnContent } from "@/lib/agent/tools/turn-content";
 import { AGENT_NOTE_PREFIX, SENDER_TYPE } from "@/lib/messaging/thread-constants";
 import type { Thread, Ticket } from "@/types";
 
@@ -15,7 +15,7 @@ export function threadToTicket(thread: Thread, agentName?: string): Ticket {
     platform: channel.name,
     logo: channel.logo,
     customer: getCustomerName(thread.customer),
-    time: lastMsg ? formatTime(lastMsg.sentAt) : "New",
+    time: formatTicketAge(thread.createdAt),
     subject: thread.tag || "New Inquiry",
     preview: lastMsg?.contentText || "No messages yet.",
     tag: thread.tag || "Support",
@@ -24,6 +24,7 @@ export function threadToTicket(thread: Thread, agentName?: string): Ticket {
     status: thread.status,
     lastCustomerMessageAt:
       thread.messages.filter((message) => message.senderType === SENDER_TYPE.CUSTOMER).at(-1)?.sentAt ?? null,
+    hasPlan: !!thread.cachedPlan,
     messages: thread.messages
       .filter((message) => !(message.senderType === SENDER_TYPE.NOTE && isAgentTurnContent(message.contentText)))
       .map((message) => {

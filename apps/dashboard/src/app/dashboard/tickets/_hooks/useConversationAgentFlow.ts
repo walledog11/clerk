@@ -17,6 +17,7 @@ interface UseConversationAgentFlowProps {
   onAgentRunningChange: (running: boolean) => void
   onAgentComplete: (turn: AgentTurn) => void
   onPlanCached: (plan: AgentPlan | null) => void
+  onPrivateAnswerStart?: () => void
   onNoteModeReset: () => void
 }
 
@@ -31,7 +32,8 @@ export function getClerkCommandState(
 ) {
   const triggerPrefix = `@${agentName.toLowerCase()}`
   const trimmedReply = replyText.trimStart()
-  const isClerkMode = viewTab === "notes" && trimmedReply.toLowerCase().startsWith(triggerPrefix)
+  const isSupportedComposerTab = viewTab === "chat" || viewTab === "notes"
+  const isClerkMode = isSupportedComposerTab && trimmedReply.toLowerCase().startsWith(triggerPrefix)
   const clerkInstruction = isClerkMode ? trimmedReply.slice(triggerPrefix.length).replace(/^ /, "") : ""
 
   return {
@@ -59,6 +61,22 @@ export function resolvePendingPlan(plan: AgentPlan, instruction: string): AgentP
   return plan.steps.length > 0 ? { ...plan, instruction } : null
 }
 
+const PRIVATE_ASK_RE =
+  /\b(what should i|what do i|what to say|how should i|how do i|what can i|can you draft|draft|write|rewrite|responding to this|summari[sz]e|explain|do we have enough|should i|what's|what is|why)\b/i
+const ACTION_REQUEST_RE =
+  /^(?:(?:please|can you|could you|go ahead and|let's|lets)\s+)?(?:change|update|edit|swap|remove|add|refund|cancel|create|place|make|send|email|notify|close|tag|run|approve)\b/i
+
+export function shouldUsePrivateComposerAsk(instruction: string): boolean {
+  const normalized = instruction.trim()
+  if (!normalized) return false
+  if (PRIVATE_ASK_RE.test(normalized)) return true
+  return !ACTION_REQUEST_RE.test(normalized)
+}
+
+export function planRequiresApproval(plan: AgentPlan): boolean {
+  return plan.steps.some(step => step.category === "action" || step.category === "communication" || step.category === "internal")
+}
+
 export function useConversationAgentFlow({
   activeTab,
   ticket,
@@ -73,6 +91,7 @@ export function useConversationAgentFlow({
   onAgentRunningChange,
   onAgentComplete,
   onPlanCached,
+  onPrivateAnswerStart,
   onNoteModeReset,
 }: UseConversationAgentFlowProps) {
   const [pendingInstruction, setPendingInstruction] = useState<string | null>(null)
@@ -155,9 +174,53 @@ export function useConversationAgentFlow({
     }
   }
 
+  const answerPrivateQuestion = async (instruction: string) => {
+    onReplyChange("")
+    setPendingInstruction(instruction)
+    setIsPlanLoading(true)
+    onPrivateAnswerStart?.()
+
+    try {
+      const response = await fetch("/api/agent/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threadId: ticket.id, instruction }),
+      })
+      const data = await response.json()
+      const turn = createAgentTurn({
+        instruction,
+        actions: data.actionsPerformed ?? [],
+        summary: data.summary ?? null,
+        error: response.ok ? null : (data.error ?? "Agent failed."),
+      })
+
+      if (response.ok) {
+        onAgentComplete(turn)
+      } else {
+        onAgentTurnAdd(turn)
+      }
+    } catch {
+      onAgentTurnAdd(createAgentTurn({
+        instruction,
+        actions: [],
+        summary: null,
+        error: "Network error — please try again.",
+      }))
+    } finally {
+      setIsPlanLoading(false)
+      setPendingInstruction(null)
+    }
+  }
+
   const handleSend = async (noteArg: boolean) => {
     if (isClerkMode && clerkInstruction) {
       const instruction = clerkInstruction
+
+      if (shouldUsePrivateComposerAsk(instruction)) {
+        await answerPrivateQuestion(instruction)
+        return
+      }
+
       onReplyChange("")
       setPendingInstruction(instruction)
       setIsPlanLoading(true)
@@ -173,11 +236,12 @@ export function useConversationAgentFlow({
         }
 
         const plan: AgentPlan = await response.json()
-        const hasActionStep = plan.steps.some(step => step.category === "action")
+        const requiresApproval = planRequiresApproval(plan)
 
-        if (!hasActionStep) {
+        if (!requiresApproval) {
           setIsPlanLoading(false)
-          await executeApprovedPlan(instruction, plan.rawToolCalls)
+          setPendingInstruction(null)
+          await answerPrivateQuestion(instruction)
         } else {
           setIsPlanLoading(false)
           setPendingInstruction(null)
