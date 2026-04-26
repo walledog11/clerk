@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bot, Camera, Mail, MessageSquare, ShoppingBag, Smartphone } from "lucide-react"
+import { Bot, Camera, Mail, MessageSquare, ShoppingBag, Smartphone, Sparkles } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { getTagStyle } from "@/app/dashboard/_lib/ticket-tags"
@@ -9,11 +9,12 @@ import { getTagStyle } from "@/app/dashboard/_lib/ticket-tags"
 interface NeedsYouItem {
   threadId: string
   customerName: string
-  channelLogo: string
   channelName: string
-  ticketRef: string
   timeAgo: string
+  actionHeadline: string
+  contextLine: string
   proposalSummary: string
+  orderRef: string | null
   tag: string | null
 }
 
@@ -59,15 +60,15 @@ function NeedsYouRow({ item, agentName }: { item: NeedsYouItem; agentName: strin
     <Card className="bg-card border-border rounded-md overflow-hidden">
       <div className="flex items-stretch">
         <div className="flex-1 min-w-0 px-4 py-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${tagStyle.className}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${tagStyle.className}`}>
               {tagStyle.label}
             </span>
             <Link
               href={`/dashboard/tickets?thread=${item.threadId}`}
-              className="text-sm font-semibold text-white/90 truncate hover:text-white transition-colors"
+              className="text-sm font-semibold text-white/95 truncate hover:text-white transition-colors"
             >
-              {item.customerName}
+              {item.actionHeadline}
             </Link>
           </div>
 
@@ -75,35 +76,44 @@ function NeedsYouRow({ item, agentName }: { item: NeedsYouItem; agentName: strin
             <ChannelIcon aria-hidden className={`h-[11px] w-[11px] shrink-0 ${channelMeta.className}`} />
             <span className={`${channelMeta.className} uppercase tracking-wide`}>{item.channelName}</span>
             <span className="text-white/15">·</span>
+            <span className="truncate text-white/55">{item.customerName}</span>
+            {item.orderRef && (
+              <>
+                <span className="text-white/15">·</span>
+                <span className="tabular-nums text-white/55">{item.orderRef}</span>
+              </>
+            )}
+            <span className="text-white/15">·</span>
             <span>{item.timeAgo}</span>
           </div>
 
+          {item.contextLine && (
+            <p className="text-xs text-white/55 leading-snug mb-1.5">{item.contextLine}</p>
+          )}
+
           <div className="px-2.5 py-2 rounded-md bg-black/30 border border-white/[0.04]">
-            <p className="text-xs text-white/60 leading-snug">
-              <span className="text-white/40">{agentName} proposes: </span>
-              <span className="text-white/80">{item.proposalSummary}</span>
+            <p className="text-xs text-white/70 leading-snug flex items-start gap-1.5">
+              <Sparkles aria-hidden className="h-3 w-3 mt-[2px] shrink-0 text-green-400/80" />
+              <span>
+                <span className="font-semibold text-white/85">{agentName} proposes: </span>
+                <span className="text-white/80">{item.proposalSummary}</span>
+              </span>
             </p>
           </div>
         </div>
 
         <div className="flex flex-col gap-1.5 px-3 py-3 border-l border-border bg-white/[0.01]">
           <Link
-            href={`/dashboard/tickets?thread=${item.threadId}&action=approve`}
+            href={`/dashboard/tickets?thread=${item.threadId}`}
             className="text-center text-[11px] font-semibold px-3 py-1.5 rounded-md bg-green-400 hover:bg-green-300 text-black transition-colors"
           >
-            ✓ Approve
+            Review
           </Link>
           <Link
             href={`/dashboard/tickets?thread=${item.threadId}`}
             className="text-center text-[11px] font-semibold px-3 py-1.5 rounded-md border border-white/[0.10] hover:border-white/[0.20] text-white/70 transition-colors"
           >
             Edit & run
-          </Link>
-          <Link
-            href={`/dashboard/tickets?thread=${item.threadId}&action=skip`}
-            className="text-center text-[11px] font-medium px-3 py-1 rounded-md text-white/35 hover:text-white/70 transition-colors"
-          >
-            Skip
           </Link>
         </div>
       </div>

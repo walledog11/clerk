@@ -232,7 +232,7 @@ async function processInboundMessage(
   return { thread: thread!, isNew };
 }
 
-export async function generateThreadIntelligence(threadId: string) {
+export async function generateThreadIntelligence(threadId: string, opts?: { triggerPlaybooks?: boolean }) {
   try {
     logger.info({ threadId }, '[Worker] Generating AI Summary');
     const fullThread = await db.thread.findUnique({
@@ -250,8 +250,7 @@ export async function generateThreadIntelligence(threadId: string) {
       model: MODEL.CLAUDE,
       max_tokens: 256,
       system: `You are an AI assistant for a customer support team.
-          Read the following customer service transcript.
-          Provide a 1-sentence summary of the customer's core issue.
+          Read the following customer service transcript and produce a 1-sentence summary of what the customer said or asked. Always describe the actual content, even if the message is a single word, a fragment, or unclear. Never refuse, never say you cannot summarize, never ask for more information — if the message is just one word, your summary should quote or paraphrase that word (e.g., 'Customer wrote a single word: "Palettegarments".'). Write the summary in third person about the customer.
           Also choose exactly one tag from this list: Shipping, Returns, Order Status, Product Inquiry, General.
           You must respond ONLY in strict JSON format like this: {"summary": "...", "tag": "..."}`,
       messages: [{ role: 'user', content: conversationText }],
@@ -269,10 +268,13 @@ export async function generateThreadIntelligence(threadId: string) {
 
     logger.info({ tag: aiData.tag, summary: aiData.summary, threadId }, '[Worker] AI Summary saved');
 
-    // Fire tag_applied playbooks in background — don't await
-    const org = await db.thread.findUnique({ where: { id: threadId }, select: { organizationId: true } });
-    if (org) {
-      void triggerPlaybooks(org.organizationId, threadId, { type: 'tag_applied', tag: aiData.tag });
+    // Fire tag_applied playbooks in background — don't await.
+    // Skipped when called from a backfill so we don't re-run automation on historical tickets.
+    if (opts?.triggerPlaybooks !== false) {
+      const org = await db.thread.findUnique({ where: { id: threadId }, select: { organizationId: true } });
+      if (org) {
+        void triggerPlaybooks(org.organizationId, threadId, { type: 'tag_applied', tag: aiData.tag });
+      }
     }
 
     return updated;

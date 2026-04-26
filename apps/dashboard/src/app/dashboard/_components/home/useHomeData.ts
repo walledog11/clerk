@@ -7,7 +7,9 @@ import { getChannelInfo } from "@/lib/messaging/channels"
 import { fetcher } from "@/lib/api/fetcher"
 import { CHANNEL_TYPE, SENDER_TYPE } from "@/lib/messaging/thread-constants"
 import { AGENT_SETTINGS_DEFAULTS } from "@/lib/agent/settings"
-import type { Thread, Integration, OrgSettings, KnowledgeBase } from "@/types"
+import { readAgentPlanCachePlan } from "@/lib/agent/plan-cache-shape"
+import { buildPlanPreview } from "@/lib/agent/plan-preview"
+import type { Thread, Integration, OrgSettings, KnowledgeBase, AgentPlan } from "@/types"
 
 // Rough heuristic: a typical Shopify-support reply takes ~14 minutes of human
 // time end-to-end (read, look up order, draft, send). Used only for the
@@ -35,11 +37,12 @@ interface OrdersResponse {
 interface NeedsYouItem {
   threadId: string
   customerName: string
-  channelLogo: string
   channelName: string
-  ticketRef: string
   timeAgo: string
+  actionHeadline: string
+  contextLine: string
   proposalSummary: string
+  orderRef: string | null
   tag: string | null
 }
 
@@ -89,18 +92,12 @@ function lastNDays(n: number): string[] {
   return out
 }
 
-function planSummary(plan: unknown): string {
-  const fallback = "Concierge plan ready for review"
-  if (!plan || typeof plan !== "object") return fallback
-  const p = plan as { steps?: { label?: string }[]; instruction?: string }
-  if (Array.isArray(p.steps) && p.steps.length > 0) {
-    const labels = p.steps.slice(0, 2).map(s => s?.label).filter(Boolean)
-    if (labels.length > 0) return labels.join(" · ")
-  }
-  if (typeof p.instruction === "string" && p.instruction.length > 0) {
-    return p.instruction.slice(0, 120)
-  }
-  return fallback
+function currentPlanForThread(thread: Thread): AgentPlan | null {
+  const latestMessage = thread.messages[0]
+  if (latestMessage?.senderType !== SENDER_TYPE.CUSTOMER) return null
+  if (!thread.cachedPlanMessageId || thread.cachedPlanMessageId !== latestMessage.id) return null
+  const plan = readAgentPlanCachePlan(thread.cachedPlan)
+  return plan && plan.steps.length > 0 ? plan : null
 }
 
 function initialsOf(name: string): string {
@@ -192,21 +189,25 @@ export function useHomeData({ initialOpenThreads }: Options) {
 
   // ── Needs-you queue ────────────────────────────────────────────────────────
   const needsYouAll = useMemo(
-    () => openThreads.filter(t => t.cachedPlan != null && t.messages[0]?.senderType === SENDER_TYPE.CUSTOMER),
+    () => openThreads.filter(t => currentPlanForThread(t) !== null),
     [openThreads],
   )
   const needsYouCount = needsYouAll.length
   const needsYouItems = useMemo<NeedsYouItem[]>(
     () => needsYouAll.slice(0, 5).map(t => {
       const channel = getChannelInfo(t.channelType)
+      const plan = currentPlanForThread(t)
+      const firstMessage = t.messages[0]?.contentText ?? null
+      const copy = buildPlanPreview(plan, t.aiSummary, firstMessage)
       return {
         threadId: t.id,
         customerName: getCustomerName(t.customer),
-        channelLogo: channel.logo,
         channelName: channel.name,
-        ticketRef: `#${t.id.slice(0, 6)}`,
         timeAgo: timeAgoShort(t.messages[0]?.sentAt ?? t.updatedAt),
-        proposalSummary: planSummary(t.cachedPlan),
+        actionHeadline: copy.headline,
+        contextLine: copy.context,
+        proposalSummary: copy.proposal,
+        orderRef: copy.orderRef,
         tag: t.tag,
       }
     }),

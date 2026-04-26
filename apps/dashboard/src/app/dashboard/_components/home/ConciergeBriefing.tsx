@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Sparkles } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { GridPattern } from "@/components/ui/grid-pattern"
 
 interface Props {
   greeting: string
@@ -72,8 +73,25 @@ export default function ConciergeBriefing({
   }
 
   return (
-    <Card className="relative bg-card border-border rounded-xl overflow-hidden noise-texture">
-      <div className="absolute -left-8 top-1/2 -translate-y-1/2 w-[320px] h-[200px] rounded-full opacity-[0.05] pointer-events-none" style={{ background: "radial-gradient(ellipse at center, #4ade80 0%, transparent 70%)" }} />
+    <Card className="relative bg-card border-border rounded-xl overflow-hidden noise-texture shadow-[0_24px_80px_-52px_rgba(74,222,128,0.42)]">
+      <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(180deg,rgba(255,255,255,0.045),transparent_46%)]" />
+      <div className="absolute -left-8 top-1/2 -translate-y-1/2 w-[320px] h-[200px] rounded-full opacity-[0.06] pointer-events-none" style={{ background: "radial-gradient(ellipse at center, #4ade80 0%, transparent 70%)" }} />
+      <div className="absolute -right-20 -top-24 h-56 w-56 rounded-full bg-green-400/[0.10] blur-3xl pointer-events-none" />
+      <div className="absolute right-0 top-0 h-px w-2/3 bg-gradient-to-l from-green-300/35 to-transparent pointer-events-none" />
+      <GridPattern
+        width={34}
+        height={34}
+        x={-1}
+        y={-1}
+        strokeDasharray="4 3"
+        squares={[
+          [10, 1],
+          [11, 2],
+          [8, 3],
+          [12, 4],
+        ]}
+        className="stroke-green-300/[0.13] fill-green-300/[0.055] [mask-image:radial-gradient(340px_circle_at_85%_18%,white,transparent)]"
+      />
 
       <div className="relative px-6 pt-5 pb-5">
         <div className="flex items-start justify-between gap-4 mb-3">

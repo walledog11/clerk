@@ -14,7 +14,8 @@
     "test": "npm run test:integration",
     "test:integration": "node ../../scripts/with-test-env.mjs vitest run --config vitest.config.ts",
     "test:watch": "node ../../scripts/with-test-env.mjs vitest --config vitest.config.ts",
-    "test:coverage": "node ../../scripts/with-test-env.mjs vitest run --coverage --config vitest.config.ts"
+    "test:coverage": "node ../../scripts/with-test-env.mjs vitest run --coverage --config vitest.config.ts",
+    "rebuild-summaries": "tsx src/scripts/rebuild-bad-summaries.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.80.0",

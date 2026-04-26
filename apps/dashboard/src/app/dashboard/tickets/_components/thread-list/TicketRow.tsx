@@ -65,10 +65,10 @@ export function TicketRow({
         className={`flex items-start gap-3 transition-all ${hasSelection ? "pl-5" : "group-hover:pl-5"}`}
       >
         <div className="relative w-9 h-9 shrink-0">
-          <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-[11px] font-bold shadow-sm`}>
+          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-[14px] font-bold shadow-sm`}>
             {initials}
           </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center">
+          <div className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center">
             <Image src={ticket.logo} width={9} height={9} alt={ticket.platform} className="object-contain brightness-0 invert opacity-80" />
           </div>
         </div>

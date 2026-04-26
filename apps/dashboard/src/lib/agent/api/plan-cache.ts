@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentPlan } from "@/types";
-
-const AGENT_PLAN_CACHE_VERSION = 2;
+import { AGENT_PLAN_CACHE_VERSION } from "@/lib/agent/plan-cache-shape";
 
 export interface AgentPlanCacheRecord {
   version: number;

@@ -154,6 +154,7 @@ export interface Thread {
   aiSummary: string | null;
   tag: string | null;
   shopifyCustomerId: string | null;
+  cachedPlanMessageId: string | null;
   cachedPlan: unknown | null;
   customer: Customer;
   messages: Message[];
