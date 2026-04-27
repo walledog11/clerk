@@ -91,7 +91,7 @@ function NeedsYouRow({ item, agentName, onApproved }: { item: NeedsYouItem; agen
 
   return (
     <Card className="bg-card border-border rounded-md overflow-hidden">
-      <div className="flex items-stretch">
+      <div className="flex md:flex-row flex-col items-stretch">
         <div className="flex-1 min-w-0 px-4 py-3">
           <div className="flex items-center gap-2 mb-1">
             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${tagStyle.className}`}>
@@ -154,36 +154,34 @@ function NeedsYouRow({ item, agentName, onApproved }: { item: NeedsYouItem; agen
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5 justify-center px-3 py-3 border-l border-border bg-white/[0.01]">
+        <div className="flex flex-col gap-1.5 justify-center px-3 py-3 md:border-l border-t border-border bg-white/[0.01]">
           {item.kind === "quick_reply" ? (
             <>
               <button
                 type="button"
                 onClick={approveQuickReply}
                 disabled={isApproving}
-                className="inline-flex items-center justify-center gap-1.5 text-center text-[11px] font-semibold px-3 md:py-3 py-6 rounded-md bg-gradient-to-r from-sky-600 to-sky-400 hover:bg-sky-300 disabled:bg-white/[0.07] disabled:text-white/25 text-black transition-colors"
+                className="inline-flex items-center justify-center gap-1.5 text-center md:text-[11px] text-sm font-semibold px-3 md:py-3 py-4 rounded-md bg-gradient-to-r from-sky-600 to-sky-400 hover:bg-sky-300 disabled:bg-white/[0.07] disabled:text-white/25 text-black transition-colors"
               >
                 {isApproving && <Loader2 aria-hidden className="h-3 w-3 animate-spin" />}
                 {isApproving ? "Sending" : "Approve & send"}
               </button>
               <Link
                 href={`/dashboard/tickets?thread=${item.threadId}`}
-                className="text-center text-[11px] font-semibold px-3 md:py-3 py-6 rounded-md border border-white/[0.10] hover:border-white/[0.20] text-white/70 transition-colors"
+                className="text-center md:text-[11px] text-sm font-semibold px-3 md:py-3 py-4 rounded-md border border-white/[0.10] hover:border-white/[0.20] text-white/70 transition-colors"
               >
                 Edit
               </Link>
             </>
           ) : (
             <>
-              <div className="text-center text-[11px] font-semibold px-3 md:py-3 py-6 rounded-md border border-white/[0.08] text-white/40">
-                Requires review
-              </div>
               <Link
                 href={`/dashboard/tickets?thread=${item.threadId}`}
-                className="text-center text-[11px] font-semibold px-3 md:py-3 py-6 rounded-md bg-green-400 hover:bg-green-300 text-black transition-colors"
+                className="text-center md:text-[11px] text-sm font-semibold px-3 md:py-3 py-4 rounded-md bg-green-400 hover:bg-green-300 text-black transition-colors"
               >
                 Review decision
               </Link>
+
             </>
           )}
         </div>

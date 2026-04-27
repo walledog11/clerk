@@ -492,19 +492,19 @@ export default function PlaybooksPage() {
           <h1 className="text-2xl font-bold text-white mb-1">Playbooks</h1>
           <p className="text-sm text-white/40">Trigger-based rules that run automatically. Combine tags, replies, and closures.</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setTemplatesOpen(true)}
-            className="text-sm text-white/50 hover:text-white/80 transition-colors"
-          >
-            Browse templates
-          </button>
+        <div className="flex md:flex-row flex-col items-center gap-3 shrink-0">
           <button
             onClick={openNew}
-            className="flex items-center gap-1.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-500 px-4 py-1.5 rounded-md transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-white border border-green-500 bg-green-600 hover:bg-green-500 px-4 py-1.5 rounded-md transition-colors"
           >
             <Plus className="w-4 h-4" />
             New playbook
+          </button>
+          <button
+            onClick={() => setTemplatesOpen(true)}
+            className="text-sm text-white/50 hover:text-white/80 border border-white/40 font-semibold px-4 py-1.5 gap-1.5 bg-white/10 rounded-md transition-colors"
+          >
+            Browse templates
           </button>
         </div>
       </div>
