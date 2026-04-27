@@ -2,12 +2,25 @@
 
 import { useMemo, useState } from "react"
 import useSWR from "swr"
-import { Plus, Trash2, Pencil, Check, Loader2, ShoppingBag, BookOpen, X, Search, Library } from "lucide-react"
+import { Plus, Trash2, Pencil, Check, Loader2, ShoppingBag, BookOpen, X, Search, Library, ChevronLeft } from "lucide-react"
 import { fetcher } from "@/lib/api/fetcher"
 import type { KnowledgeBase, KbArticle, KbSource } from "@/types"
 
-type SortKey = 'most_cited' | 'recent' | 'alpha'
+type SortKey = 'recent' | 'alpha'
 type ArticleWithBase = KbArticle & { baseName: string; baseSource: KbSource }
+type MobileView = 'collections' | 'list' | 'detail'
+
+const inputCls = "w-full text-sm text-white/80 bg-white/[0.06] border border-white/[0.12] rounded-md px-3 py-2 focus:outline-none focus:border-white/[0.25] placeholder:text-white/25"
+
+const parseTags = (raw: string) => raw.split(',').map(t => t.trim()).filter(Boolean)
+
+const SORT_OPTIONS = [
+  { value: 'recent', label: 'Recently updated' },
+  { value: 'alpha', label: 'Alphabetical (A-Z)' },
+];
+
+const formatDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: "numeric" })
 
 export default function KbPageClient() {
   const { data, isLoading, mutate } = useSWR<{ knowledgeBases: KnowledgeBase[] }>('/api/kb', fetcher)
@@ -16,7 +29,8 @@ export default function KbPageClient() {
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null)
   const [selectedBaseId, setSelectedBaseId] = useState<string>('all')
   const [search, setSearch] = useState('')
-  const [sort, setSort] = useState<SortKey>('most_cited')
+  const [sort, setSort] = useState<SortKey>('recent')
+  const [mobileView, setMobileView] = useState<MobileView>('list')
 
   // New KB
   const [isCreatingKb, setIsCreatingKb] = useState(false)
@@ -55,9 +69,7 @@ export default function KbPageClient() {
       list = list.filter(a => a.title.toLowerCase().includes(q) || a.body.toLowerCase().includes(q))
     }
     const sorted = [...list]
-    if (sort === 'most_cited') {
-      sorted.sort((a, b) => (b.citationCount ?? 0) - (a.citationCount ?? 0) || +new Date(b.updatedAt) - +new Date(a.updatedAt))
-    } else if (sort === 'recent') {
+    if (sort === 'recent') {
       sorted.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
     } else {
       sorted.sort((a, b) => a.title.localeCompare(b.title))
@@ -73,6 +85,7 @@ export default function KbPageClient() {
   const selectArticle = (id: string | null) => {
     setSelectedArticleId(id)
     setIsEditing(false)
+    setMobileView(id ? 'detail' : 'list')
   }
 
   const selectBase = (id: string) => {
@@ -80,11 +93,10 @@ export default function KbPageClient() {
     setSelectedArticleId(null)
     setIsCreatingArticle(false)
     setIsEditing(false)
+    setMobileView('list')
   }
 
-  const parseTags = (raw: string) => raw.split(',').map(t => t.trim()).filter(Boolean)
-
-  // Handlers ────────────────────────────────────────────────────────────────
+  // Handlers
   const handleCreateKb = async () => {
     if (!newKbName.trim()) return
     setIsCreatingKbSaving(true)
@@ -116,8 +128,7 @@ export default function KbPageClient() {
   }
 
   const handleCreateArticle = async () => {
-    if (!articleTargetKb) return
-    if (!articleDraft.title.trim() || !articleDraft.body.trim()) return
+    if (!articleTargetKb || !articleDraft.title.trim() || !articleDraft.body.trim()) return
     setIsArticleSaving(true)
     try {
       const res = await fetch(`/api/kb/bases/${articleTargetKb.id}/articles`, {
@@ -170,29 +181,23 @@ export default function KbPageClient() {
     setIsEditing(true)
   }
 
-  const inputCls = "w-full text-sm text-white/80 bg-white/[0.06] border border-white/[0.12] rounded-md px-3 py-2 focus:outline-none focus:border-white/[0.25] placeholder:text-white/25"
-
-  const newArticleDisabled = !articleTargetKb || isCreatingArticle
-
-  // Render ──────────────────────────────────────────────────────────────────
+  // Render
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-8 py-4 border-b border-border shrink-0">
-        <p className="text-xs text-white/35">
-          {isLoading ? 'Loading…' : `${allArticles.length} article${allArticles.length !== 1 ? 's' : ''} across ${knowledgeBases.length} collection${knowledgeBases.length !== 1 ? 's' : ''}`}
-        </p>
+      <div className="flex items-center justify-between px-2 md:px-8 py-2 md:py-3 border-b border-border shrink-0">
+        <h1 className="text-md font-semibold text-foreground">Memory</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsCreatingKb(true)}
+            onClick={() => { setIsCreatingKb(true); setMobileView('collections') }}
             className="flex items-center gap-1.5 text-xs font-medium text-white/70 bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.12] px-3 py-1.5 rounded-md transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             New collection
           </button>
           <button
-            onClick={() => setIsCreatingArticle(true)}
-            disabled={newArticleDisabled}
+            onClick={() => { setIsCreatingArticle(true); setMobileView('list') }}
+            disabled={!articleTargetKb || isCreatingArticle}
             title={!articleTargetKb ? 'Select or create a custom collection first' : undefined}
             className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/[0.10] hover:bg-white/[0.15] border border-white/[0.12] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
           >
@@ -205,7 +210,14 @@ export default function KbPageClient() {
       {/* Three-pane body */}
       <div className="flex flex-1 min-h-0">
         {/* Left rail — collections */}
-        <aside className="w-[220px] shrink-0 border-r border-border overflow-y-auto custom-scrollbar py-4 px-3">
+        <aside className={`${mobileView === 'collections' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[200px] shrink-0 border-r border-border overflow-y-auto custom-scrollbar py-4 px-3`}>
+          <button
+            onClick={() => setMobileView('list')}
+            className="md:hidden flex items-center gap-1 text-xs text-white/50 hover:text-white/80 transition-colors px-2 mb-3"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            Back to articles
+          </button>
           <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider px-2 mb-2">Collections</p>
           <div className="space-y-0.5">
             <CollectionRow
@@ -271,30 +283,44 @@ export default function KbPageClient() {
         </aside>
 
         {/* Middle — article list */}
-        <section className="w-[400px] shrink-0 border-r border-border flex flex-col min-h-0">
+        <section className={`${mobileView === 'list' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[400px] shrink-0 border-r border-border min-h-0`}>
           <div className="px-4 py-3 border-b border-border space-y-2.5 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
-              <input
-                placeholder="Search memory…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className={`${inputCls} pl-8`}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-white/35">
-                {visibleArticles.length} {visibleArticles.length === 1 ? 'article' : 'articles'}
-              </span>
-              <select
-                value={sort}
-                onChange={e => setSort(e.target.value as SortKey)}
-                className="text-[11px] text-white/60 bg-transparent border-none focus:outline-none cursor-pointer hover:text-white/80"
-              >
-                <option value="most_cited" className="bg-zinc-900">Sort: Most cited</option>
-                <option value="recent" className="bg-zinc-900">Sort: Recently updated</option>
-                <option value="alpha" className="bg-zinc-900">Sort: A–Z</option>
-              </select>
+            <button
+              onClick={() => setMobileView('collections')}
+              className="md:hidden flex items-center gap-1 text-xs text-white/50 hover:text-white/80 transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Collections
+            </button>
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center flex-1 mr-4 bg-zinc-950 rounded-lg border border-white/10 px-3 py-2 hover:border-white/30">
+                <Search className="w-4 h-4 text-white/50 shrink-0" />
+                <input
+                  placeholder="Search memory…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full bg-transparent border-none focus:outline-none text-sm text-white placeholder:text-white/50 ml-2" 
+                />
+              </div>
+
+              <div className="flex items-center shrink-0">
+                <p className="text-[11px] text-white/60 mr-1 whitespace-nowrap">Sort: </p>
+                <select
+                  value={sort}
+                  onChange={e => setSort(e.target.value as SortKey)}
+                  className="text-[11px] text-white bg-transparent focus:outline-none cursor-pointer hover:text-white/80"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option 
+                      key={option.value} 
+                      value={option.value} 
+                      className="bg-zinc-900 text-white"
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -362,19 +388,19 @@ export default function KbPageClient() {
         </section>
 
         {/* Right — detail */}
-        <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar bg-background">
+        <main className={`${mobileView === 'detail' ? 'flex' : 'hidden'} md:flex flex-col flex-1 min-w-0 overflow-y-auto custom-scrollbar bg-background`}>
           {selectedArticle ? (
             <ArticleDetail
               article={selectedArticle}
               isEditing={isEditing}
               editDraft={editDraft}
-              inputCls={inputCls}
               isEditSaving={isEditSaving}
               onEditDraftChange={setEditDraft}
               onCancelEdit={() => setIsEditing(false)}
               onSaveEdit={handleUpdateArticle}
               onStartEdit={startEdit}
               onDelete={handleDeleteArticle}
+              onBack={() => setMobileView('list')}
             />
           ) : (
             <div className="h-full flex items-center justify-center">
@@ -391,7 +417,7 @@ export default function KbPageClient() {
   )
 }
 
-// Components ────────────────────────────────────────────────────────────────
+// Sub-components
 
 function CollectionRow({
   icon, label, count, active, onClick, onDelete,
@@ -404,9 +430,7 @@ function CollectionRow({
   onDelete?: () => void
 }) {
   return (
-    <div
-      className={`group flex items-center rounded-md transition-colors ${active ? 'bg-white/[0.10]' : 'hover:bg-white/[0.05]'}`}
-    >
+    <div className={`group flex items-center rounded-md transition-colors ${active ? 'bg-white/[0.10]' : 'hover:bg-white/[0.05]'}`}>
       <button
         type="button"
         onClick={onClick}
@@ -443,16 +467,14 @@ function ArticleCard({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`block w-full text-left px-4 py-3 border-b border-border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-inset ${active ? 'bg-white/[0.06]' : 'hover:bg-white/[0.02]'}`}
+      className={`block w-full text-left px-4 py-3 border-b border-border cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70 focus-visible:ring-inset ${active ? 'bg-white/[0.06] border-l-2 border-solid border-l-green-600' : 'hover:bg-white/[0.02]'}`}
     >
-      <p className={`text-xs font-medium mb-1 truncate ${active ? 'text-white/90' : 'text-white/75'}`}>
+      <p className={`text-xs font-bold mb-1 truncate text-white`}>
         {article.title}
       </p>
-      <p className="text-xs text-white/35 leading-relaxed line-clamp-2 mb-2">{article.body}</p>
+      <p className="text-xs text-white/90 leading-relaxed font-light line-clamp-2 mb-2">{article.body}</p>
       <div className="flex items-center gap-2 text-[10px] text-white/30">
         <span className="truncate">{article.baseName}</span>
-        <span>·</span>
-        <span className="tabular-nums">cited {article.citationCount ?? 0}×</span>
         <span className="ml-auto">{formatDate(article.updatedAt)}</span>
       </div>
     </button>
@@ -463,30 +485,30 @@ function ArticleDetail({
   article,
   isEditing,
   editDraft,
-  inputCls,
   isEditSaving,
   onEditDraftChange,
   onCancelEdit,
   onSaveEdit,
   onStartEdit,
   onDelete,
+  onBack,
 }: {
   article: ArticleWithBase
   isEditing: boolean
   editDraft: { title: string; body: string; tags: string }
-  inputCls: string
   isEditSaving: boolean
   onEditDraftChange: React.Dispatch<React.SetStateAction<{ title: string; body: string; tags: string }>>
   onCancelEdit: () => void
   onSaveEdit: () => void
   onStartEdit: () => void
   onDelete: () => void
+  onBack: () => void
 }) {
   const tags = article.tags ?? []
 
   if (isEditing) {
     return (
-      <div className="px-8 py-6 space-y-3 max-w-3xl">
+      <div className="px-4 md:px-8 py-6 space-y-3 max-w-3xl">
         <input
           value={editDraft.title}
           onChange={e => onEditDraftChange(d => ({ ...d, title: e.target.value }))}
@@ -522,22 +544,18 @@ function ArticleDetail({
   }
 
   return (
-    <div className="px-8 py-6 max-w-3xl">
+    <div className="px-4 md:px-8 py-6 max-w-3xl">
+      <button
+        onClick={onBack}
+        className="md:hidden flex items-center gap-1 text-xs text-white/50 hover:text-white/80 transition-colors mb-4"
+      >
+        <ChevronLeft className="w-3.5 h-3.5" />
+        Back
+      </button>
       <p className="text-[11px] text-white/35 uppercase tracking-wide mb-2">{article.baseName}</p>
       <h1 className="text-xl font-semibold text-white/90 mb-4">{article.title}</h1>
-      <div className="text-sm text-white/65 leading-relaxed whitespace-pre-wrap mb-6">
-        {article.body}
-      </div>
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-6">
-          {tags.map(tag => (
-            <span key={tag} className="text-[11px] font-medium text-white/55 bg-white/[0.05] border border-white/[0.08] px-2 py-0.5 rounded-full">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center gap-6 pt-5 border-t border-border text-[11px] text-white/40">
+
+      <div className="flex items-center gap-6 pt-2 pb-2 border-t border-b border-border text-[11px] text-white/40">
         <div>
           <p className="text-white/30 uppercase tracking-wide text-[10px]">Updated</p>
           <p className="text-white/60 mt-0.5">{formatDate(article.updatedAt)}</p>
@@ -565,11 +583,18 @@ function ArticleDetail({
           </div>
         )}
       </div>
+      <div className="text-sm text-white/65 leading-relaxed pt-6 whitespace-pre-wrap mb-6">
+        {article.body}
+      </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-6">
+          {tags.map(tag => (
+            <span key={tag} className="text-[11px] font-medium text-white/55 bg-white/[0.05] border border-white/[0.08] px-2 py-0.5 rounded-full">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
