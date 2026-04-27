@@ -1,4 +1,4 @@
-import { db, SenderType } from '@clerk/db';
+import { db, SenderType, createMessage } from '@clerk/db';
 import { ServerClient } from 'postmark';
 import twilio from 'twilio';
 import logger from '@/lib/server/logger';
@@ -129,13 +129,10 @@ export async function dispatchMessage(
     });
   }
 
-  await db.message.create({
-    data: { threadId: thread.id, senderType: SenderType.agent, contentText: text },
-  });
-  await db.thread.update({
-    where: { id: thread.id },
-    data: { status: THREAD_STATUS.OPEN },
-  });
+  await createMessage(
+    { threadId: thread.id, senderType: SenderType.agent, contentText: text },
+    { status: THREAD_STATUS.OPEN },
+  );
 
   return { ok: true };
 }

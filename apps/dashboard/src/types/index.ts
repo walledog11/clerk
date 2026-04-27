@@ -154,6 +154,7 @@ export interface Thread {
   status: ThreadStatus;
   createdAt: string;
   updatedAt: string;
+  lastMessageAt: string;
   aiSummary: string | null;
   tag: string | null;
   shopifyCustomerId: string | null;

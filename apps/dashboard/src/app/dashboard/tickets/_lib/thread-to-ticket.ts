@@ -8,6 +8,11 @@ import type { Thread, Ticket } from "@/types";
 export function threadToTicket(thread: Thread, agentName?: string): Ticket {
   const channel = getChannelInfo(thread.channelType);
   const lastMsg = thread.messages.filter((message) => message.senderType !== SENDER_TYPE.NOTE).at(-1);
+  const planIsForLastMessage =
+    !!thread.cachedPlan &&
+    !!thread.cachedPlanMessageId &&
+    lastMsg?.senderType === SENDER_TYPE.CUSTOMER &&
+    lastMsg.id === thread.cachedPlanMessageId;
 
   return {
     id: thread.id,
@@ -15,7 +20,7 @@ export function threadToTicket(thread: Thread, agentName?: string): Ticket {
     platform: channel.name,
     logo: channel.logo,
     customer: getCustomerName(thread.customer),
-    time: formatTicketAge(thread.createdAt),
+    time: formatTicketAge(thread.lastMessageAt),
     subject: thread.tag || "New Inquiry",
     preview: lastMsg?.contentText || "No messages yet.",
     tag: thread.tag || "Support",
@@ -24,7 +29,7 @@ export function threadToTicket(thread: Thread, agentName?: string): Ticket {
     status: thread.status,
     lastCustomerMessageAt:
       thread.messages.filter((message) => message.senderType === SENDER_TYPE.CUSTOMER).at(-1)?.sentAt ?? null,
-    hasPlan: !!thread.cachedPlan,
+    hasPlan: planIsForLastMessage,
     messages: thread.messages
       .filter((message) => !(message.senderType === SENDER_TYPE.NOTE && isAgentTurnContent(message.contentText)))
       .map((message) => {

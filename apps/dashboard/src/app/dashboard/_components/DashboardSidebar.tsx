@@ -583,10 +583,10 @@ function MobileBottomBar({ openCount }: { openCount: number }) {
             }}
             className={cn(
               "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 relative transition-colors",
-              isActive ? "text-white" : "text-white/30",
+              isActive ? "text-white" : "text-white/70",
             )}
           >
-            {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-green-400" />}
+            {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-sky-400" />}
             <div className="relative">
               <tab.icon className="w-5 h-5" />
               {tab.badge && (

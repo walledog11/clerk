@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
-import { db, Prisma } from "@clerk/db";
+import { db, Prisma, createMessage } from "@clerk/db";
 import { auth } from "@clerk/nextjs/server";
 import { getOrCreateOrg } from "@/lib/server/org";
 import { handleApiError } from "@/lib/api/errors";
@@ -237,19 +237,15 @@ async function clearPendingApproval(threadId: string) {
 }
 
 async function persistDashboardExchange(threadId: string, userText: string, agentText: string) {
-  await db.message.create({
-    data: {
-      threadId,
-      senderType: "customer",
-      contentText: userText,
-    },
+  await createMessage({
+    threadId,
+    senderType: "customer",
+    contentText: userText,
   });
-  await db.message.create({
-    data: {
-      threadId,
-      senderType: "agent",
-      contentText: agentText,
-    },
+  await createMessage({
+    threadId,
+    senderType: "agent",
+    contentText: agentText,
   });
 }
 

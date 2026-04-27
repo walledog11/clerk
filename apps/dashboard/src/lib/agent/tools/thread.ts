@@ -1,4 +1,4 @@
-import { db, SenderType } from "@clerk/db";
+import { db, SenderType, createMessage } from "@clerk/db";
 import { ServerClient } from "postmark";
 import twilio from "twilio";
 import { AGENT_NOTE_PREFIX, CHANNEL_TYPE, THREAD_STATUS } from "@/lib/messaging/thread-constants";
@@ -23,8 +23,10 @@ export async function addInternalNote(
   input: AddInternalNoteInput,
   ctx: ThreadContext
 ): Promise<string> {
-  await db.message.create({
-    data: { threadId: ctx.threadId, senderType: SenderType.note, contentText: `${AGENT_NOTE_PREFIX}${input.text}` },
+  await createMessage({
+    threadId: ctx.threadId,
+    senderType: SenderType.note,
+    contentText: `${AGENT_NOTE_PREFIX}${input.text}`,
   });
   return `Note logged: "${input.text}"`;
 }
@@ -72,8 +74,10 @@ export async function sendReply(
       logger.error({ status: igRes.status, body: errBody }, '[sendReply] Instagram dispatch error');
       return `Error: Instagram dispatch failed (${igRes.status}).`;
     }
-    await db.message.create({
-      data: { threadId: ctx.threadId, senderType: SenderType.agent, contentText: input.text },
+    await createMessage({
+      threadId: ctx.threadId,
+      senderType: SenderType.agent,
+      contentText: input.text,
     });
     return `Reply sent to customer via Instagram DM.`;
   }
@@ -114,8 +118,10 @@ export async function sendReply(
       logger.error({ err: msg }, '[sendReply] Postmark error');
       return `Error: email dispatch failed — ${msg}`;
     }
-    await db.message.create({
-      data: { threadId: ctx.threadId, senderType: SenderType.agent, contentText: input.text },
+    await createMessage({
+      threadId: ctx.threadId,
+      senderType: SenderType.agent,
+      contentText: input.text,
     });
     return `Reply sent to customer via email.`;
   }
@@ -140,8 +146,10 @@ export async function sendReply(
       logger.error({ err: msg }, '[sendReply] Twilio error');
       return `Error: SMS dispatch failed — ${msg}`;
     }
-    await db.message.create({
-      data: { threadId: ctx.threadId, senderType: SenderType.agent, contentText: input.text },
+    await createMessage({
+      threadId: ctx.threadId,
+      senderType: SenderType.agent,
+      contentText: input.text,
     });
     return `Reply sent to customer via SMS.`;
   }
@@ -237,8 +245,10 @@ export async function sendEmail(
   }
 
   // Send confirmed — persist the message
-  await db.message.create({
-    data: { threadId: targetThreadId, senderType: SenderType.agent, contentText: input.body },
+  await createMessage({
+    threadId: targetThreadId,
+    senderType: SenderType.agent,
+    contentText: input.body,
   });
 
   return existingThread

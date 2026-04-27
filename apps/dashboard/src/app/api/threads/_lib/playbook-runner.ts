@@ -1,4 +1,4 @@
-import { db, Prisma, SenderType } from "@clerk/db";
+import { db, Prisma, SenderType, createMessage } from "@clerk/db";
 import type { PlaybookAction, PlaybookTrigger } from "@/types";
 import { dispatchMessage } from "@/lib/messaging/dispatch-message";
 import logger from "@/lib/server/logger";
@@ -63,9 +63,7 @@ async function executePlaybook(
         });
       } else if (action.type === "add_note") {
         if (action.note) {
-          await db.message.create({
-            data: { threadId, senderType: SenderType.note, contentText: action.note },
-          });
+          await createMessage({ threadId, senderType: SenderType.note, contentText: action.note });
         }
       } else if (action.type === "send_reply") {
         if (!action.message) continue;

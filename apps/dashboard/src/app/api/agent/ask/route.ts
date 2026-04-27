@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@clerk/db";
+import { createMessage } from "@clerk/db";
 import { getOrCreateOrg } from "@/lib/server/org";
 import { handleApiError } from "@/lib/api/errors";
 import { requireOrgThread } from "@/lib/agent/api/auth";
@@ -37,17 +37,15 @@ export async function POST(request: Request) {
     const ctx = await buildContext(threadId, org.id);
     const result = await answerComposerQuestion(ctx, instruction, settings);
 
-    await db.message.create({
-      data: {
-        threadId,
-        senderType: "note",
-        contentText: serializeAgentTurn({
-          instruction,
-          actions: result.actionsPerformed,
-          summary: result.summary,
-          error: null,
-        }),
-      },
+    await createMessage({
+      threadId,
+      senderType: "note",
+      contentText: serializeAgentTurn({
+        instruction,
+        actions: result.actionsPerformed,
+        summary: result.summary,
+        error: null,
+      }),
     });
 
     logger.info({

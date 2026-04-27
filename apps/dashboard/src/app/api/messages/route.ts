@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db, SenderType } from '@clerk/db';
+import { db, SenderType, createMessage } from '@clerk/db';
 import { getOrCreateOrg } from '@/lib/server/org';
 import { handleApiError } from '@/lib/api/errors';
 import { rateLimit, tooManyRequests } from '@/lib/server/rate-limit';
@@ -33,8 +33,10 @@ export async function POST(request: Request) {
     }
 
     if (isNote) {
-      const message = await db.message.create({
-        data: { threadId, senderType: SenderType.note, contentText: text },
+      const message = await createMessage({
+        threadId,
+        senderType: SenderType.note,
+        contentText: text,
       });
       return NextResponse.json(message);
     }

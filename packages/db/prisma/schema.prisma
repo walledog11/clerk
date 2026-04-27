@@ -115,6 +115,7 @@ model Thread {
   status         ThreadStatus @default(open)
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  lastMessageAt  DateTime     @default(now()) @map("last_message_at") @db.Timestamptz
   aiSummary            String?  @map("ai_summary")
   tag                  String?  @default("Support")
   shopifyCustomerId    String?  @map("shopify_customer_id") @db.VarChar(255)
@@ -131,6 +132,7 @@ model Thread {
 
   @@index([organizationId, status])
   @@index([organizationId, updatedAt])
+  @@index([organizationId, status, lastMessageAt(sort: Desc)])
   @@index([customerId])
   @@index([organizationId, archivedAt, status])
   @@index([deletedAt])

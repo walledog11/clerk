@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { PrismaClient as PrismaClientType } from '@prisma/client';
+import type { Message, Prisma, PrismaClient as PrismaClientType } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
 
 const require = createRequire(import.meta.url);
@@ -34,6 +34,34 @@ export const db = shouldCacheClient
   : createClient();
 
 if (shouldCacheClient) globalForPrisma.prisma = db;
+
+// Insert a message and atomically bump Thread.lastMessageAt so the inbox
+// sort always reflects real conversation activity. Internal notes don't
+// bump — they're metadata, not activity. `threadPatch` merges extra thread
+// fields (e.g. resetting a cached plan) into the same write.
+export async function createMessage(
+  data: Prisma.MessageUncheckedCreateInput,
+  threadPatch?: Prisma.ThreadUpdateInput,
+): Promise<Message> {
+  const isConversation = data.senderType !== SenderTypeRuntime.note;
+  const hasPatch = threadPatch && Object.keys(threadPatch).length > 0;
+
+  if (!isConversation && !hasPatch) {
+    return db.message.create({ data });
+  }
+
+  return db.$transaction(async (tx) => {
+    const message = await tx.message.create({ data });
+    await tx.thread.update({
+      where: { id: message.threadId },
+      data: {
+        ...(threadPatch ?? {}),
+        ...(isConversation ? { lastMessageAt: message.sentAt } : {}),
+      },
+    });
+    return message;
+  });
+}
 
 export {
   PrismaRuntime as Prisma,

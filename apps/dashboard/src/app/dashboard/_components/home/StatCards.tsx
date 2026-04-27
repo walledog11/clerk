@@ -27,7 +27,7 @@ function StatCard({ href, label, value, spark, footer, footerClass }: CardProps)
   return (
     <Link
       href={href}
-      className="flex flex-col justify-between px-4 py-3 rounded-md bg-card border border-border hover:border-white/[0.14] transition-colors min-h-[88px]"
+      className="flex flex-col justify-between px-4 py-2 rounded-md bg-card border border-border hover:border-white/[0.14] transition-colors min-h-[88px]"
     >
       <p className="text-[10px] uppercase tracking-wider font-semibold text-white/40">{label}</p>
       <div className="flex items-end justify-between gap-2">

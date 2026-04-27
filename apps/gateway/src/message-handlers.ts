@@ -1,5 +1,5 @@
 import type { Job, Queue } from 'bullmq';
-import { db, SenderType, Prisma, type DbChannelType } from '@clerk/db';
+import { db, SenderType, Prisma, createMessage, type DbChannelType } from '@clerk/db';
 import Anthropic from '@anthropic-ai/sdk';
 import twilio from 'twilio';
 import { updateContext } from './sms-context.js';
@@ -205,21 +205,16 @@ async function processInboundMessage(
     }
   }
 
-  await db.$transaction([
-    db.message.create({
-      data: {
-        threadId: thread!.id,
-        senderType: SenderType.customer,
-        contentText: messageText,
-        externalMessageId: idempotencyKey,
-        ...(attachments.length > 0 && { attachments }),
-      },
-    }),
-    db.thread.update({
-      where: { id: thread!.id },
-      data: { cachedPlanMessageId: null, cachedPlan: Prisma.DbNull },
-    }),
-  ]);
+  await createMessage(
+    {
+      threadId: thread!.id,
+      senderType: SenderType.customer,
+      contentText: messageText,
+      externalMessageId: idempotencyKey,
+      ...(attachments.length > 0 && { attachments }),
+    },
+    { cachedPlanMessageId: null, cachedPlan: Prisma.DbNull },
+  );
 
   await aiSummaryQueue.add(JOB.SUMMARIZE_THREAD, {
     threadId: thread!.id,

@@ -1,14 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
-import { Plus, Trash2, Pencil, Check, Loader2, ShoppingBag, BookOpen, X, Search, Library, ChevronLeft } from "lucide-react"
+import { Plus, Trash2, Pencil, Check, Loader2, ShoppingBag, BookOpen, X, Search, Library, ChevronLeft, ChevronDown } from "lucide-react"
 import { fetcher } from "@/lib/api/fetcher"
 import type { KnowledgeBase, KbArticle, KbSource } from "@/types"
 
 type SortKey = 'recent' | 'alpha'
 type ArticleWithBase = KbArticle & { baseName: string; baseSource: KbSource }
-type MobileView = 'collections' | 'list' | 'detail'
+type MobileView = 'list' | 'detail'
 
 const inputCls = "w-full text-sm text-white/80 bg-white/[0.06] border border-white/[0.12] rounded-md px-3 py-2 focus:outline-none focus:border-white/[0.25] placeholder:text-white/25"
 
@@ -189,8 +189,8 @@ export default function KbPageClient() {
         <h1 className="text-md font-semibold text-foreground">Memory</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setIsCreatingKb(true); setMobileView('collections') }}
-            className="flex items-center gap-1.5 text-xs font-medium text-white/70 bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.12] px-3 py-1.5 rounded-md transition-colors"
+            onClick={() => setIsCreatingKb(true)}
+            className="hidden md:flex items-center gap-1.5 text-xs font-medium text-white/70 bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.12] px-3 py-1.5 rounded-md transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             New collection
@@ -199,10 +199,10 @@ export default function KbPageClient() {
             onClick={() => { setIsCreatingArticle(true); setMobileView('list') }}
             disabled={!articleTargetKb || isCreatingArticle}
             title={!articleTargetKb ? 'Select or create a custom collection first' : undefined}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/[0.10] hover:bg-white/[0.15] border border-white/[0.12] disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 rounded-md transition-colors"
+            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-white/[0.10] hover:bg-white/[0.15] border border-white/[0.12] disabled:opacity-40 disabled:cursor-not-allowed px-2 md:px-3 py-1.5 rounded-md transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            New article
+            <span className="hidden md:inline">New article</span>
           </button>
         </div>
       </div>
@@ -210,14 +210,7 @@ export default function KbPageClient() {
       {/* Three-pane body */}
       <div className="flex flex-1 min-h-0">
         {/* Left rail — collections */}
-        <aside className={`${mobileView === 'collections' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[200px] shrink-0 border-r border-border overflow-y-auto custom-scrollbar py-4 px-3`}>
-          <button
-            onClick={() => setMobileView('list')}
-            className="md:hidden flex items-center gap-1 text-xs text-white/50 hover:text-white/80 transition-colors px-2 mb-3"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to articles
-          </button>
+        <aside className="hidden md:flex flex-col w-full md:w-[200px] shrink-0 border-r border-border overflow-y-auto custom-scrollbar py-4 px-3">
           <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider px-2 mb-2">Collections</p>
           <div className="space-y-0.5">
             <CollectionRow
@@ -285,13 +278,19 @@ export default function KbPageClient() {
         {/* Middle — article list */}
         <section className={`${mobileView === 'list' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[400px] shrink-0 border-r border-border min-h-0`}>
           <div className="px-4 py-3 border-b border-border space-y-2.5 shrink-0">
-            <button
-              onClick={() => setMobileView('collections')}
-              className="md:hidden flex items-center gap-1 text-xs text-white/50 hover:text-white/80 transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              Collections
-            </button>
+            <CollectionsDropdown
+              knowledgeBases={knowledgeBases}
+              selectedBaseId={selectedBaseId}
+              allArticlesCount={allArticles.length}
+              onSelectBase={selectBase}
+              onDeleteKb={handleDeleteKb}
+              isCreatingKb={isCreatingKb}
+              setIsCreatingKb={setIsCreatingKb}
+              newKbName={newKbName}
+              setNewKbName={setNewKbName}
+              isCreatingKbSaving={isCreatingKbSaving}
+              onCreateKb={handleCreateKb}
+            />
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center flex-1 mr-4 bg-zinc-950 rounded-lg border border-white/10 px-3 py-2 hover:border-white/30">
                 <Search className="w-4 h-4 text-white/50 shrink-0" />
@@ -593,6 +592,149 @@ function ArticleDetail({
               #{tag}
             </span>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CollectionsDropdown({
+  knowledgeBases,
+  selectedBaseId,
+  allArticlesCount,
+  onSelectBase,
+  onDeleteKb,
+  isCreatingKb,
+  setIsCreatingKb,
+  newKbName,
+  setNewKbName,
+  isCreatingKbSaving,
+  onCreateKb,
+}: {
+  knowledgeBases: KnowledgeBase[]
+  selectedBaseId: string
+  allArticlesCount: number
+  onSelectBase: (id: string) => void
+  onDeleteKb: (id: string) => void
+  isCreatingKb: boolean
+  setIsCreatingKb: (v: boolean) => void
+  newKbName: string
+  setNewKbName: (v: string) => void
+  isCreatingKbSaving: boolean
+  onCreateKb: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  useEffect(() => { setOpen(false) }, [selectedBaseId])
+
+  const userKbs = knowledgeBases.filter(kb => kb.source === 'user')
+  const shopifyKb = knowledgeBases.find(kb => kb.source === 'shopify')
+
+  const active = (() => {
+    if (selectedBaseId === 'all') return { icon: <Library className="w-3.5 h-3.5 text-white/55" />, label: 'All memory', count: allArticlesCount }
+    const kb = knowledgeBases.find(k => k.id === selectedBaseId)
+    if (!kb) return { icon: <Library className="w-3.5 h-3.5 text-white/55" />, label: 'All memory', count: allArticlesCount }
+    if (kb.source === 'shopify') return { icon: <ShoppingBag className="w-3.5 h-3.5 text-green-400/70" />, label: 'Shopify', count: kb.articles.length }
+    return { icon: <BookOpen className="w-3.5 h-3.5 text-white/40" />, label: kb.name, count: kb.articles.length }
+  })()
+
+  return (
+    <div ref={ref} className="md:hidden relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 w-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.10] rounded-md px-3 py-2"
+      >
+        <span className="shrink-0">{active.icon}</span>
+        <span className="text-xs text-white/85 font-medium flex-1 truncate text-left">{active.label}</span>
+        <span className="text-[10px] tabular-nums text-white/40">{active.count}</span>
+        <ChevronDown className={`w-3.5 h-3.5 text-white/50 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-zinc-950 border border-white/[0.12] rounded-md shadow-lg p-2">
+          <div className="space-y-0.5">
+            <CollectionRow
+              icon={<Library className="w-3.5 h-3.5" />}
+              label="All memory"
+              count={allArticlesCount}
+              active={selectedBaseId === 'all'}
+              onClick={() => onSelectBase('all')}
+            />
+            {shopifyKb && (
+              <CollectionRow
+                icon={<ShoppingBag className="w-3.5 h-3.5 text-green-400/70" />}
+                label="Shopify"
+                count={shopifyKb.articles.length}
+                active={selectedBaseId === shopifyKb.id}
+                onClick={() => onSelectBase(shopifyKb.id)}
+              />
+            )}
+            {userKbs.map(kb => (
+              <CollectionRow
+                key={kb.id}
+                icon={<BookOpen className="w-3.5 h-3.5 text-white/40" />}
+                label={kb.name}
+                count={kb.articles.length}
+                active={selectedBaseId === kb.id}
+                onClick={() => onSelectBase(kb.id)}
+                onDelete={() => onDeleteKb(kb.id)}
+              />
+            ))}
+          </div>
+
+          <div className="mt-2 pt-2 border-t border-white/[0.08]">
+            {isCreatingKb ? (
+              <>
+                <input
+                  autoFocus
+                  placeholder="Collection name"
+                  value={newKbName}
+                  onChange={e => setNewKbName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') onCreateKb()
+                    if (e.key === 'Escape') { setIsCreatingKb(false); setNewKbName('') }
+                  }}
+                  className={inputCls}
+                />
+                <div className="flex justify-end gap-1 mt-2">
+                  <button
+                    onClick={() => { setIsCreatingKb(false); setNewKbName('') }}
+                    className="text-[11px] text-white/40 hover:text-white/70 px-2 py-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={onCreateKb}
+                    disabled={isCreatingKbSaving || !newKbName.trim()}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-white bg-white/[0.12] hover:bg-white/[0.18] disabled:opacity-40 px-2 py-1 rounded transition-colors"
+                  >
+                    {isCreatingKbSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    Create
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsCreatingKb(true)}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/[0.05] rounded transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                New collection
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

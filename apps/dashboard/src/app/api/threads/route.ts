@@ -47,7 +47,7 @@ export async function GET(request: Request) {
             }
           : { where: { deletedAt: null }, orderBy: { sentAt: 'asc' } },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { lastMessageAt: 'desc' },
     });
 
     let threads = rows;
