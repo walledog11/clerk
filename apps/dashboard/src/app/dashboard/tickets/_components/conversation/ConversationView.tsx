@@ -36,9 +36,7 @@ interface Props {
   onSend: (isNote: boolean) => void
   onDraft: () => void
   onAgentComplete: (turn: AgentTurn) => void
-  planRevisionKey?: string | null
   initialPlan?: AgentPlan | null
-  onPlanCached: (plan: AgentPlan | null) => void
   onOpenContext?: () => void
   aiSummary: string | null
   isSummaryRefreshing: boolean
@@ -69,9 +67,7 @@ export default function ConversationView({
   onSend,
   onDraft,
   onAgentComplete,
-  planRevisionKey,
   initialPlan,
-  onPlanCached,
   onOpenContext,
   aiSummary,
   isSummaryRefreshing,
@@ -88,7 +84,6 @@ export default function ConversationView({
     handlePlanDismiss,
     handlePlanRegenerate,
     handleSend,
-    isAutoPlanLoading,
     isClerkMode,
     isPlanExecuting,
     isPlanLoading,
@@ -96,19 +91,16 @@ export default function ConversationView({
     pendingInstruction,
     pendingPlan,
   } = useConversationAgentFlow({
-    activeTab,
     ticket,
     viewTab,
     replyText,
     agentName,
-    planRevisionKey,
     initialPlan,
     onReplyChange,
     onSend,
     onAgentTurnAdd,
     onAgentRunningChange,
     onAgentComplete,
-    onPlanCached,
     onPrivateAnswerStart: () => setViewTab('notes'),
     onNoteModeReset: () => setViewTab('chat'),
   })
@@ -186,7 +178,6 @@ export default function ConversationView({
         <ConversationComposerArea
           agentName={agentName}
           clerkInstruction={clerkInstruction}
-          isAutoPlanLoading={isAutoPlanLoading}
           isClerkMode={isClerkMode}
           isPlanExecuting={isPlanExecuting}
           isRegenerating={isRegenerating}

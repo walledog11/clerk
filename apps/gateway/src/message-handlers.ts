@@ -189,6 +189,10 @@ interface ProcessMessageOptions {
   // and skip the LLM round-trip in the SUMMARIZE_THREAD job. The job still runs
   // (with skipSummary=true) so plan precompute + WhatsApp notify still fire.
   precomputed?: ClassificationResult | null;
+  // Kill-switch path: write filterDecidedAt at creation so SUMMARIZE_THREAD
+  // still generates summary+tag but skips reclassifying (gated on
+  // filterDecidedAt === null). filterStatus stays at the 'genuine' default.
+  lockAsGenuine?: boolean;
 }
 
 async function processInboundMessage(
@@ -197,7 +201,7 @@ async function processInboundMessage(
   channelType: DbChannelType,
   messageText: string,
   aiSummaryQueue: Queue,
-  { customerName = null, profilePicUrl = null, initialTag = null, externalMessageId = null, traceId = null, attachments = [], precomputed = null }: ProcessMessageOptions = {}
+  { customerName = null, profilePicUrl = null, initialTag = null, externalMessageId = null, traceId = null, attachments = [], precomputed = null, lockAsGenuine = false }: ProcessMessageOptions = {}
 ): Promise<{ thread: Awaited<ReturnType<typeof db.thread.create>>; isNew: boolean } | null> {
   messageText = sanitizeUserInput(messageText);
 
@@ -243,6 +247,10 @@ async function processInboundMessage(
             tag: precomputed.tag,
             filterStatus: precomputed.filterStatus,
             filterReason: precomputed.filterReason,
+            filterDecidedAt: new Date(),
+          }),
+          ...(!precomputed && lockAsGenuine && {
+            filterReason: 'Spam filter disabled',
             filterDecidedAt: new Date(),
           }),
         },
@@ -319,7 +327,10 @@ export async function generateThreadIntelligence(
 
     // filterDecidedAt is the lock: once any path commits a decision, subsequent
     // summaries refresh aiSummary/tag but don't reclassify.
-    const shouldSetFilter = fullThread.filterDecidedAt === null;
+    // Spam filter scope is email only — IG/Shopify/SMS threads stay genuine
+    // regardless of what the classifier says (Shopify order events read like
+    // "automated system alerts" and would be wrongly purged otherwise).
+    const shouldSetFilter = fullThread.filterDecidedAt === null && fullThread.channelType === CHANNEL.EMAIL;
 
     const updated = await db.thread.update({
       where: { id: threadId },
@@ -703,6 +714,7 @@ export async function handleEmailJob(job: Job<InboundJobData>, aiSummaryQueue: Q
       externalMessageId: job.data.inboundMessageId,
       traceId,
       precomputed,
+      lockAsGenuine: !spamFilterEnabled,
     });
     if (result?.isNew && precomputed?.filterStatus !== 'filtered') {
       void triggerPlaybooks(organizationId, result.thread.id, { type: 'new_ticket' });

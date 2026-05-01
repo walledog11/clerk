@@ -3,7 +3,6 @@ import {
   getClerkCommandState,
   planRequiresApproval,
   resolvePendingPlan,
-  shouldHydratePlanOnOpen,
   shouldUsePrivateComposerAsk,
 } from "./useConversationAgentFlow"
 import type { AgentPlan } from "@/types"
@@ -21,31 +20,6 @@ describe("getClerkCommandState", () => {
       isClerkMode: true,
       triggerPrefix: "@clerk",
     })
-  })
-})
-
-describe("shouldHydratePlanOnOpen", () => {
-  it("hydrates only when the ticket is open, revision is known, plan is unknown, and the last chat message is from the customer", () => {
-    expect(shouldHydratePlanOnOpen({
-      activeTab: "open",
-      hasPlanRevisionKey: true,
-      initialPlan: undefined,
-      lastChatMessageSender: "customer",
-    })).toBe(true)
-
-    expect(shouldHydratePlanOnOpen({
-      activeTab: "closed",
-      hasPlanRevisionKey: true,
-      initialPlan: undefined,
-      lastChatMessageSender: "customer",
-    })).toBe(false)
-
-    expect(shouldHydratePlanOnOpen({
-      activeTab: "open",
-      hasPlanRevisionKey: true,
-      initialPlan: null,
-      lastChatMessageSender: "customer",
-    })).toBe(false)
   })
 })
 

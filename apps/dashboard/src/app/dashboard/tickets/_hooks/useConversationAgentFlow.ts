@@ -4,19 +4,16 @@ import { useEffect, useState } from "react"
 import type { AgentPlan, AgentTurn, RawToolCall, Ticket } from "@/types"
 
 interface UseConversationAgentFlowProps {
-  activeTab: "open" | "closed"
   ticket: Ticket
   viewTab: "chat" | "notes"
   replyText: string
   agentName: string
-  planRevisionKey?: string | null
   initialPlan?: AgentPlan | null
   onReplyChange: (text: string) => void
   onSend: (isNote: boolean) => void
   onAgentTurnAdd: (turn: AgentTurn) => void
   onAgentRunningChange: (running: boolean) => void
   onAgentComplete: (turn: AgentTurn) => void
-  onPlanCached: (plan: AgentPlan | null) => void
   onPrivateAnswerStart?: () => void
   onNoteModeReset: () => void
 }
@@ -43,20 +40,6 @@ export function getClerkCommandState(
   }
 }
 
-export function shouldHydratePlanOnOpen(args: {
-  activeTab: "open" | "closed"
-  hasPlanRevisionKey: boolean
-  initialPlan: AgentPlan | null | undefined
-  lastChatMessageSender?: Ticket["messages"][number]["sender"]
-}) {
-  return (
-    args.activeTab === "open" &&
-    args.hasPlanRevisionKey &&
-    args.initialPlan === undefined &&
-    args.lastChatMessageSender === "customer"
-  )
-}
-
 export function resolvePendingPlan(plan: AgentPlan, instruction: string): AgentPlan | null {
   return plan.steps.length > 0 ? { ...plan, instruction } : null
 }
@@ -78,63 +61,30 @@ export function planRequiresApproval(plan: AgentPlan): boolean {
 }
 
 export function useConversationAgentFlow({
-  activeTab,
   ticket,
   viewTab,
   replyText,
   agentName,
-  planRevisionKey,
   initialPlan,
   onReplyChange,
   onSend,
   onAgentTurnAdd,
   onAgentRunningChange,
   onAgentComplete,
-  onPlanCached,
   onPrivateAnswerStart,
   onNoteModeReset,
 }: UseConversationAgentFlowProps) {
   const [pendingInstruction, setPendingInstruction] = useState<string | null>(null)
   const [pendingPlan, setPendingPlan] = useState<AgentPlan | null>(initialPlan ?? null)
   const [isPlanLoading, setIsPlanLoading] = useState(false)
-  const [isAutoPlanLoading, setIsAutoPlanLoading] = useState(false)
   const [isPlanExecuting, setIsPlanExecuting] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
 
   const { clerkInstruction, isClerkMode } = getClerkCommandState(replyText, agentName, viewTab)
 
-  const lastChatMessage = ticket.messages.filter(message => message.sender !== "note").at(-1)
-
   useEffect(() => {
     setPendingPlan(initialPlan ?? null)
-  }, [planRevisionKey, initialPlan])
-
-  useEffect(() => {
-    if (!shouldHydratePlanOnOpen({
-      activeTab,
-      hasPlanRevisionKey: Boolean(planRevisionKey),
-      initialPlan,
-      lastChatMessageSender: lastChatMessage?.sender,
-    })) return
-
-    setIsAutoPlanLoading(true)
-
-    const instruction = ticket.aiSummary || "Handle this customer's latest request"
-
-    fetch("/api/agent/plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ threadId: ticket.id, instruction }),
-    })
-      .then(response => response.ok ? response.json() : Promise.reject())
-      .then((plan: AgentPlan) => {
-        const resolved = resolvePendingPlan(plan, instruction)
-        if (resolved) setPendingPlan(resolved)
-        onPlanCached(resolved)
-      })
-      .catch(() => {})
-      .finally(() => setIsAutoPlanLoading(false))
-  }, [activeTab, initialPlan, lastChatMessage?.sender, onPlanCached, planRevisionKey, ticket.aiSummary, ticket.id])
+  }, [initialPlan])
 
   const executeApprovedPlan = async (instruction: string, approvedToolCalls: RawToolCall[]) => {
     setPendingPlan(null)
@@ -296,7 +246,6 @@ export function useConversationAgentFlow({
       const plan: AgentPlan = await response.json()
       const resolved = resolvePendingPlan(plan, instruction)
       if (resolved) setPendingPlan(resolved)
-      onPlanCached(resolved)
     } catch {
       // Keep the current plan in place on failure.
     } finally {
@@ -310,7 +259,6 @@ export function useConversationAgentFlow({
     handlePlanDismiss,
     handlePlanRegenerate,
     handleSend,
-    isAutoPlanLoading,
     isClerkMode,
     isPlanExecuting,
     isPlanLoading,

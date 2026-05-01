@@ -285,10 +285,77 @@ describe('Message worker — email branch', () => {
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
 
     const thread = await db.thread.findFirst({ where: { organizationId: org.id, channelType: ChannelType.email } });
-    // No precomputed inline → defaults to 'genuine', filterDecidedAt remains null
-    // until the SUMMARIZE_THREAD job runs (which is mocked away in this test).
+    // Lock-as-genuine: filterDecidedAt is set at creation so the downstream
+    // SUMMARIZE_THREAD path can't reclassify the thread away from genuine.
     expect(thread?.filterStatus).toBe('genuine');
-    expect(thread?.filterDecidedAt).toBeNull();
+    expect(thread?.filterReason).toBe('Spam filter disabled');
+    expect(thread?.filterDecidedAt).not.toBeNull();
+  });
+
+  it('does not classify non-email threads (Shopify order events stay genuine)', async () => {
+    // The combined classifier prompt would mark "New order #1001 was placed."
+    // as 'filtered' (system alert). Filter writes must be gated to email.
+    mockAnthropicCreate.mockResolvedValue(classifierResponse('filtered', { reason: 'system alert' }));
+    mockFetch.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({}), text: vi.fn().mockResolvedValue('') });
+
+    const customer = await db.customer.create({
+      data: { organizationId: org.id, platformId: 'shop_customer@example.com' },
+    });
+    const thread = await db.thread.create({
+      data: { organizationId: org.id, customerId: customer.id, channelType: ChannelType.shopify, status: 'open' },
+    });
+    await db.message.create({
+      data: { threadId: thread.id, senderType: 'customer', contentText: 'New order #1001 was placed.' },
+    });
+
+    const aiHandler = capturedHandlers.get('ai-summary');
+    await aiHandler!({
+      id: 'ai-job-shopify',
+      data: {
+        threadId: thread.id,
+        organizationId: org.id,
+        customerName: 'Shop Customer',
+        channelType: ChannelType.shopify,
+        traceId: 'trace-shopify',
+      },
+    });
+
+    const after = await db.thread.findUnique({ where: { id: thread.id } });
+    expect(after?.filterStatus).toBe('genuine');
+    expect(after?.filterDecidedAt).toBeNull();
+  });
+
+  it('preserves genuine lock through SUMMARIZE_THREAD when kill switch is on', async () => {
+    await db.organization.update({
+      where: { id: org.id },
+      data: { settings: { spamFilterEnabled: false } },
+    });
+    // If SUMMARIZE_THREAD called the classifier, it would return 'filtered'.
+    // The lock at thread creation must prevent that write.
+    mockAnthropicCreate.mockResolvedValue(classifierResponse('filtered', { reason: 'spammy' }));
+    mockFetch.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue({}), text: vi.fn().mockResolvedValue('') });
+
+    const handler = capturedHandlers.get('inbound-messages');
+    await handler!(makeEmailJob(org.id));
+
+    const thread = await db.thread.findFirst({ where: { organizationId: org.id, channelType: ChannelType.email } });
+    expect(thread).not.toBeNull();
+
+    const aiHandler = capturedHandlers.get('ai-summary');
+    await aiHandler!({
+      id: 'ai-job-killswitch',
+      data: {
+        threadId: thread!.id,
+        organizationId: org.id,
+        customerName: 'Test Customer',
+        channelType: ChannelType.email,
+        traceId: 'trace-killswitch',
+      },
+    });
+
+    const after = await db.thread.findUnique({ where: { id: thread!.id } });
+    expect(after?.filterStatus).toBe('genuine');
+    expect(after?.filterReason).toBe('Spam filter disabled');
   });
 
   it('deduplicates messages with the same externalMessageId', async () => {

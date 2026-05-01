@@ -15,10 +15,8 @@ import { fetcher } from '@/lib/api/fetcher'
 import ThreadList from './thread-list/ThreadList'
 import ConversationView from './conversation/ConversationView'
 import ContextPanel from './context-panel/ContextPanel'
-import type { Thread, Ticket, ChannelType, AgentPlan } from '@/types'
-
-// Module-level cache — persists across navigation for the browser session
-const planCache = new Map<string, AgentPlan | null>()
+import { readAgentPlanCachePlan } from '@/lib/agent/plan-cache-shape'
+import type { Thread, Ticket, ChannelType } from '@/types'
 
 interface Props {
   initialOpenThreads: Thread[]
@@ -83,12 +81,11 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
   const lastCustomerMessageId = activeThread?.messages
     .filter(m => m.senderType === 'customer')
     .at(-1)?.id ?? null
-  const planCacheKey = activeTicketId && lastCustomerMessageId
-    ? `${activeTicketId}:${lastCustomerMessageId}`
+  const cachedPlan = activeThread
+    && activeThread.cachedPlanMessageId
+    && activeThread.cachedPlanMessageId === lastCustomerMessageId
+    ? readAgentPlanCachePlan(activeThread.cachedPlan)
     : null
-  const cachedPlan = planCacheKey !== null
-    ? planCache.get(planCacheKey)
-    : undefined
 
   const { selectedIds, setSelectedIds, handleToggleSelect, handleClearSelection } = useTicketSelection()
 
@@ -310,9 +307,7 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               activeTab={isSearchMode || activeTab === 'filtered'
                 ? (activeThread.status === 'closed' ? 'closed' : 'open')
                 : activeTab}
-              planRevisionKey={planCacheKey}
               initialPlan={cachedPlan}
-              onPlanCached={(plan) => { if (planCacheKey) planCache.set(planCacheKey, plan) }}
               aiSummary={activeThread.aiSummary}
               isSummaryRefreshing={refreshingSummaryId === activeThread.id}
               onRefreshSummary={() => handleRefreshSummary(activeThread.id)}
