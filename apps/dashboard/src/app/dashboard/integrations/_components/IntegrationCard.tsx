@@ -207,7 +207,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
                     Enter the email address your customers write to. Clerk will receive those emails and convert them into support tickets.
                   </p>
                   <ol className="text-xs text-white/30 space-y-1 list-decimal list-inside leading-relaxed">
-                    <li>Set your inbound email routing to forward to Clerk's inbound address</li>
+                    <li>Set your inbound email routing to forward to Clerk&apos;s inbound address</li>
                     <li>Enter your support address below and save</li>
                   </ol>
                 </div>
@@ -266,7 +266,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
                   </p>
                   <ol className="text-xs text-white/30 space-y-1 list-decimal list-inside leading-relaxed">
                     <li>Enter your <span className="font-mono text-white/45">.myshopify.com</span> store domain below</li>
-                    <li>You'll be redirected to Shopify to authorize Clerk</li>
+                    <li>You&apos;ll be redirected to Shopify to authorize Clerk</li>
                     <li>Order data and messages will sync automatically</li>
                   </ol>
                 </div>
@@ -319,7 +319,7 @@ export default function IntegrationCard({ config, connected, onConnect, onDiscon
           {/* Coming soon */}
           {config.connectType === 'coming-soon' && (
             <div className="flex items-center justify-between">
-              <p className="text-xs text-white/30">This integration isn't available yet.</p>
+              <p className="text-xs text-white/30">This integration isn&apos;t available yet.</p>
               <Button
                 variant="ghost"
                 size="sm"

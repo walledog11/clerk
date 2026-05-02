@@ -1,15 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import Image from "next/image"
-import { Ban, CheckSquare, Flag, MoreHorizontal, RotateCcw, Sparkles, Square } from "lucide-react"
+import { Ban, CheckSquare, Flag, RotateCcw, Sparkles, Square } from "lucide-react"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { getSlaInfo } from "./sla"
 import { getAvatarGradient, getInitials, getTagStyle, type TicketListTab } from "./constants"
 import type { Ticket } from "@/types"
@@ -52,6 +46,7 @@ export function TicketRow({
   const initials = getInitials(ticket.customer)
   const closed = ticket.status === "closed" || activeTab === "closed"
   const overdue = sla?.dot === "bg-red-400"
+  const isSpam = ticket.filterStatus === "filtered"
 
   const isHoverCapable = useMediaQuery("(hover: hover) and (pointer: fine)")
   const useSwipe = isHoverCapable === false
@@ -66,58 +61,85 @@ export function TicketRow({
         : null
     : null
 
-  const [tx, setTx] = useState(0)
-  const [animating, setAnimating] = useState(false)
-  const swipe = useRef({ startX: 0, startY: 0, dx: 0, active: false, locked: false, width: 0 })
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const swipe = useRef({
+    pointerId: -1, startX: 0, startY: 0, dx: 0,
+    locked: false, width: 0, suppressClick: false, committed: false,
+  })
+  const commitTimeout = useRef<number | null>(null)
 
   const canSwipe = useSwipe && rowAction !== null
 
-  function onPointerDown(event: React.PointerEvent) {
-    if (!canSwipe) return
-    swipe.current = {
-      startX: event.clientX, startY: event.clientY,
-      dx: 0, active: true, locked: false,
-      width: event.currentTarget.getBoundingClientRect().width,
-    }
-    setAnimating(false)
+  useEffect(() => () => {
+    if (commitTimeout.current !== null) window.clearTimeout(commitTimeout.current)
+  }, [])
+
+  function applyTransform(tx: number, animate: boolean) {
+    const el = surfaceRef.current
+    if (!el) return
+    el.style.transition = animate ? "transform 180ms ease" : "none"
+    el.style.transform = tx === 0 ? "" : `translate3d(${tx}px,0,0)`
   }
 
-  function onPointerMove(event: React.PointerEvent) {
+  function onPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!canSwipe) return
+    if (event.pointerType === "mouse" && event.button !== 0) return
+    if (swipe.current.pointerId !== -1) return
+    if (swipe.current.committed) return
+    swipe.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX, startY: event.clientY,
+      dx: 0, locked: false,
+      width: event.currentTarget.getBoundingClientRect().width,
+      suppressClick: false, committed: false,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function onPointerMove(event: React.PointerEvent<HTMLDivElement>) {
     const s = swipe.current
-    if (!s.active) return
+    if (s.pointerId !== event.pointerId) return
     const dx = event.clientX - s.startX
     const dy = event.clientY - s.startY
     if (!s.locked) {
       if (Math.abs(dx) < SWIPE_DETECT_PX && Math.abs(dy) < SWIPE_DETECT_PX) return
-      if (Math.abs(dy) > Math.abs(dx)) { s.active = false; return }
+      if (Math.abs(dy) > Math.abs(dx)) {
+        s.pointerId = -1
+        return
+      }
       s.locked = true
     }
     s.dx = Math.min(0, dx)
-    setTx(s.dx)
+    if (Math.abs(s.dx) > CLICK_SUPPRESS_PX) s.suppressClick = true
+    applyTransform(s.dx, false)
   }
 
-  function onPointerUp() {
+  function finish(event: React.PointerEvent<HTMLDivElement>, cancelled: boolean) {
     const s = swipe.current
-    if (!s.active) return
-    s.active = false
-    const commit = Math.min(SWIPE_COMMIT_PX, s.width * 0.4)
-    setAnimating(true)
-    if (s.dx <= -commit && rowAction) {
-      setTx(-s.width)
-      window.setTimeout(() => rowAction.run(), 180)
+    if (s.pointerId !== event.pointerId) return
+    try { event.currentTarget.releasePointerCapture(event.pointerId) } catch {}
+    s.pointerId = -1
+    const commitPx = Math.min(SWIPE_COMMIT_PX, s.width * 0.4)
+    if (!cancelled && s.locked && rowAction && s.dx <= -commitPx) {
+      s.committed = true
+      applyTransform(-s.width, true)
+      commitTimeout.current = window.setTimeout(() => {
+        commitTimeout.current = null
+        rowAction.run()
+      }, 180)
     } else {
-      setTx(0)
+      applyTransform(0, true)
+      s.locked = false
     }
   }
 
-  function onPointerCancel() {
-    swipe.current.active = false
-    setAnimating(true)
-    setTx(0)
-  }
-
-  function handleClick() {
-    if (Math.abs(swipe.current.dx) > CLICK_SUPPRESS_PX) return
+  function handleClick(event: React.MouseEvent) {
+    if (swipe.current.suppressClick || swipe.current.committed) {
+      swipe.current.suppressClick = false
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
     onSelectTicket(ticket.id)
   }
 
@@ -128,9 +150,10 @@ export function TicketRow({
       data-ticket-channel={ticket.channelType}
       className="relative overflow-hidden"
     >
-      {canSwipe && tx < 0 && rowAction && (
+      {canSwipe && rowAction && (
         <div
-          className={`absolute inset-y-0 right-0 left-0 flex items-center justify-end gap-2 pr-5 text-white text-sm font-semibold pointer-events-none ${
+          aria-hidden="true"
+          className={`absolute inset-0 flex items-center justify-end gap-2 pr-5 text-white text-sm font-semibold pointer-events-none ${
             rowAction.kind === "spam" ? "bg-red-500/90" : "bg-emerald-500/90"
           }`}
         >
@@ -142,19 +165,16 @@ export function TicketRow({
       )}
 
       <div
+        ref={surfaceRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
-        style={canSwipe ? {
-          transform: `translateX(${tx}px)`,
-          transition: animating ? "transform 180ms ease" : "none",
-          touchAction: "pan-y",
-        } : undefined}
-        className={`relative ${canSwipe ? "bg-background" : ""}`}
+        onPointerUp={event => finish(event, false)}
+        onPointerCancel={event => finish(event, true)}
+        style={canSwipe ? { touchAction: "pan-y", willChange: "transform" } : undefined}
+        className={`relative pt-0.5 ${canSwipe ? "bg-background select-none" : ""}`}
       >
         <div
-          className={`cursor-pointer relative px-4 py-2 mt-0.5 transition-colors group ${
+          className={`cursor-pointer relative px-4 py-2 transition-colors group ${
             isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
           }`}
         >
@@ -192,66 +212,76 @@ export function TicketRow({
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline justify-between gap-2 mb-0.5">
                 <span className="text-sm font-semibold text-white/90 truncate">{ticket.customer}</span>
-                <span className={`text-[10px] shrink-0 ${overdue ? "text-red-400 font-semibold" : "text-white/30"}`}>{ticket.time}</span>
+                <div className="relative shrink-0 flex items-center justify-end min-h-[14px]">
+                  <span
+                    className={`text-[10px] transition-opacity ${overdue ? "text-red-400 font-semibold" : "text-white/30"} ${
+                      !useSwipe && rowAction ? "group-hover:opacity-0" : ""
+                    }`}
+                  >
+                    {ticket.time}
+                  </span>
+                  {!useSwipe && rowAction && (
+                    <button
+                      onClick={event => { event.stopPropagation(); rowAction.run() }}
+                      title={rowAction.kind === "spam" ? "Mark as spam" : "Recover to inbox"}
+                      className={`absolute inset-0 flex items-center justify-end opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity ${
+                        rowAction.kind === "spam" ? "text-white/50 hover:text-red-400" : "text-white/50 hover:text-emerald-400"
+                      }`}
+                    >
+                      {rowAction.kind === "spam"
+                        ? <Ban className="w-3.5 h-3.5" />
+                        : <RotateCcw className="w-3.5 h-3.5" />
+                      }
+                    </button>
+                  )}
+                </div>
               </div>
 
               <p className="text-[13px] font-medium text-white/80 truncate mb-0.5">{ticket.subject}</p>
-              <p className="text-xs text-white/40 line-clamp-1 mb-2">{ticket.preview}</p>
+              {isSpam && ticket.filterReason ? (
+                <p className="text-xs text-white/45 line-clamp-2 mb-2">{ticket.filterReason}</p>
+              ) : (
+                <p className="text-xs text-white/40 line-clamp-1 mb-2">{ticket.preview}</p>
+              )}
 
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${tagStyle.className}`}>
-                  {tagStyle.label}
-                </span>
-                {ticket.hasPlan && !closed && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
-                    <Sparkles className="w-2.5 h-2.5 mr-1"/> Plan ready
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                {isSpam ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-400 shrink-0">
+                    <Ban className="w-2.5 h-2.5 mr-1" /> Spam
                   </span>
-                )}
-                {ticket.filterStatus === "questionable" && !closed && (
-                  <span
-                    title={ticket.filterReason ?? undefined}
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400"
-                  >
-                    <Flag className="w-2.5 h-2.5 mr-1" /> Flagged
-                  </span>
-                )}
-                {closed && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-400/10 text-green-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    Closed
-                  </span>
-                )}
-                {!sla && isSearchMode && ticket.status && !closed && (
-                  <span className="text-[10px] text-white/25 font-medium capitalize ml-auto">{ticket.status}</span>
+                ) : (
+                  <>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${tagStyle.className}`}>
+                      {tagStyle.label}
+                    </span>
+                    {ticket.hasPlan && !closed && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">
+                        <Sparkles className="w-2.5 h-2.5 mr-1"/> Plan ready
+                      </span>
+                    )}
+                    {ticket.filterStatus === "questionable" && !closed && (
+                      <span
+                        title={`Possibly not a genuine customer message${ticket.filterReason ? ` — ${ticket.filterReason}` : ""}`}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400"
+                      >
+                        <Flag className="w-2.5 h-2.5 mr-1" /> Unverified sender
+                      </span>
+                    )}
+                    {closed && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-400/10 text-green-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                        Closed
+                      </span>
+                    )}
+                    {!sla && isSearchMode && ticket.status && !closed && (
+                      <span className="text-[10px] text-white/25 font-medium capitalize ml-auto">{ticket.status}</span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           </div>
 
-          {!useSwipe && rowAction && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  onClick={event => event.stopPropagation()}
-                  title="More actions"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-white/[0.08] text-white/40 hover:text-white/80"
-                >
-                  <MoreHorizontal className="w-3.5 h-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                {rowAction.kind === "spam" ? (
-                  <DropdownMenuItem variant="destructive" onSelect={() => rowAction.run()}>
-                    <Ban /> Mark as spam
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onSelect={() => rowAction.run()}>
-                    <RotateCcw /> Recover to inbox
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </div>
     </div>

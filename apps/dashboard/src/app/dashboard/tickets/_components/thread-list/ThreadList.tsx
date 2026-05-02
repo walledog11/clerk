@@ -13,6 +13,8 @@ interface Props {
   activeFilter: ChannelType | null
   activeTicketId: string | null
   openCount: number
+  closedCount: number
+  spamCount: number
   searchQuery: string
   isSearchMode?: boolean
   isSearchLoading?: boolean
@@ -40,6 +42,8 @@ export default function ThreadList({
   activeFilter,
   activeTicketId,
   openCount,
+  closedCount,
+  spamCount,
   searchQuery,
   isSearchMode,
   isSearchLoading,
@@ -70,6 +74,8 @@ export default function ThreadList({
         isSearchLoading={isSearchLoading}
         isSearchMode={isSearchMode}
         openCount={openCount}
+        closedCount={closedCount}
+        spamCount={spamCount}
         searchQuery={searchQuery}
         selectedCount={selectedIds.length}
         onBulkArchive={onBulkArchive}

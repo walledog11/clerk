@@ -272,6 +272,8 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
           activeFilter={activeFilter}
           activeTicketId={activeTicketId}
           openCount={openThreads.length}
+          closedCount={closedThreads.length}
+          spamCount={filteredThreads.length}
           searchQuery={searchQuery}
           isSearchMode={isSearchMode}
           isSearchLoading={isSearchLoading}

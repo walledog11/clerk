@@ -9,7 +9,8 @@ export default defineConfig({
   fullyParallel: false,
   use: {
     baseURL: 'http://localhost:3100',
-    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
   },
   projects: [
     {

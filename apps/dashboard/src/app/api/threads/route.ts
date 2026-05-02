@@ -21,15 +21,15 @@ export async function GET(request: Request) {
     const limitParam = searchParams.get('limit');
     const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
     const limit = !isNaN(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : undefined;
+    const wantsFiltered = filterStatusParam === ThreadFilterStatus.filtered;
     const where = {
       organizationId: org.id,
-      status,
       channelType: { notIn: [CHANNEL_TYPE.SMS_AGENT, CHANNEL_TYPE.DASHBOARD_AGENT] },
       archivedAt: null,
       deletedAt: null,
-      filterStatus: filterStatusParam === ThreadFilterStatus.filtered
-        ? ThreadFilterStatus.filtered
-        : { not: ThreadFilterStatus.filtered },
+      ...(wantsFiltered
+        ? { filterStatus: ThreadFilterStatus.filtered }
+        : { status, filterStatus: { not: ThreadFilterStatus.filtered } }),
     };
 
     if (countOnly) {

@@ -151,6 +151,22 @@ describe('GET /api/threads', () => {
     expect(body.threads[0].id).toBe(spamThread.id);
   });
 
+  it('returns both open and closed filtered threads when ?filterStatus=filtered', async () => {
+    const openSpammer = await createTestCustomer(org.id, 'open_spam@test.com', { name: 'OpenSpam' });
+    const openSpam = await createTestThread(org.id, openSpammer.id, ChannelType.email);
+    await db.thread.update({ where: { id: openSpam.id }, data: { filterStatus: 'filtered' } });
+
+    const closedSpammer = await createTestCustomer(org.id, 'closed_spam@test.com', { name: 'ClosedSpam' });
+    const closedSpam = await createTestThread(org.id, closedSpammer.id, ChannelType.email);
+    await db.thread.update({ where: { id: closedSpam.id }, data: { filterStatus: 'filtered', status: 'closed' } });
+
+    const req = new Request('http://localhost:3000/api/threads?status=open&filterStatus=filtered');
+    const res = await GET(req);
+    const body = await res.json() as { threads: { id: string }[] };
+
+    expect(body.threads.map(t => t.id).sort()).toEqual([openSpam.id, closedSpam.id].sort());
+  });
+
   it('returns 403 when the user has no active organization', async () => {
     vi.mocked(auth).mockResolvedValueOnce(
       { userId: 'usr_test', orgId: null } as unknown as ReturnType<typeof auth> extends Promise<infer T>

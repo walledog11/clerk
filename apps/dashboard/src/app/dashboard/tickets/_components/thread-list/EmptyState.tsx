@@ -43,11 +43,13 @@ export function EmptyState({
     )
   }
 
+  const tabLabel = activeTab === "filtered" ? "spam" : activeTab
+
   return (
     <div className="text-center p-8 text-white/25 text-sm">
       {searchQuery
         ? `No results for "${searchQuery}"`
-        : `No ${activeTab} tickets${activeFilter ? ` from ${CHANNEL_FILTERS.find(channel => channel.id === activeFilter)?.label ?? activeFilter}` : ""}.`
+        : `No ${tabLabel} tickets${activeFilter ? ` from ${CHANNEL_FILTERS.find(channel => channel.id === activeFilter)?.label ?? activeFilter}` : ""}.`
       }
     </div>
   )

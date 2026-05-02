@@ -14,6 +14,8 @@ interface ThreadListHeaderProps {
   isSearchLoading?: boolean
   isSearchMode?: boolean
   openCount: number
+  closedCount: number
+  spamCount: number
   searchQuery: string
   selectedCount: number
   onBulkArchive: () => void
@@ -32,6 +34,8 @@ export function ThreadListHeader({
   isSearchLoading,
   isSearchMode,
   openCount,
+  closedCount,
+  spamCount,
   searchQuery,
   selectedCount,
   onBulkArchive,
@@ -66,7 +70,6 @@ export function ThreadListHeader({
               value="open"
               className="flex-1 gap-1.5 py-1.5 h-auto text-xs font-semibold data-[state=active]:bg-white/[0.12] data-[state=active]:text-white data-[state=active]:shadow-none data-[state=inactive]:text-white/35"
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${activeTab === "open" ? "bg-amber-400" : "bg-white/20"}`} />
               Open
               {openCount > 0 && (
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
@@ -80,15 +83,28 @@ export function ThreadListHeader({
               value="closed"
               className="flex-1 gap-1.5 py-1.5 h-auto text-xs font-semibold data-[state=active]:bg-white/[0.12] data-[state=active]:text-white data-[state=active]:shadow-none data-[state=inactive]:text-white/35"
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${activeTab === "closed" ? "bg-green-400" : "bg-white/20"}`} />
               Closed
+              {closedCount > 0 && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  activeTab === "closed" ? "bg-white/[0.15] text-white" : "bg-white/[0.08] text-white/35"
+                }`}>
+                  {closedCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger
               value="filtered"
+              title="Spam — automatically filtered messages"
               className="flex-1 gap-1.5 py-1.5 h-auto text-xs font-semibold data-[state=active]:bg-white/[0.12] data-[state=active]:text-white data-[state=active]:shadow-none data-[state=inactive]:text-white/35"
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${activeTab === "filtered" ? "bg-red-400" : "bg-white/20"}`} />
-              Filtered
+              Spam
+              {spamCount > 0 && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  activeTab === "filtered" ? "bg-white/[0.15] text-white" : "bg-white/[0.08] text-white/35"
+                }`}>
+                  {spamCount}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
         </Tabs>
