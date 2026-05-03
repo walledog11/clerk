@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ChannelType, db } from '@clerk/db';
+import { ChannelType, SenderType, db } from '@clerk/db';
 import {
   createTestOrg,
   createTestCustomer,
@@ -102,14 +102,19 @@ describe('GET /api/threads', () => {
   it('returns preview message when preview=true', async () => {
     const customer = await createTestCustomer(org.id, 'cust_preview', { name: 'Frank' });
     const thread = await createTestThread(org.id, customer.id, ChannelType.email);
-    await createTestMessage(thread.id, 'First message');
-    await createTestMessage(thread.id, 'Second message');
+    const first = await createTestMessage(thread.id, 'First message');
+    const note = await createTestMessage(thread.id, 'Internal note', SenderType.note);
+    const second = await createTestMessage(thread.id, 'Second message');
+    await db.message.update({ where: { id: first.id }, data: { sentAt: new Date('2024-01-01T00:00:00.000Z') } });
+    await db.message.update({ where: { id: note.id }, data: { sentAt: new Date('2024-01-01T00:01:00.000Z') } });
+    await db.message.update({ where: { id: second.id }, data: { sentAt: new Date('2024-01-01T00:02:00.000Z') } });
 
     const req = new Request('http://localhost:3000/api/threads?preview=true');
     const res = await GET(req);
-    const body = await res.json() as { threads: { messages: unknown[] }[] };
+    const body = await res.json() as { threads: { messages: { contentText: string | null }[] }[] };
 
     expect(body.threads[0].messages).toHaveLength(1);
+    expect(body.threads[0].messages[0].contentText).toBe('Second message');
   });
 
   it('returns 401 when not authenticated', async () => {

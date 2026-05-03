@@ -1,45 +1,32 @@
-import { useState, useCallback, useMemo } from 'react'
-import type { Thread, Message, AgentTurn } from '@/types'
+import { useCallback, useMemo, useState } from 'react'
+import type { AgentTurn, Message, Thread } from '@/types'
 import { extractAgentTurnsFromMessages, serializeAgentTurn } from '@/lib/agent/api/turns'
 import { SENDER_TYPE } from '@/lib/messaging/thread-constants'
 
 interface UseAgentTurnsProps {
   activeTicketId: string | null
-  activeTab: 'open' | 'closed' | 'filtered'
   activeThread: Thread | undefined
-  mutateOpen: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  mutateClosed: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  mutateFiltered: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  openThreads: Thread[]
-  closedThreads: Thread[]
-  filteredThreads: Thread[]
+  patchThreadCaches: (threadId: string, updateThread: (thread: Thread) => Thread) => Promise<void>
+  revalidateThreadCaches: () => Promise<void>
 }
 
 export function useAgentTurns({
   activeTicketId,
-  activeTab,
   activeThread,
-  mutateOpen,
-  mutateClosed,
-  mutateFiltered,
-  openThreads,
-  closedThreads,
-  filteredThreads,
+  patchThreadCaches,
+  revalidateThreadCaches,
 }: UseAgentTurnsProps) {
   const [agentTurnsByThread, setAgentTurnsByThread] = useState<Record<string, AgentTurn[]>>({})
   const [agentRunningThread, setAgentRunningThread] = useState<string | null>(null)
 
-  // Derive persisted agent turns from the thread messages (survive page refresh)
   const activeAgentTurns = useMemo((): AgentTurn[] => {
     const dbTurns = extractAgentTurnsFromMessages(activeThread?.messages ?? [])
-    // Overlay in-session error turns (transient, not persisted)
     const errorTurns = activeTicketId ? (agentTurnsByThread[activeTicketId] ?? []) : []
     return [...dbTurns, ...errorTurns]
-  }, [activeThread, activeTicketId, agentTurnsByThread])
+  }, [activeThread?.messages, activeTicketId, agentTurnsByThread])
 
   const isAgentRunning = agentRunningThread === activeTicketId
 
-  // Only used for transient error turns (not persisted to DB)
   const handleAgentTurnAdd = useCallback((turn: AgentTurn) => {
     if (!activeTicketId) return
     setAgentTurnsByThread(prev => ({
@@ -54,28 +41,25 @@ export function useAgentTurns({
 
   const handleAgentComplete = useCallback((turn: AgentTurn) => {
     if (!activeTicketId) return
-    const mutateFn = activeTab === 'open' ? mutateOpen : activeTab === 'closed' ? mutateClosed : mutateFiltered
-    const currentThreads = activeTab === 'open' ? openThreads : activeTab === 'closed' ? closedThreads : filteredThreads
-    // Optimistically insert the turn into the thread messages so it shows instantly
+    const threadId = activeTicketId
     const optimisticMsg: Message = {
       id: `agent-turn-${Date.now()}`,
-      threadId: activeTicketId,
+      threadId,
       senderType: SENDER_TYPE.NOTE,
       contentText: serializeAgentTurn(turn),
       mediaUrl: null,
       attachments: [],
       sentAt: new Date().toISOString(),
     }
-    mutateFn(
-      currentThreads.map(t => t.id === activeTicketId
-        ? { ...t, messages: [...t.messages, optimisticMsg] }
-        : t),
-      false
-    )
-    mutateOpen()
-    mutateClosed()
-    mutateFiltered()
-  }, [activeTicketId, activeTab, mutateOpen, mutateClosed, mutateFiltered, openThreads, closedThreads, filteredThreads])
+
+    void (async () => {
+      await patchThreadCaches(threadId, thread => ({
+        ...thread,
+        messages: [...thread.messages, optimisticMsg],
+      }))
+      await revalidateThreadCaches()
+    })()
+  }, [activeTicketId, patchThreadCaches, revalidateThreadCaches])
 
   return {
     activeAgentTurns,

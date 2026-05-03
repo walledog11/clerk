@@ -26,13 +26,11 @@ interface Props {
   viewTab: "chat" | "notes"
   noteCount: number
   onViewTabChange: (tab: "chat" | "notes") => void
-  isDrafting: boolean
   isSending: boolean
   error: string | null
   onChange: (text: string) => void
   onClearClerk?: () => void
   onSend: (isNote: boolean) => void
-  onDraft: () => void
 }
 
 export default function Composer({
@@ -46,13 +44,11 @@ export default function Composer({
   viewTab,
   noteCount,
   onViewTabChange,
-  isDrafting: _isDrafting,
   isSending,
   error,
   onChange,
   onClearClerk,
   onSend,
-  onDraft: _onDraft,
 }: Props) {
   const { organization } = useOrganization()
 

@@ -21,7 +21,6 @@ interface Props {
   shopifyCustomerId?: string | null
   customerPlatformId?: string
   replyText: string
-  isDrafting: boolean
   isSending: boolean
   sendError: string | null
   messagesEndRef: RefObject<HTMLDivElement | null>
@@ -34,7 +33,6 @@ interface Props {
   onReopen: () => void
   onReplyChange: (text: string) => void
   onSend: (isNote: boolean) => void
-  onDraft: () => void
   onAgentComplete: (turn: AgentTurn) => void
   initialPlan?: AgentPlan | null
   onOpenContext?: () => void
@@ -52,7 +50,6 @@ export default function ConversationView({
   shopifyCustomerId,
   customerPlatformId,
   replyText,
-  isDrafting,
   isSending,
   sendError,
   messagesEndRef,
@@ -65,7 +62,6 @@ export default function ConversationView({
   onReopen,
   onReplyChange,
   onSend,
-  onDraft,
   onAgentComplete,
   initialPlan,
   onOpenContext,
@@ -194,9 +190,7 @@ export default function ConversationView({
             customerName: ticket.customer,
             channelType: ticket.channelType,
             customerPlatformId,
-            isDrafting,
             isSending: isSending || isAgentRunning || isPlanLoading,
-            onDraft,
             replyText,
             sendError,
             shopifyCustomerId,

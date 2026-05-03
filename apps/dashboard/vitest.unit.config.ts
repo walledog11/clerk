@@ -14,6 +14,7 @@ export default defineConfig({
       'src/lib/agent/prompting.test.ts',
       'src/lib/agent/run-policy.test.ts',
       'src/app/dashboard/tickets/_hooks/useConversationAgentFlow.test.ts',
+      'src/app/dashboard/tickets/_hooks/useTicketActions.test.ts',
       'src/app/dashboard/tickets/_components/conversation/utils/conversationViewUtils.test.ts',
     ],
   },

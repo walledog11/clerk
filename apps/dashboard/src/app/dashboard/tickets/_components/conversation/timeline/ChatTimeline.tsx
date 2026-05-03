@@ -20,6 +20,7 @@ function AttachmentList({ attachments }: { attachments: string[] }) {
     <div className="flex flex-wrap gap-2 mt-2">
       {attachments.map((url, index) => (
         /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url)
+          // eslint-disable-next-line @next/next/no-img-element
           ? <img key={index} src={url} alt="attachment" className="max-w-[240px] rounded-md border border-white/[0.10]" />
           : <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline">Download attachment</a>
       ))}

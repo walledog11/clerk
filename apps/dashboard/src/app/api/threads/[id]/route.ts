@@ -2,8 +2,43 @@ import { NextResponse } from 'next/server';
 import { db, Prisma, ThreadFilterStatus, ThreadFilterFeedback } from '@clerk/db';
 import { getOrCreateOrg } from '@/lib/server/org';
 import { handleApiError } from '@/lib/api/errors';
-import { THREAD_STATUS } from '@/lib/messaging/thread-constants';
+import { CHANNEL_TYPE, THREAD_STATUS } from '@/lib/messaging/thread-constants';
 import { runPlaybooks } from '@/app/api/threads/_lib/playbook-runner';
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const org = await getOrCreateOrg();
+    const { id } = await params;
+
+    const thread = await db.thread.findFirst({
+      where: {
+        id,
+        organizationId: org.id,
+        channelType: { notIn: [CHANNEL_TYPE.SMS_AGENT, CHANNEL_TYPE.DASHBOARD_AGENT] },
+        archivedAt: null,
+        deletedAt: null,
+      },
+      include: {
+        customer: true,
+        messages: {
+          where: { deletedAt: null },
+          orderBy: { sentAt: 'asc' },
+        },
+      },
+    });
+
+    if (!thread) {
+      return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ thread });
+  } catch (error) {
+    return handleApiError(error, 'Threads GET by id', 'Failed to fetch thread');
+  }
+}
 
 export async function PATCH(
   request: Request,
@@ -23,11 +58,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
 
-    if (filterStatus !== undefined && !(filterStatus in ThreadFilterStatus)) {
+    if (filterStatus !== undefined && !Object.values(ThreadFilterStatus).includes(filterStatus)) {
       return NextResponse.json({ error: 'Invalid filterStatus' }, { status: 400 });
     }
 
-    if (filterFeedback !== undefined && !(filterFeedback in ThreadFilterFeedback)) {
+    if (filterFeedback !== undefined && !Object.values(ThreadFilterFeedback).includes(filterFeedback)) {
       return NextResponse.json({ error: 'Invalid filterFeedback' }, { status: 400 });
     }
 

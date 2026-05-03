@@ -1,61 +1,61 @@
-import { useState, useCallback } from 'react'
-import type { Thread, Message, FailedMessage } from '@/types'
+import { useCallback, useRef, useState } from 'react'
+import type { FailedMessage, Message, Thread } from '@/types'
 import { SENDER_TYPE } from '@/lib/messaging/thread-constants'
 
+type TicketListTab = 'open' | 'closed' | 'filtered'
+
+export interface TicketToast {
+  message: string
+  tone: 'success' | 'error'
+}
 
 interface UseTicketActionsProps {
   activeTicketId: string | null
-  activeTab: 'open' | 'closed' | 'filtered'
-  dbThreads: Thread[]
-  openThreads: Thread[]
-  closedThreads: Thread[]
-  filteredThreads: Thread[]
-  mutateOpen: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  mutateClosed: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  mutateFiltered: (data?: Thread[], revalidate?: boolean) => Promise<Thread[] | undefined>
-  setActiveTab: (tab: 'open' | 'closed' | 'filtered') => void
+  patchThreadCaches: (threadId: string, updateThread: (thread: Thread) => Thread) => Promise<void>
+  revalidateThreadCaches: () => Promise<void>
+  setActiveTab: (tab: TicketListTab) => void
   setActiveTicketId: (id: string | null) => void
   setSelectedIds: (ids: string[]) => void
 }
 
+async function apiErrorMessage(res: Response, fallback: string) {
+  const body = await res.json().catch(() => null) as { error?: unknown } | null
+  if (typeof body?.error === 'string' && body.error.trim()) return body.error
+  return `${fallback} (${res.status})`
+}
+
+export async function requireOkResponse(res: Response, fallback: string) {
+  if (!res.ok) throw new Error(await apiErrorMessage(res, fallback))
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
+}
+
 export function useTicketActions({
   activeTicketId,
-  activeTab,
-  dbThreads,
-  openThreads,
-  closedThreads,
-  filteredThreads,
-  mutateOpen,
-  mutateClosed,
-  mutateFiltered,
+  patchThreadCaches,
+  revalidateThreadCaches,
   setActiveTab,
   setActiveTicketId,
   setSelectedIds,
 }: UseTicketActionsProps) {
   const [replyText, setReplyText] = useState('')
-  const [isDrafting, setIsDrafting] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<TicketToast | null>(null)
   const [failedMessages, setFailedMessages] = useState<FailedMessage[]>([])
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2500)
+  const showToast = useCallback((message: string, tone: TicketToast['tone'] = 'success') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current)
+    setToast({ message, tone })
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 2500)
   }, [])
-
-  const getMutate = useCallback(
-    () => activeTab === 'open' ? mutateOpen : activeTab === 'closed' ? mutateClosed : mutateFiltered,
-    [activeTab, mutateOpen, mutateClosed, mutateFiltered]
-  )
-
-  const getCurrentThreads = useCallback(
-    () => activeTab === 'open' ? openThreads : activeTab === 'closed' ? closedThreads : filteredThreads,
-    [activeTab, openThreads, closedThreads, filteredThreads]
-  )
 
   const handleSendMessage = useCallback(async (noteMode: boolean) => {
     if (!replyText.trim() || !activeTicketId) return
+    const threadId = activeTicketId
     const textToSend = replyText
     setReplyText('')
     setIsSending(true)
@@ -63,7 +63,7 @@ export function useTicketActions({
 
     const optimisticMessage: Message = {
       id: `temp-${Date.now()}`,
-      threadId: activeTicketId,
+      threadId,
       senderType: noteMode ? SENDER_TYPE.NOTE : SENDER_TYPE.AGENT,
       contentText: textToSend,
       mediaUrl: null,
@@ -71,122 +71,93 @@ export function useTicketActions({
       sentAt: new Date().toISOString(),
     }
 
-    const mutateFn = getMutate()
-    const currentThreads = getCurrentThreads()
-
-    await mutateFn(
-      currentThreads.map(t => t.id === activeTicketId
-        ? { ...t, messages: [...t.messages, optimisticMessage] }
-        : t),
-      false
-    )
+    await patchThreadCaches(threadId, thread => ({
+      ...thread,
+      messages: [...thread.messages, optimisticMessage],
+    }))
 
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId: activeTicketId, text: textToSend, isNote: noteMode }),
+        body: JSON.stringify({ threadId, text: textToSend, isNote: noteMode }),
       })
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
-      mutateFn()
+      await requireOkResponse(res, 'Failed to send message')
+      await revalidateThreadCaches()
     } catch (err) {
       console.error('Failed to send message', err)
-      setFailedMessages(prev => [...prev, { id: optimisticMessage.id, threadId: activeTicketId, text: textToSend, isNote: noteMode }])
-      mutateFn()
+      setSendError(errorMessage(err, 'Failed to send message.'))
+      setFailedMessages(prev => [...prev, { id: optimisticMessage.id, threadId, text: textToSend, isNote: noteMode }])
+      await revalidateThreadCaches()
     } finally {
       setIsSending(false)
     }
-  }, [replyText, activeTicketId, getMutate, getCurrentThreads])
-
-  const refreshAllLists = useCallback(() => {
-    mutateOpen()
-    mutateClosed()
-    mutateFiltered()
-  }, [mutateOpen, mutateClosed, mutateFiltered])
+  }, [activeTicketId, patchThreadCaches, replyText, revalidateThreadCaches])
 
   const handleResolve = useCallback(async () => {
     if (!activeTicketId) return
     const resolvedId = activeTicketId
-    setActiveTicketId(null)
     try {
-      await fetch(`/api/threads/${resolvedId}`, {
+      const res = await fetch(`/api/threads/${resolvedId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'closed' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to close ticket')
+      await revalidateThreadCaches()
+      setActiveTicketId(null)
       setActiveTab('closed')
       showToast('Ticket resolved')
     } catch (err) {
       console.error('Failed to resolve ticket', err)
+      showToast(errorMessage(err, 'Failed to close ticket.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTab, setActiveTicketId, showToast])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTab, setActiveTicketId, showToast])
 
   const handleReopen = useCallback(async () => {
     if (!activeTicketId) return
     const reopenId = activeTicketId
-    setActiveTicketId(null)
     try {
-      await fetch(`/api/threads/${reopenId}`, {
+      const res = await fetch(`/api/threads/${reopenId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'open' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to reopen ticket')
+      await revalidateThreadCaches()
+      setActiveTicketId(null)
       setActiveTab('open')
       showToast('Ticket reopened')
     } catch (err) {
       console.error('Failed to reopen ticket', err)
+      showToast(errorMessage(err, 'Failed to reopen ticket.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTab, setActiveTicketId, showToast])
-
-  const handleAiDraft = useCallback(async () => {
-    if (!activeTicketId) return
-    setIsDrafting(true)
-    setReplyText('Clerk is thinking...')
-    try {
-      const res = await fetch('/api/ai/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threadId: activeTicketId }),
-      })
-      const data = await res.json()
-      setReplyText(data.draft || 'Failed to generate draft. Please try typing manually.')
-    } catch (err) {
-      console.error('AI Draft Error:', err)
-      setReplyText('Failed to generate draft. Please try typing manually.')
-    } finally {
-      setIsDrafting(false)
-    }
-  }, [activeTicketId])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTab, setActiveTicketId, showToast])
 
   const handleLinkShopifyCustomer = useCallback(async (customerId: string | null) => {
     if (!activeTicketId) return
-    const mutateFn = getMutate()
-    await mutateFn(dbThreads.map(t =>
-      t.id === activeTicketId ? { ...t, shopifyCustomerId: customerId } : t
-    ), false)
+    const threadId = activeTicketId
+    await patchThreadCaches(threadId, thread => ({ ...thread, shopifyCustomerId: customerId }))
     try {
-      const res = await fetch(`/api/threads/${activeTicketId}`, {
+      const res = await fetch(`/api/threads/${threadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopifyCustomerId: customerId }),
       })
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
+      await requireOkResponse(res, 'Failed to link Shopify customer')
+      await revalidateThreadCaches()
     } catch (err) {
       console.error('Failed to link Shopify customer', err)
-      await mutateFn()
+      await revalidateThreadCaches()
       throw err
     }
-  }, [activeTicketId, dbThreads, getMutate])
+  }, [activeTicketId, patchThreadCaches, revalidateThreadCaches])
 
   const handleRetry = useCallback(async (id: string) => {
     const failed = failedMessages.find(m => m.id === id)
     if (!failed) return
     setFailedMessages(prev => prev.filter(m => m.id !== id))
-
-    const mutateFn = getMutate()
-    const currentThreads = getCurrentThreads()
+    setSendError(null)
 
     const optimisticMessage: Message = {
       id,
@@ -198,12 +169,10 @@ export function useTicketActions({
       sentAt: new Date().toISOString(),
     }
 
-    await mutateFn(
-      currentThreads.map(t => t.id === failed.threadId
-        ? { ...t, messages: [...t.messages, optimisticMessage] }
-        : t),
-      false
-    )
+    await patchThreadCaches(failed.threadId, thread => ({
+      ...thread,
+      messages: [...thread.messages, optimisticMessage],
+    }))
 
     try {
       const res = await fetch('/api/messages', {
@@ -211,102 +180,113 @@ export function useTicketActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ threadId: failed.threadId, text: failed.text, isNote: failed.isNote }),
       })
-      if (!res.ok) throw new Error(`Server error: ${res.status}`)
-      mutateFn()
+      await requireOkResponse(res, 'Failed to retry message')
+      await revalidateThreadCaches()
     } catch (err) {
       console.error('Failed to retry message', err)
+      setSendError(errorMessage(err, 'Failed to retry message.'))
       setFailedMessages(prev => [...prev, failed])
-      mutateFn()
+      await revalidateThreadCaches()
     }
-  }, [failedMessages, getMutate, getCurrentThreads])
+  }, [failedMessages, patchThreadCaches, revalidateThreadCaches])
 
   const handleBulkClose = useCallback(async (selectedIds: string[]) => {
     if (selectedIds.length === 0) return
     const ids = [...selectedIds]
-    setSelectedIds([])
     try {
-      await fetch('/api/threads/bulk', {
+      const res = await fetch('/api/threads/bulk', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, action: 'close' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to close selected tickets')
+      await revalidateThreadCaches()
+      setSelectedIds([])
       if (activeTicketId && ids.includes(activeTicketId)) setActiveTicketId(null)
       showToast(`${ids.length} ticket${ids.length !== 1 ? 's' : ''} closed`)
     } catch (err) {
       console.error('Bulk close failed', err)
+      showToast(errorMessage(err, 'Failed to close selected tickets.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTicketId, setSelectedIds, showToast])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTicketId, setSelectedIds, showToast])
 
   const handleBulkArchive = useCallback(async (selectedIds: string[]) => {
     if (selectedIds.length === 0) return
     const ids = [...selectedIds]
-    setSelectedIds([])
     try {
-      await fetch('/api/threads/bulk', {
+      const res = await fetch('/api/threads/bulk', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids, action: 'archive' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to archive selected tickets')
+      await revalidateThreadCaches()
+      setSelectedIds([])
       if (activeTicketId && ids.includes(activeTicketId)) setActiveTicketId(null)
       showToast(`${ids.length} ticket${ids.length !== 1 ? 's' : ''} archived`)
     } catch (err) {
       console.error('Bulk archive failed', err)
+      showToast(errorMessage(err, 'Failed to archive selected tickets.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTicketId, setSelectedIds, showToast])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTicketId, setSelectedIds, showToast])
 
   const handleMarkAsSpam = useCallback(async (threadId: string) => {
     try {
-      await fetch(`/api/threads/${threadId}`, {
+      const res = await fetch(`/api/threads/${threadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filterStatus: 'filtered', filterFeedback: 'confirmed_spam' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to mark as spam')
+      await revalidateThreadCaches()
       if (activeTicketId === threadId) setActiveTicketId(null)
       showToast('Marked as spam')
     } catch (err) {
       console.error('Failed to mark as spam', err)
+      showToast(errorMessage(err, 'Failed to mark as spam.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTicketId, showToast])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTicketId, showToast])
 
   const handleRecover = useCallback(async (threadId: string) => {
     try {
-      await fetch(`/api/threads/${threadId}`, {
+      const res = await fetch(`/api/threads/${threadId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filterStatus: 'genuine', filterFeedback: 'confirmed_genuine' }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to recover thread')
+      await revalidateThreadCaches()
       if (activeTicketId === threadId) setActiveTicketId(null)
       showToast('Recovered to inbox')
     } catch (err) {
       console.error('Failed to recover thread', err)
+      showToast(errorMessage(err, 'Failed to recover thread.'), 'error')
     }
-  }, [activeTicketId, refreshAllLists, setActiveTicketId, showToast])
+  }, [activeTicketId, revalidateThreadCaches, setActiveTicketId, showToast])
 
   const handleBulkTag = useCallback(async (selectedIds: string[], tag: string) => {
-    if (selectedIds.length === 0) return
+    const trimmedTag = tag.trim()
+    if (selectedIds.length === 0 || !trimmedTag) return
     const ids = [...selectedIds]
-    setSelectedIds([])
     try {
-      await fetch('/api/threads/bulk', {
+      const res = await fetch('/api/threads/bulk', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids, action: 'tag', tag }),
+        body: JSON.stringify({ ids, action: 'tag', tag: trimmedTag }),
       })
-      refreshAllLists()
+      await requireOkResponse(res, 'Failed to tag selected tickets')
+      await revalidateThreadCaches()
+      setSelectedIds([])
       showToast(`Tagged ${ids.length} ticket${ids.length !== 1 ? 's' : ''}`)
     } catch (err) {
       console.error('Bulk tag failed', err)
+      showToast(errorMessage(err, 'Failed to tag selected tickets.'), 'error')
     }
-  }, [refreshAllLists, setSelectedIds, showToast])
+  }, [revalidateThreadCaches, setSelectedIds, showToast])
 
   return {
     replyText,
     setReplyText,
-    isDrafting,
     isSending,
     sendError,
     setSendError,
@@ -316,7 +296,6 @@ export function useTicketActions({
     handleRetry,
     handleResolve,
     handleReopen,
-    handleAiDraft,
     handleLinkShopifyCustomer,
     handleBulkClose,
     handleBulkArchive,

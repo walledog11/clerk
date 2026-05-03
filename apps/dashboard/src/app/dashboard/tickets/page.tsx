@@ -1,7 +1,8 @@
 import { Suspense } from "react"
-import { db } from "@clerk/db"
+import { db, SenderType, ThreadFilterStatus } from "@clerk/db"
 import { getOrCreateOrg } from "@/lib/server/org"
 import { resolveAgentSettings } from "@/lib/agent/settings"
+import { CHANNEL_TYPE } from "@/lib/messaging/thread-constants"
 import TicketsPageClient from "./_components/TicketsPageClient"
 import type { Thread, OrgSettings } from "@/types"
 
@@ -10,9 +11,23 @@ export default async function TicketsPage() {
 
   const [openThreadsRaw, integrations] = await Promise.all([
     db.thread.findMany({
-      where: { organizationId: org.id, status: "open", channelType: { notIn: ["sms_agent", "dashboard_agent"] }, archivedAt: null },
-      include: { customer: true, messages: { orderBy: { sentAt: "asc" } } },
-      orderBy: { updatedAt: "desc" },
+      where: {
+        organizationId: org.id,
+        status: "open",
+        channelType: { notIn: [CHANNEL_TYPE.SMS_AGENT, CHANNEL_TYPE.DASHBOARD_AGENT] },
+        archivedAt: null,
+        deletedAt: null,
+        filterStatus: { not: ThreadFilterStatus.filtered },
+      },
+      include: {
+        customer: true,
+        messages: {
+          where: { NOT: { senderType: SenderType.note }, deletedAt: null },
+          orderBy: { sentAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { lastMessageAt: "desc" },
       take: 25,
     }),
     db.integration.findMany({

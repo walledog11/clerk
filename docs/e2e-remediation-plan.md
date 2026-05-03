@@ -20,6 +20,8 @@ The suite must stay deterministic, avoid real provider sends, fail with actionab
 - Server-side provider calls are tested through test-only outbound recording, not browser `page.route()`.
 - Clerk browser auth uses `@clerk/testing`, with active organization selection verified against the seeded DB organization.
 - Browser E2E runs the dashboard through `next build` + `next start`, not `next dev`.
+- Dashboard E2E builds no longer depend on remote font fetches and clean `.next-e2e` before each build.
+- The E2E env harness loads repo/app `.env` and `.env.e2e*` files for credentials while preserving deterministic test DB, Redis, ports, and provider fakes.
 - E2E is not launch-ready until `npm run test:e2e` passes in CI.
 
 ## Commands
@@ -46,6 +48,10 @@ Set these to real Clerk development-instance values before running `npm run test
 
 The user identified by `CLERK_E2E_EMAIL` must already belong to the Clerk organization identified by `E2E_CLERK_ORG_ID`. The DB seed uses `E2E_CLERK_ORG_ID` as `Organization.clerkOrgId`.
 
+`scripts/with-test-env.mjs` loads `.env`, `.env.local`, `.env.e2e`, `.env.e2e.local`, plus app-level dashboard/gateway `.env*` and `.env.e2e*` files before applying E2E defaults. Shell variables still win. Deterministic E2E infrastructure values (`DATABASE_URL`, `REDIS_URL`, ports, local URLs, outbound recording, fake provider credentials) are owned by the harness unless explicitly overridden through the shell-supported E2E variables such as `TEST_DATABASE_URL`.
+
+Current local env note: `.env.e2e.local` provides the required Clerk browser E2E values, and `npm run test:e2e` passes locally with that file present.
+
 ## Completed Work
 
 ### Infrastructure
@@ -59,6 +65,7 @@ The user identified by `CLERK_E2E_EMAIL` must already belong to the Clerk organi
 - [x] Reset app tables deterministically.
 - [x] Seed the E2E organization, membership, and email integration.
 - [x] Clear outbound recording before/after runs.
+- [x] Load repo/app env and `.env.e2e*` files for credentials while keeping E2E DB, Redis, ports, URLs, and provider fakes deterministic.
 
 ### Playwright Startup
 
@@ -69,6 +76,8 @@ The user identified by `CLERK_E2E_EMAIL` must already belong to the Clerk organi
 - [x] Use a public dashboard route for dashboard readiness.
 - [x] Add a dedicated browser E2E config for the Clerk-authenticated core flow.
 - [x] Run dashboard browser E2E against `next build` + `next start` instead of `next dev`.
+- [x] Remove build-time remote font fetches from dashboard E2E builds.
+- [x] Clean the dashboard `.next-e2e` output before each E2E build.
 
 ### Auth
 
@@ -121,6 +130,7 @@ The user identified by `CLERK_E2E_EMAIL` must already belong to the Clerk organi
 - [x] Verify outbound recording captures the email send.
 - [x] Verify the agent message is persisted in DB and visible in the UI.
 - [x] Once passing locally, run through `npm run test:e2e`.
+- [x] Add `CLERK_E2E_EMAIL` and a real non-placeholder `E2E_CLERK_ORG_ID` to env visible to Playwright in this workspace.
 - [ ] Configure CI env with the required Clerk browser E2E values.
 
 Expected failure order to debug:

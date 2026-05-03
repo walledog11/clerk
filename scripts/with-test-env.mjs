@@ -1,14 +1,36 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import dotenv from 'dotenv';
 
 const DEFAULT_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55432/clerk_test?schema=public';
 const DEFAULT_REDIS_URL = 'redis://127.0.0.1:56379/0';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ENV_FILE_PATHS = [
+  path.join(REPO_ROOT, '.env'),
+  path.join(REPO_ROOT, '.env.local'),
+  path.join(REPO_ROOT, 'apps/dashboard/.env'),
+  path.join(REPO_ROOT, 'apps/dashboard/.env.local'),
+  path.join(REPO_ROOT, 'apps/gateway/.env'),
+  path.join(REPO_ROOT, 'apps/gateway/.env.local'),
+  path.join(REPO_ROOT, '.env.e2e'),
+  path.join(REPO_ROOT, '.env.e2e.local'),
+  path.join(REPO_ROOT, 'apps/dashboard/.env.e2e'),
+  path.join(REPO_ROOT, 'apps/dashboard/.env.e2e.local'),
+  path.join(REPO_ROOT, 'apps/gateway/.env.e2e'),
+  path.join(REPO_ROOT, 'apps/gateway/.env.e2e.local'),
+];
 
 export function getTestEnv(baseEnv = process.env) {
-  return {
+  const envFiles = loadEnvFiles();
+  const env = {
+    ...envFiles,
     ...baseEnv,
+  };
+
+  return {
+    ...env,
     NODE_ENV: 'test',
     DATABASE_URL: baseEnv.TEST_DATABASE_URL || DEFAULT_DATABASE_URL,
     REDIS_URL: baseEnv.TEST_REDIS_URL || DEFAULT_REDIS_URL,
@@ -20,16 +42,16 @@ export function getTestEnv(baseEnv = process.env) {
     GATEWAY_PUBLIC_URL: baseEnv.GATEWAY_PUBLIC_URL || baseEnv.GATEWAY_INTERNAL_URL || 'http://127.0.0.1:8180',
     PORT: baseEnv.PORT || '8180',
     E2E_TEST_RUN: baseEnv.E2E_TEST_RUN || 'true',
-    CLERK_SECRET_KEY: baseEnv.CLERK_SECRET_KEY || 'sk_test_clerk',
-    CLERK_PUBLISHABLE_KEY: baseEnv.CLERK_PUBLISHABLE_KEY || baseEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k', // gitleaks:allow
+    CLERK_SECRET_KEY: env.CLERK_SECRET_KEY || 'sk_test_clerk',
+    CLERK_PUBLISHABLE_KEY: env.CLERK_PUBLISHABLE_KEY || env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k', // gitleaks:allow
     ANTHROPIC_API_KEY: baseEnv.ANTHROPIC_API_KEY || 'test-anthropic-key',
     INTERNAL_API_SECRET: baseEnv.INTERNAL_API_SECRET || 'test-internal-secret',
     INTERNAL_API_SECRET_PREV: baseEnv.INTERNAL_API_SECRET_PREV || 'test-internal-secret-prev',
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: baseEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || baseEnv.CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k', // gitleaks:allow
-    E2E_AUTH_BYPASS: baseEnv.E2E_AUTH_BYPASS || 'false',
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k', // gitleaks:allow
+    E2E_AUTH_BYPASS: env.E2E_AUTH_BYPASS || 'false',
     E2E_AI_MODE: baseEnv.E2E_AI_MODE || 'deterministic',
-    E2E_CLERK_ORG_ID: baseEnv.E2E_CLERK_ORG_ID || 'org_e2e_test',
-    E2E_CLERK_USER_ID: baseEnv.E2E_CLERK_USER_ID || 'user_e2e_test',
+    E2E_CLERK_ORG_ID: env.E2E_CLERK_ORG_ID || 'org_e2e_test',
+    E2E_CLERK_USER_ID: env.E2E_CLERK_USER_ID || 'user_e2e_test',
     E2E_OUTBOUND_MODE: baseEnv.E2E_OUTBOUND_MODE || 'record',
     E2E_OUTBOUND_RECORD_PATH: baseEnv.E2E_OUTBOUND_RECORD_PATH || path.join(REPO_ROOT, 'test-results', 'e2e-outbound.jsonl'),
     E2E_TEST_EMAIL_ADDRESS: baseEnv.E2E_TEST_EMAIL_ADDRESS || 'support-e2e@inbound.test',
@@ -49,6 +71,22 @@ export function getTestEnv(baseEnv = process.env) {
     UPSTASH_REDIS_REST_URL: baseEnv.UPSTASH_REDIS_REST_URL || 'https://example-upstash.local',
     UPSTASH_REDIS_REST_TOKEN: baseEnv.UPSTASH_REDIS_REST_TOKEN || 'test-upstash-token',
   };
+}
+
+function loadEnvFiles() {
+  return ENV_FILE_PATHS.reduce((acc, envPath) => {
+    try {
+      return {
+        ...acc,
+        ...dotenv.parse(readFileSync(envPath)),
+      };
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+        return acc;
+      }
+      throw error;
+    }
+  }, {});
 }
 
 async function main() {

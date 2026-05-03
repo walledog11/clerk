@@ -24,9 +24,7 @@ interface Props {
     customerName: string
     channelType: Ticket["channelType"]
     customerPlatformId?: string
-    isDrafting: boolean
     isSending: boolean
-    onDraft: () => void
     replyText: string
     sendError: string | null
     shopifyCustomerId?: string | null
@@ -88,13 +86,11 @@ export default function ConversationComposerArea({
         viewTab={viewTab}
         noteCount={noteCount}
         onViewTabChange={onViewTabChange}
-        isDrafting={composer.isDrafting}
         isSending={composer.isSending}
         error={composer.sendError}
         onChange={onChange}
         onClearClerk={onClearClerk}
         onSend={onSend}
-        onDraft={composer.onDraft}
       />
     </div>
   )

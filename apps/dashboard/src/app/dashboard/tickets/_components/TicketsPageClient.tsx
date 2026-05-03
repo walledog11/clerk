@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
-import { CheckCircle2, Inbox } from "lucide-react"
+import { AlertCircle, CheckCircle2, Inbox, Loader2 } from "lucide-react"
 import useSWR from 'swr'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -26,6 +26,7 @@ interface Props {
 
 export default function TicketsPageClient({ initialOpenThreads, hasShopify, agentName }: Props) {
   const searchParams = useSearchParams()
+  const queryThreadId = searchParams.get('thread')
 
   const [activeFilter, setActiveFilter] = useState<ChannelType | null>(null)
   const [activeTab, setActiveTab] = useState<'open' | 'closed' | 'filtered'>('open')
@@ -34,13 +35,14 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
   const [showContextDrawer, setShowContextDrawer] = useState(false)
   const [refreshingSummaryId, setRefreshingSummaryId] = useState<string | null>(null)
   const summaryRequestsRef = useRef(new Set<string>())
+  const appliedQueryThreadRef = useRef<string | null>(null)
   const isDesktopContext = useMediaQuery('(min-width: 1280px)')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const { threads: openThreads, isLoading: openLoading, error, mutate: mutateOpen, loadMore: loadMoreOpen, hasMore: hasMoreOpen, isLoadingMore: isLoadingMoreOpen } = usePaginatedThreads('open', initialOpenThreads)
-  const { threads: closedThreads, isLoading: closedLoading, mutate: mutateClosed, loadMore: loadMoreClosed, hasMore: hasMoreClosed, isLoadingMore: isLoadingMoreClosed } = usePaginatedThreads('closed')
-  const { threads: filteredThreads, isLoading: filteredLoading, mutate: mutateFiltered, loadMore: loadMoreFiltered, hasMore: hasMoreFiltered, isLoadingMore: isLoadingMoreFiltered } = usePaginatedThreads('open', undefined, false, 'filtered')
+  const { threads: openThreads, isLoading: openLoading, error, mutate: mutateOpen, loadMore: loadMoreOpen, hasMore: hasMoreOpen, isLoadingMore: isLoadingMoreOpen } = usePaginatedThreads('open', initialOpenThreads, true)
+  const { threads: closedThreads, isLoading: closedLoading, mutate: mutateClosed, loadMore: loadMoreClosed, hasMore: hasMoreClosed, isLoadingMore: isLoadingMoreClosed } = usePaginatedThreads('closed', undefined, true)
+  const { threads: filteredThreads, isLoading: filteredLoading, mutate: mutateFiltered, loadMore: loadMoreFiltered, hasMore: hasMoreFiltered, isLoadingMore: isLoadingMoreFiltered } = usePaginatedThreads('open', undefined, true, 'filtered')
   const isSearchMode = searchQuery.length >= 2
   const dbThreads = useMemo(
     () => {
@@ -59,24 +61,33 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
     { keepPreviousData: true },
   )
   const searchThreads = useMemo(() => searchData?.threads ?? [], [searchData?.threads])
+  const activeThreadKey = activeTicketId ? `/api/threads/${activeTicketId}` : null
+  const {
+    data: activeThreadData,
+    error: activeThreadError,
+    isLoading: isActiveThreadLoading,
+    mutate: mutateActiveThread,
+  } = useSWR<{ thread: Thread }>(activeThreadKey, fetcher)
 
-  const filteredTickets: Ticket[] = useMemo(() => {
-    if (isSearchMode) {
-      return searchThreads.map(t => threadToTicket(t, agentName))
-    }
-    return dbThreads
-      .filter(t => !activeFilter || t.channelType === activeFilter)
-      .map(t => threadToTicket(t, agentName))
-  }, [isSearchMode, searchThreads, dbThreads, activeFilter, agentName])
-
-  const liveTickets: Ticket[] = useMemo(
-    () => isSearchMode ? filteredTickets : dbThreads.map(t => threadToTicket(t, agentName)),
-    [isSearchMode, filteredTickets, dbThreads, agentName]
+  const listThreads = useMemo(
+    () => isSearchMode ? searchThreads : dbThreads,
+    [dbThreads, isSearchMode, searchThreads],
   )
 
-  const activeTicket = liveTickets.find(t => t.id === activeTicketId)
-  const allThreads = isSearchMode ? searchThreads : dbThreads
-  const activeThread = allThreads.find(t => t.id === activeTicketId)
+  const liveTickets: Ticket[] = useMemo(
+    () => listThreads.map(t => threadToTicket(t, agentName)),
+    [listThreads, agentName],
+  )
+
+  const filteredTickets: Ticket[] = useMemo(
+    () => isSearchMode
+      ? liveTickets
+      : liveTickets.filter(t => !activeFilter || t.channelType === activeFilter),
+    [activeFilter, isSearchMode, liveTickets],
+  )
+
+  const activeThread = activeThreadData?.thread
+  const activeTicket = activeThread ? threadToTicket(activeThread, agentName) : undefined
 
   const lastCustomerMessageId = useMemo(
     () => activeThread?.messages.filter(m => m.senderType === 'customer').at(-1)?.id ?? null,
@@ -91,27 +102,54 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
     [activeThread?.id, cachedPlanMessageId, lastCustomerMessageId],
   )
 
+  const patchThreadCaches = useCallback(async (threadId: string, updateThread: (thread: Thread) => Thread) => {
+    const updateIfMatch = (thread: Thread): Thread =>
+      thread.id === threadId ? updateThread(thread) : thread
+
+    await Promise.all([
+      mutateOpen(openThreads.map(updateIfMatch), false),
+      mutateClosed(closedThreads.map(updateIfMatch), false),
+      mutateFiltered(filteredThreads.map(updateIfMatch), false),
+      mutateSearch(
+        current => current
+          ? { ...current, threads: current.threads.map(updateIfMatch) }
+          : current,
+        { revalidate: false },
+      ),
+      mutateActiveThread(
+        current => current?.thread.id === threadId
+          ? { ...current, thread: updateThread(current.thread) }
+          : current,
+        { revalidate: false },
+      ),
+    ])
+  }, [closedThreads, filteredThreads, mutateActiveThread, mutateClosed, mutateFiltered, mutateOpen, mutateSearch, openThreads])
+
+  const revalidateThreadCaches = useCallback(async () => {
+    await Promise.all([
+      mutateOpen(),
+      mutateClosed(),
+      mutateFiltered(),
+      mutateSearch(),
+      mutateActiveThread(),
+    ])
+  }, [mutateActiveThread, mutateClosed, mutateFiltered, mutateOpen, mutateSearch])
+
   const { selectedIds, setSelectedIds, handleToggleSelect, handleClearSelection } = useTicketSelection()
 
   const {
     replyText, setReplyText,
-    isDrafting, isSending, sendError, setSendError,
+    isSending, sendError, setSendError,
     toast,
     failedMessages, handleRetry,
     handleSendMessage, handleResolve, handleReopen,
-    handleAiDraft, handleLinkShopifyCustomer,
+    handleLinkShopifyCustomer,
     handleBulkClose, handleBulkArchive, handleBulkTag,
     handleMarkAsSpam, handleRecover,
   } = useTicketActions({
     activeTicketId,
-    activeTab,
-    dbThreads,
-    openThreads,
-    closedThreads,
-    filteredThreads,
-    mutateOpen,
-    mutateClosed,
-    mutateFiltered,
+    patchThreadCaches,
+    revalidateThreadCaches,
     setActiveTab,
     setActiveTicketId,
     setSelectedIds,
@@ -122,52 +160,46 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
     handleAgentTurnAdd, handleAgentRunningChange, handleAgentComplete,
   } = useAgentTurns({
     activeTicketId,
-    activeTab,
     activeThread,
-    mutateOpen,
-    mutateClosed,
-    mutateFiltered,
-    openThreads,
-    closedThreads,
-    filteredThreads,
+    patchThreadCaches,
+    revalidateThreadCaches,
   })
 
-  // Pre-select thread from ?thread= query param
+  // Pre-select thread from ?thread= query param, fetching details even when the
+  // thread is not in the currently loaded list page.
   useEffect(() => {
-    const threadId = searchParams.get('thread')
-    if (!threadId) return
-    if (openThreads.find(t => t.id === threadId)) {
-      setActiveTab('open')
-      setActiveTicketId(threadId)
-    } else if (closedThreads.find(t => t.id === threadId)) {
-      setActiveTab('closed')
-      setActiveTicketId(threadId)
-    } else if (filteredThreads.find(t => t.id === threadId)) {
-      setActiveTab('filtered')
-      setActiveTicketId(threadId)
+    if (!queryThreadId) {
+      appliedQueryThreadRef.current = null
+      return
     }
-  }, [searchParams, openThreads, closedThreads, filteredThreads])
+    if (appliedQueryThreadRef.current === queryThreadId) return
+    appliedQueryThreadRef.current = queryThreadId
+    setActiveTicketId(current => current === queryThreadId ? current : queryThreadId)
+    if (openThreads.find(t => t.id === queryThreadId)) {
+      setActiveTab('open')
+    } else if (closedThreads.find(t => t.id === queryThreadId)) {
+      setActiveTab('closed')
+    } else if (filteredThreads.find(t => t.id === queryThreadId)) {
+      setActiveTab('filtered')
+    }
+  }, [queryThreadId, openThreads, closedThreads, filteredThreads])
+
+  useEffect(() => {
+    if (!queryThreadId || activeThread?.id !== queryThreadId) return
+    if (activeThread.filterStatus === 'filtered') {
+      setActiveTab('filtered')
+    } else {
+      setActiveTab(activeThread.status === 'closed' ? 'closed' : 'open')
+    }
+  }, [activeThread?.filterStatus, activeThread?.id, activeThread?.status, queryThreadId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeTicket?.messages?.length, activeTicketId])
 
   const patchThreadSummary = useCallback(async (threadId: string, summary: string | null) => {
-    const updateThread = (thread: Thread): Thread =>
-      thread.id === threadId ? { ...thread, aiSummary: summary } : thread
-
-    await Promise.all([
-      mutateOpen([...(openThreads.map(updateThread))], false),
-      mutateClosed([...(closedThreads.map(updateThread))], false),
-      mutateFiltered([...(filteredThreads.map(updateThread))], false),
-      mutateSearch(
-        current => current
-          ? { ...current, threads: current.threads.map(updateThread) }
-          : current,
-        { revalidate: false },
-      ),
-    ])
-  }, [closedThreads, filteredThreads, mutateClosed, mutateFiltered, mutateOpen, mutateSearch, openThreads])
+    await patchThreadCaches(threadId, thread => ({ ...thread, aiSummary: summary }))
+  }, [patchThreadCaches])
 
   const handleRefreshSummary = useCallback(async (threadId: string) => {
     if (refreshingSummaryId === threadId) return
@@ -318,7 +350,6 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               isSummaryRefreshing={refreshingSummaryId === activeThread.id}
               onRefreshSummary={() => handleRefreshSummary(activeThread.id)}
               replyText={replyText}
-              isDrafting={isDrafting}
               isSending={isSending}
               sendError={sendError}
               messagesEndRef={messagesEndRef}
@@ -330,7 +361,6 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               onReopen={handleReopen}
               onReplyChange={text => { setReplyText(text); if (sendError) setSendError(null) }}
               onSend={handleSendMessage}
-              onDraft={handleAiDraft}
             />
             {/* Desktop context panel */}
             {isDesktopContext && (
@@ -362,6 +392,25 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
               </SheetContent>
             </Sheet>
           </>
+        ) : activeTicketId ? (
+          <div className="flex-1 flex flex-col items-center justify-center bg-background p-6 text-center gap-3">
+            {activeThreadError ? (
+              <>
+                <AlertCircle className="w-5 h-5 text-red-400" />
+                <div>
+                  <p className="text-sm font-semibold text-white/60">Unable to load conversation</p>
+                  <p className="text-xs text-white/30 mt-1">The thread may have been archived or is no longer available.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Loader2 className="w-5 h-5 text-white/30 animate-spin" />
+                <p className="text-sm font-semibold text-white/50">
+                  {isActiveThreadLoading ? 'Loading conversation…' : 'Preparing conversation…'}
+                </p>
+              </>
+            )}
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-background p-6 text-center gap-4">
             <div className="w-14 h-14 rounded-md bg-white/[0.05] border border-border flex items-center justify-center">
@@ -387,8 +436,11 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-[#1c1c1c] border border-white/[0.10] text-white text-sm font-medium px-4 py-2.5 rounded-md shadow-lg pointer-events-none">
-          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-          {toast}
+          {toast.tone === 'error'
+            ? <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            : <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+          }
+          {toast.message}
         </div>
       )}
     </div>
