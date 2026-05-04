@@ -50,6 +50,7 @@ export function getTestEnv(baseEnv = process.env) {
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || env.CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k', // gitleaks:allow
     E2E_AUTH_BYPASS: env.E2E_AUTH_BYPASS || 'false',
     E2E_AI_MODE: baseEnv.E2E_AI_MODE || 'deterministic',
+    E2E_RATE_LIMIT_TEST_MODE: baseEnv.E2E_RATE_LIMIT_TEST_MODE || 'force-header',
     E2E_CLERK_ORG_ID: env.E2E_CLERK_ORG_ID || 'org_e2e_test',
     E2E_CLERK_USER_ID: env.E2E_CLERK_USER_ID || 'user_e2e_test',
     E2E_OUTBOUND_MODE: baseEnv.E2E_OUTBOUND_MODE || 'record',

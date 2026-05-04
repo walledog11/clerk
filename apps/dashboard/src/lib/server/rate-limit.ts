@@ -1,5 +1,17 @@
 import { NextResponse } from 'next/server';
+import { Redis as IORedis } from 'ioredis';
 import { getRedis } from '@/lib/server/redis';
+
+interface RateLimitOptions {
+  forceForE2E?: boolean;
+}
+
+interface RedisRateLimitClient {
+  incr(key: string): Promise<number>;
+  expire(key: string, seconds: number): Promise<unknown>;
+}
+
+let e2eRedis: IORedis | null = null;
 
 /**
  * Fixed-window rate limiter backed by Redis INCR.
@@ -15,18 +27,19 @@ export async function rateLimit(
   key: string,
   limit = 10,
   windowSecs = 60,
+  options: RateLimitOptions = {},
 ): Promise<{ success: boolean; remaining: number; reset: number }> {
   const now = Math.floor(Date.now() / 1000);
   const windowStart = Math.floor(now / windowSecs);
   const windowKey = `rl:${key}:${windowStart}`;
   const reset = (windowStart + 1) * windowSecs;
 
-  if (isE2ERateLimitBypassEnabled()) {
+  if (isE2ERateLimitBypassEnabled(process.env, options)) {
     return { success: true, remaining: limit, reset };
   }
 
   try {
-    const client = getRedis();
+    const client = getRateLimitClient(options);
     const count = await client.incr(windowKey);
     if (count === 1) {
       // Set expiry only on first increment so the key is cleaned up automatically
@@ -42,8 +55,47 @@ export async function rateLimit(
   }
 }
 
-export function isE2ERateLimitBypassEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NODE_ENV !== 'production' && env.E2E_TEST_RUN === 'true';
+function getRateLimitClient(options: RateLimitOptions): RedisRateLimitClient {
+  if (isE2ERateLimitForceEnabled(process.env, options)) {
+    return getE2ERedis();
+  }
+
+  return getRedis();
+}
+
+function getE2ERedis(): IORedis {
+  if (!e2eRedis) {
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+      throw new Error('REDIS_URL is required for E2E rate-limit enforcement');
+    }
+    e2eRedis = new IORedis(redisUrl);
+    e2eRedis.on('error', () => undefined);
+  }
+  return e2eRedis;
+}
+
+export function isE2ERateLimitBypassEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  options: RateLimitOptions = {},
+): boolean {
+  return readEnv(env, 'NODE_ENV') !== 'production' &&
+    readEnv(env, 'E2E_TEST_RUN') === 'true' &&
+    !isE2ERateLimitForceEnabled(env, options);
+}
+
+export function isE2ERateLimitForceEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+  options: RateLimitOptions = {},
+): boolean {
+  return readEnv(env, 'NODE_ENV') === 'test' &&
+    readEnv(env, 'E2E_TEST_RUN') === 'true' &&
+    readEnv(env, 'E2E_RATE_LIMIT_TEST_MODE') === 'force-header' &&
+    options.forceForE2E === true;
+}
+
+function readEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  return env[name];
 }
 
 /** Returns a 429 response with standard rate-limit headers */

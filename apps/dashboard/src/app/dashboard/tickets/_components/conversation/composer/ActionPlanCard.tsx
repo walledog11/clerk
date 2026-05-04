@@ -119,6 +119,7 @@ export default function ActionPlanCard({ plan, isExecuting, isRegenerating, onAp
           <motion.div
             key="card"
             layoutId="plan-card"
+            data-testid="action-plan-card"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -174,6 +175,9 @@ export default function ActionPlanCard({ plan, isExecuting, isRegenerating, onAp
                   return (
                     <button
                       key={step.id}
+                      data-testid="action-plan-step-toggle"
+                      data-step-id={step.id}
+                      aria-pressed={step.enabled}
                       onClick={() => toggleStep(step.id)}
                       disabled={isExecuting}
                       className="w-full flex items-start gap-3 px-4 py-2.5 text-left hover:bg-white/[0.04] transition-colors disabled:opacity-60"
@@ -216,6 +220,7 @@ export default function ActionPlanCard({ plan, isExecuting, isRegenerating, onAp
               {/* Actions */}
               <div className="flex items-center gap-2 px-4 py-2.5 border-t border-white/[0.06] bg-white/[0.02]">
                 <button
+                  data-testid="action-plan-run"
                   onClick={handleRun}
                   disabled={isExecuting || enabledCount === 0}
                   className="flex items-center gap-1.5 h-8 px-4 bg-green-400 hover:bg-green-300 disabled:bg-white/[0.07] disabled:text-white/25 text-black text-xs font-semibold rounded-md transition-colors"
@@ -226,6 +231,7 @@ export default function ActionPlanCard({ plan, isExecuting, isRegenerating, onAp
                   }
                 </button>
                 <button
+                  data-testid="action-plan-dismiss"
                   onClick={onDismiss}
                   disabled={isExecuting}
                   className="h-8 px-3 text-xs font-semibold text-white/50 border border-white/[0.12] rounded-md hover:text-white/70 hover:border-white/[0.20] transition-colors disabled:opacity-40"

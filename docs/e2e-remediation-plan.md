@@ -22,7 +22,7 @@ The suite must stay deterministic, avoid real provider sends, fail with actionab
 - Browser E2E runs the dashboard through `next build` + `next start`, not `next dev`.
 - Dashboard E2E builds no longer depend on remote font fetches and clean `.next-e2e` before each build.
 - The E2E env harness loads repo/app `.env` and `.env.e2e*` files for credentials while preserving deterministic test DB, Redis, ports, and provider fakes.
-- E2E is not launch-ready until `npm run test:e2e` passes in CI.
+- The CI launch gate passed in GitHub Actions, including `npm run lint`, `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e`.
 
 ## Commands
 
@@ -52,9 +52,11 @@ The user identified by `CLERK_E2E_EMAIL` must already belong to the Clerk organi
 
 Current local env note: `.env.e2e.local` provides the required Clerk browser E2E values, and `npm run test:e2e` passes locally with that file present.
 
-Current CI env note: GitHub repository secrets include the required Clerk browser E2E values. The E2E workflow now runs `npm run test:e2e` directly, so browser E2E can no longer be skipped when Clerk env is missing.
+Current CI env note: GitHub repository secrets include the required Clerk browser E2E values. The E2E workflow runs `npm run test:e2e` directly, so browser E2E can no longer be skipped when Clerk env is missing.
 
-Latest local launch-gate verification: `npm run lint`, `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e` passed in this workspace. CI proof is still pending until the workflow runs on GitHub.
+Latest launch-gate verification: `npm run lint`, `npm run test:unit`, `npm run test:integration`, and `npm run test:e2e` passed locally and in GitHub Actions run `25296473503`.
+
+Current tranche local verification: `npm run lint`, `npm run test:unit`, `npm run test:integration`, `npm run test:e2e:smoke`, `npm run test:e2e:browser`, and the combined `npm run test:e2e` pass locally. CI proof for the new AI plan approval and Priority 4 safety regression coverage is still pending.
 
 ## Completed Work
 
@@ -110,8 +112,17 @@ Latest local launch-gate verification: `npm run lint`, `npm run test:unit`, `npm
 ### Existing E2E Coverage
 
 - [x] Email inbound creates customer/thread/message.
-- [x] Instagram webhook accepts a valid HMAC request and returns `EVENT_RECEIVED`.
+- [x] Instagram webhook accepts a valid HMAC request, returns `EVENT_RECEIVED`, and persists the downstream thread/message.
 - [x] Request-level dashboard auth-bypass smoke test passes.
+
+### Webhook Hardening Integration Coverage
+
+- [x] Shopify webhook HMAC success coverage.
+- [x] Invalid signature coverage for Meta.
+- [x] Invalid signature coverage for Shopify.
+- [x] Duplicate email inbound idempotency coverage.
+- [x] Duplicate Meta inbound idempotency coverage.
+- [x] Unknown integration coverage that returns safely without enqueueing downstream processing.
 
 ## Remaining Work
 
@@ -148,50 +159,56 @@ Expected failure order to debug:
 
 ### Priority 2: Strengthen Webhook Coverage
 
-- [ ] Add Shopify webhook HMAC success coverage.
-- [ ] Add invalid signature coverage for Meta.
-- [ ] Add invalid signature coverage for Shopify.
-- [ ] Add duplicate email inbound idempotency coverage.
-- [ ] Add duplicate Meta inbound idempotency coverage.
-- [ ] Add unknown integration coverage that returns safely and creates no thread.
-- [ ] Tighten the Instagram test so it proves queue enqueue or downstream processing, not just `EVENT_RECEIVED`.
+The remaining webhook hardening gaps below are covered locally. The Instagram request-level E2E now proves downstream DB persistence, not just `EVENT_RECEIVED`.
+
+- [x] Add Shopify webhook HMAC success coverage.
+- [x] Add invalid signature coverage for Meta.
+- [x] Add invalid signature coverage for Shopify.
+- [x] Add duplicate email inbound idempotency coverage.
+- [x] Add duplicate Meta inbound idempotency coverage.
+- [x] Add unknown integration coverage that returns safely and creates no thread.
+- [x] Tighten the Instagram test so it proves queue enqueue or downstream processing, not just `EVENT_RECEIVED`.
 
 ### Priority 3: Add AI Plan Approval E2E
 
-- [ ] Seed a deterministic email thread with a customer message.
+Implemented and passing locally in `npm run test:e2e`.
+
+- [x] Seed a deterministic email thread with a customer message.
 - [x] Avoid real Anthropic calls by seeding `Thread.cachedPlan` or adding a tightly guarded deterministic E2E AI mode.
-- [ ] Open the ticket in a Clerk-authenticated browser session.
-- [ ] Assert the action plan card renders.
-- [ ] Approve the plan.
-- [ ] Assert approved tool calls execute through outbound recording.
-- [ ] Assert action/audit state is persisted.
+- [x] Open the ticket in a Clerk-authenticated browser session.
+- [x] Assert the action plan card renders.
+- [x] Approve the plan.
+- [x] Assert approved tool calls execute through outbound recording.
+- [x] Assert action/audit state is persisted.
 
 ### Priority 4: Add Safety Regression E2Es
 
-- [ ] Cross-org isolation: Org A cannot access Org B thread API.
-- [ ] Cross-org isolation: Org A cannot access Org B thread UI.
-- [ ] Unsupported channel dispatch returns an error.
-- [ ] Unsupported channel dispatch does not persist a fake sent message.
-- [ ] Filtered spam email does not auto-plan.
-- [ ] Filtered spam email does not notify/send outbound messages.
-- [ ] High-cost agent endpoint rate limiting behaves as expected.
+Implemented and passing locally in `npm run test:e2e`.
+
+- [x] Cross-org isolation: Org A cannot access Org B thread API.
+- [x] Cross-org isolation: Org A cannot access Org B thread UI.
+- [x] Unsupported channel dispatch returns an error.
+- [x] Unsupported channel dispatch does not persist a fake sent message.
+- [x] Filtered spam email does not auto-plan.
+- [x] Filtered spam email does not notify/send outbound messages.
+- [x] High-cost agent endpoint rate limiting behaves as expected.
 
 ### Priority 5: CI Launch Gate
 
 - [x] Start Docker test services before integration/E2E tests.
 - [x] Configure Clerk E2E values as CI secrets.
-- [ ] Run `npm run lint`.
-- [ ] Run `npm run test:unit`.
-- [ ] Run `npm run test:integration`.
-- [ ] Run `npm run test:e2e`.
-- [ ] Upload Playwright traces/screenshots on failure.
-- [ ] Keep fake Postmark, Twilio, Meta, Anthropic, Shopify, and Stripe provider credentials in CI.
-- [ ] Rely on outbound recording for provider assertions.
-- [ ] Fail clearly if Postgres, Redis, Clerk credentials, or browser binaries are missing.
+- [x] Run `npm run lint`.
+- [x] Run `npm run test:unit`.
+- [x] Run `npm run test:integration`.
+- [x] Run `npm run test:e2e`.
+- [x] Upload Playwright traces/screenshots on failure.
+- [x] Keep fake Postmark, Twilio, Meta, Anthropic, Shopify, and Stripe provider credentials in CI.
+- [x] Rely on outbound recording for provider assertions.
+- [x] Fail clearly if Postgres, Redis, Clerk credentials, or browser binaries are missing.
 
 ## Launch Gate
 
-Do not call E2E launch-ready until CI proves:
+E2E is launch-ready because CI proved:
 
 - `npm run lint` passes.
 - `npm run test:unit` passes.

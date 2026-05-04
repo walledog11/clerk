@@ -168,6 +168,27 @@ describe('POST /api/messages', () => {
     expect(res.status).toBe(502);
   });
 
+  it('returns 502 for unsupported channels without saving an agent message', async () => {
+    const customer = await createTestCustomer(org.id, 'tiktok_sender_456');
+    const thread = await createTestThread(org.id, customer.id, ChannelType.tiktok);
+
+    const req = new Request('http://localhost:3000/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: thread.id, text: 'Reply should not persist' }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(502);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('Unsupported channel');
+
+    const agentMessageCount = await db.message.count({
+      where: { threadId: thread.id, senderType: SenderType.agent },
+    });
+    expect(agentMessageCount).toBe(0);
+  });
+
   it('dispatches via Postmark for email threads and saves the message', async () => {
     const emailAddress = `support_${org.id.slice(0, 8)}@acme.com`;
     await createTestIntegration(org.id, {

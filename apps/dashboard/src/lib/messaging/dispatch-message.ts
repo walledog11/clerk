@@ -189,6 +189,8 @@ export async function dispatchMessage(
         Headers: headers,
       });
     }
+  } else {
+    return { ok: false, error: 'Unsupported channel' };
   }
 
   await createMessage(

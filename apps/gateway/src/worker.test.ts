@@ -89,7 +89,11 @@ function makeEmailJob(organizationId: string, overrides: Record<string, unknown>
   };
 }
 
-function makeIgDmJob(organizationId: string, senderId = 'ig_sender_001') {
+function makeIgDmJob(
+  organizationId: string,
+  senderId = 'ig_sender_001',
+  options: { messageMid?: string; text?: string } = {},
+) {
   return {
     id: 'job-ig-test',
     data: {
@@ -105,7 +109,10 @@ function makeIgDmJob(organizationId: string, senderId = 'ig_sender_001') {
               {
                 sender: { id: senderId },
                 recipient: { id: 'page_123' },
-                message: { text: 'Hi, can you help me?', mid: `mid_ig_${Date.now()}` },
+                message: {
+                  text: options.text ?? 'Hi, can you help me?',
+                  mid: options.messageMid ?? `mid_ig_${Date.now()}`,
+                },
               },
             ],
           },
@@ -500,6 +507,43 @@ describe('Message worker — ig_dm branch', () => {
       where: { organizationId: org.id, customerId: existingCustomer.id, channelType: ChannelType.ig_dm },
     });
     expect(threadCount).toBe(1);
+  });
+
+  it('skips duplicate IG DMs with the same Meta message id', async () => {
+    const handler = capturedHandlers.get('inbound-messages');
+    const senderId = 'ig_duplicate_sender_001';
+    const messageMid = 'mid_ig_duplicate_001';
+    const job = makeIgDmJob(org.id, senderId, { messageMid });
+
+    await handler!(job);
+    await handler!(job);
+
+    const customerCount = await db.customer.count({
+      where: { organizationId: org.id, platformId: senderId },
+    });
+    expect(customerCount).toBe(1);
+
+    const customer = await db.customer.findFirst({
+      where: { organizationId: org.id, platformId: senderId },
+    });
+    expect(customer).not.toBeNull();
+
+    const threadCount = await db.thread.count({
+      where: { organizationId: org.id, customerId: customer!.id, channelType: ChannelType.ig_dm },
+    });
+    expect(threadCount).toBe(1);
+
+    const messageCount = await db.message.count({
+      where: { externalMessageId: messageMid },
+    });
+    expect(messageCount).toBe(1);
+
+    const messagesForSender = await db.message.count({
+      where: {
+        thread: { organizationId: org.id, customerId: customer!.id, channelType: ChannelType.ig_dm },
+      },
+    });
+    expect(messagesForSender).toBe(1);
   });
 
   it('fetches IG profile when integration has an access token', async () => {

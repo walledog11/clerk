@@ -138,6 +138,7 @@ Respond ONLY in strict JSON: {"summary":"...","tag":"...","classification":"..."
 const JSON_FENCE_OPEN = /^```json\s*/i;
 const JSON_FENCE_CLOSE = /```\s*$/;
 const VALID_FILTER_STATUSES: ReadonlySet<string> = new Set(Object.values(ThreadFilterStatus));
+const E2E_FILTERED_SPAM_MARKER = 'E2E_FILTERED_SPAM';
 
 function isFilterStatus(value: string): value is DbThreadFilterStatus {
   return VALID_FILTER_STATUSES.has(value);
@@ -155,8 +156,29 @@ function parseClassifierJson(raw: string): ClassificationResult {
   return { summary: parsed.summary, tag: parsed.tag, filterStatus: parsed.classification, filterReason: parsed.reason };
 }
 
+function isDeterministicE2EAIEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NODE_ENV === 'test' && env.E2E_TEST_RUN === 'true' && env.E2E_AI_MODE === 'deterministic';
+}
+
+function deterministicE2EClassification(subject: string, body: string): ClassificationResult | null {
+  if (!isDeterministicE2EAIEnabled()) return null;
+
+  const input = `${subject}\n${body}`;
+  if (!input.includes(E2E_FILTERED_SPAM_MARKER)) return null;
+
+  return {
+    summary: 'E2E spam marker was filtered before automation.',
+    tag: 'General',
+    filterStatus: 'filtered',
+    filterReason: 'Deterministic E2E spam marker',
+  };
+}
+
 // Fails open to 'genuine' so a classifier outage never drops legitimate mail.
 async function classifyAndSummarizeNewEmail(subject: string, body: string): Promise<ClassificationResult> {
+  const deterministic = deterministicE2EClassification(subject, body);
+  if (deterministic) return deterministic;
+
   try {
     const response = await getAnthropic().messages.create({
       model: MODEL.CLAUDE,

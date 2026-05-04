@@ -20,7 +20,9 @@ export async function POST(request: Request) {
   try {
     const org = await getOrCreateOrg();
 
-    const rl = await rateLimit(`agent:${org.id}`, 10, 60);
+    const rl = await rateLimit(`agent:${org.id}`, 10, 60, {
+      forceForE2E: request.headers.get("x-e2e-rate-limit") === "enforce",
+    });
     if (!rl.success) return tooManyRequests(rl.reset);
     const { threadId, instruction, approvedToolCalls } = parseAgentRouteBody(await request.json());
     const instructionHash = hashInstructionForLog(instruction);
