@@ -300,7 +300,7 @@ export default function Composer({
             }}
             disabled={isSending}
             rows={2}
-            className="flex-1 w-0 min-h-[44px] max-h-[40vh] overflow-y-auto bg-transparent resize-none outline-none text-base md:text-sm text-white/80 placeholder:text-white/30 disabled:opacity-50"
+            className="flex-1 w-0 min-h-[85px] max-h-[40vh] overflow-y-auto bg-transparent resize-none outline-none text-base md:text-sm text-white/80 placeholder:text-white/30 disabled:opacity-50"
             placeholder={placeholder}
           />
         </div>

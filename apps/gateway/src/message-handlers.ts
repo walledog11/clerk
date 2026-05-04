@@ -356,7 +356,7 @@ export async function generateThreadIntelligence(
     return updated;
   } catch (aiError) {
     logger.error({ err: aiError, threadId }, '[Worker] Failed to generate AI summary');
-    return null;
+    throw aiError;
   }
 }
 
@@ -418,8 +418,9 @@ export async function precomputeThreadPlan(
     });
 
     if (!planRes.ok) {
+      const errMsg = `plan-internal returned ${planRes.status}`;
       logger.warn({ status: planRes.status, threadId }, '[Worker] plan-internal failed during precompute');
-      return null;
+      throw new Error(errMsg);
     }
 
     const { plan, instruction } = await planRes.json() as { plan: AgentPlan | null; instruction: string };
@@ -429,7 +430,7 @@ export async function precomputeThreadPlan(
     return { plan, instruction };
   } catch (err) {
     logger.error({ err: (err as Error).message, threadId }, '[Worker] precomputeThreadPlan error');
-    return null;
+    throw err;
   }
 }
 
