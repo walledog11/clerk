@@ -123,6 +123,18 @@ test('receive inbound email, view ticket, and send a recorded manual reply', asy
   await expect(page.locator('[data-dashboard-mobile-bottom-bar]')).toBeVisible();
 
   await mobileComposer.focus();
+
+  // Headless Chromium never raises an on-screen keyboard, so visualViewport.height
+  // never shrinks on its own. Override the getter and fire a resize so useVisualKeyboard
+  // sees the same signal a real virtual keyboard would produce.
+  await page.evaluate(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const proto = Object.getPrototypeOf(vv);
+    Object.defineProperty(proto, 'height', { configurable: true, get: () => 500 });
+    vv.dispatchEvent(new Event('resize'));
+  });
+
   await expect(mobileConversation).toHaveAttribute('data-keyboard-open', 'true');
   await expect(page.locator('html')).toHaveAttribute('data-mobile-ticket-editing', 'true');
   await expect(page.locator('[data-dashboard-mobile-bottom-bar]')).toBeHidden();
