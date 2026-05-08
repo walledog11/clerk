@@ -64,8 +64,8 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const { threads: openThreads, isLoading: openLoading, error, mutate: mutateOpen, loadMore: loadMoreOpen, hasMore: hasMoreOpen, isLoadingMore: isLoadingMoreOpen } = usePaginatedThreads('open', initialOpenThreads, true, undefined, needsReply)
-  const { threads: closedThreads, isLoading: closedLoading, mutate: mutateClosed, loadMore: loadMoreClosed, hasMore: hasMoreClosed, isLoadingMore: isLoadingMoreClosed } = usePaginatedThreads('closed', undefined, true)
+  const { threads: openThreads, isLoading: openLoading, error, mutate: mutateOpen, removeThreadById: removeFromOpen, prependThread: prependToOpen, loadMore: loadMoreOpen, hasMore: hasMoreOpen, isLoadingMore: isLoadingMoreOpen } = usePaginatedThreads('open', initialOpenThreads, true, undefined, needsReply)
+  const { threads: closedThreads, isLoading: closedLoading, mutate: mutateClosed, removeThreadById: removeFromClosed, prependThread: prependToClosed, loadMore: loadMoreClosed, hasMore: hasMoreClosed, isLoadingMore: isLoadingMoreClosed } = usePaginatedThreads('closed', undefined, true)
   const { threads: filteredThreads, isLoading: filteredLoading, mutate: mutateFiltered, loadMore: loadMoreFiltered, hasMore: hasMoreFiltered, isLoadingMore: isLoadingMoreFiltered } = usePaginatedThreads('open', undefined, true, 'filtered')
   const isSearchMode = searchQuery.length >= 2
   const dbThreads = useMemo(
@@ -171,6 +171,34 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
     ])
   }, [closedThreads, filteredThreads, mutateActiveThread, mutateClosed, mutateFiltered, mutateOpen, mutateSearch, openThreads])
 
+  const moveThreadStatus = useCallback(async (threadId: string, nextStatus: 'open' | 'closed') => {
+    const source = nextStatus === 'closed' ? openThreads : closedThreads
+    const existing = source.find(t => t.id === threadId)
+      ?? (nextStatus === 'closed' ? closedThreads : openThreads).find(t => t.id === threadId)
+      ?? activeThreadData?.thread
+    if (!existing) return
+    const updated: Thread = { ...existing, status: nextStatus }
+
+    if (nextStatus === 'closed') {
+      await Promise.all([
+        removeFromOpen(threadId),
+        prependToClosed(updated),
+      ])
+    } else {
+      await Promise.all([
+        removeFromClosed(threadId),
+        prependToOpen(updated),
+      ])
+    }
+
+    await mutateActiveThread(
+      current => current?.thread.id === threadId
+        ? { ...current, thread: updated }
+        : current,
+      { revalidate: false },
+    )
+  }, [activeThreadData?.thread, closedThreads, mutateActiveThread, openThreads, prependToClosed, prependToOpen, removeFromClosed, removeFromOpen])
+
   const revalidateThreadCaches = useCallback(async () => {
     await Promise.all([
       mutateOpen(),
@@ -196,7 +224,7 @@ export default function TicketsPageClient({ initialOpenThreads, hasShopify, agen
     activeTicketId,
     patchThreadCaches,
     revalidateThreadCaches,
-    setActiveTab,
+    moveThreadStatus,
     setActiveTicketId,
     setSelectedIds,
   })

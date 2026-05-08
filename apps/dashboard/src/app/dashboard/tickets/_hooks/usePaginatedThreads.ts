@@ -61,6 +61,28 @@ export function usePaginatedThreads(
 
   const loadMore = useCallback(() => setSize(currentSize => currentSize + 1), [setSize]);
 
+  const removeThreadById = useCallback(async (id: string) => {
+    await swrMutate(
+      (currentPages = []) => currentPages.map(page => ({
+        ...page,
+        threads: page.threads.filter(t => t.id !== id),
+      })),
+      false,
+    )
+  }, [swrMutate])
+
+  const prependThread = useCallback(async (thread: Thread) => {
+    await swrMutate(
+      (currentPages = []) => {
+        if (currentPages.length === 0) return [{ threads: [thread], nextCursor: null }]
+        return currentPages.map((page, i) => i === 0
+          ? { ...page, threads: [thread, ...page.threads.filter(t => t.id !== thread.id)] }
+          : { ...page, threads: page.threads.filter(t => t.id !== thread.id) })
+      },
+      false,
+    )
+  }, [swrMutate])
+
   const mutate = useCallback(async (updater?: Thread[], revalidate = true): Promise<Thread[] | undefined> => {
     if (updater === undefined) {
       const result = await swrMutate();
@@ -82,6 +104,8 @@ export function usePaginatedThreads(
     isLoading,
     error,
     mutate,
+    removeThreadById,
+    prependThread,
     loadMore,
     hasMore,
     isLoadingMore,

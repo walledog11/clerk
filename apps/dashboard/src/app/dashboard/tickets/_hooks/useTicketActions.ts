@@ -2,8 +2,6 @@ import { useCallback, useRef, useState } from 'react'
 import type { FailedMessage, Message, Thread } from '@/types'
 import { SENDER_TYPE } from '@/lib/messaging/thread-constants'
 
-type TicketListTab = 'open' | 'closed' | 'filtered'
-
 export interface TicketToast {
   message: string
   tone: 'success' | 'error'
@@ -13,7 +11,7 @@ interface UseTicketActionsProps {
   activeTicketId: string | null
   patchThreadCaches: (threadId: string, updateThread: (thread: Thread) => Thread) => Promise<void>
   revalidateThreadCaches: () => Promise<void>
-  setActiveTab: (tab: TicketListTab) => void
+  moveThreadStatus: (threadId: string, nextStatus: 'open' | 'closed') => Promise<void>
   setActiveTicketId: (id: string | null) => void
   setSelectedIds: (ids: string[]) => void
 }
@@ -36,7 +34,7 @@ export function useTicketActions({
   activeTicketId,
   patchThreadCaches,
   revalidateThreadCaches,
-  setActiveTab,
+  moveThreadStatus,
   setActiveTicketId,
   setSelectedIds,
 }: UseTicketActionsProps) {
@@ -97,6 +95,11 @@ export function useTicketActions({
   const handleResolve = useCallback(async () => {
     if (!activeTicketId) return
     const resolvedId = activeTicketId
+
+    await moveThreadStatus(resolvedId, 'closed')
+    setActiveTicketId(null)
+    showToast('Ticket resolved')
+
     try {
       const res = await fetch(`/api/threads/${resolvedId}`, {
         method: 'PATCH',
@@ -104,19 +107,22 @@ export function useTicketActions({
         body: JSON.stringify({ status: 'closed' }),
       })
       await requireOkResponse(res, 'Failed to close ticket')
-      await revalidateThreadCaches()
-      setActiveTicketId(null)
-      setActiveTab('closed')
-      showToast('Ticket resolved')
+      revalidateThreadCaches()
     } catch (err) {
       console.error('Failed to resolve ticket', err)
+      await revalidateThreadCaches()
       showToast(errorMessage(err, 'Failed to close ticket.'), 'error')
     }
-  }, [activeTicketId, revalidateThreadCaches, setActiveTab, setActiveTicketId, showToast])
+  }, [activeTicketId, moveThreadStatus, revalidateThreadCaches, setActiveTicketId, showToast])
 
   const handleReopen = useCallback(async () => {
     if (!activeTicketId) return
     const reopenId = activeTicketId
+
+    await moveThreadStatus(reopenId, 'open')
+    setActiveTicketId(null)
+    showToast('Ticket reopened')
+
     try {
       const res = await fetch(`/api/threads/${reopenId}`, {
         method: 'PATCH',
@@ -124,15 +130,13 @@ export function useTicketActions({
         body: JSON.stringify({ status: 'open' }),
       })
       await requireOkResponse(res, 'Failed to reopen ticket')
-      await revalidateThreadCaches()
-      setActiveTicketId(null)
-      setActiveTab('open')
-      showToast('Ticket reopened')
+      revalidateThreadCaches()
     } catch (err) {
       console.error('Failed to reopen ticket', err)
+      await revalidateThreadCaches()
       showToast(errorMessage(err, 'Failed to reopen ticket.'), 'error')
     }
-  }, [activeTicketId, revalidateThreadCaches, setActiveTab, setActiveTicketId, showToast])
+  }, [activeTicketId, moveThreadStatus, revalidateThreadCaches, setActiveTicketId, showToast])
 
   const handleLinkShopifyCustomer = useCallback(async (customerId: string | null) => {
     if (!activeTicketId) return
