@@ -28,6 +28,7 @@ const CONTRACTS = {
       'SHOPIFY_APP_SECRET',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
+      'CLERK_WEBHOOK_SECRET',
       'PRICE_ID_STARTER',
       'PRICE_ID_PRO',
     ],

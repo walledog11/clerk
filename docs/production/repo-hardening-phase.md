@@ -31,8 +31,8 @@ Status legend: `[x]` done, `[ ]` pending, `[~]` in progress or partially done.
 
 ### Clerk Lifecycle Cleanup
 
-- [ ] Implement signed Clerk lifecycle webhook handling or document why it is deferred.
-- [ ] Cover org/user deletion handling with tests if implemented.
+- [x] Implement signed Clerk lifecycle webhook handling or document why it is deferred.
+- [x] Cover org/user deletion handling with tests if implemented.
 
 ### Billing Enforcement
 
@@ -49,9 +49,9 @@ Status legend: `[x]` done, `[ ]` pending, `[~]` in progress or partially done.
 
 ### Legal and Data Deletion
 
-- [ ] Add published `/privacy` and `/terms` pages.
-- [ ] Document data deletion request handling.
-- [ ] Decide whether Shopify App Store GDPR webhooks are in this launch phase.
+- [x] Add published `/privacy` and `/terms` pages.
+- [x] Document data deletion request handling.
+- [x] Decide whether Shopify App Store GDPR webhooks are in this launch phase.
 
 ## Exit Criteria
 

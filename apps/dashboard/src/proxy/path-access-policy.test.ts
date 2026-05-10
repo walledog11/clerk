@@ -16,6 +16,7 @@ describe("proxy path access policy", () => {
   it("keeps inbound machine endpoints public", () => {
     expect(isPublicPath("/api/health")).toBe(true);
     expect(isPublicPath("/api/billing/webhook")).toBe(true);
+    expect(isPublicPath("/api/webhooks/clerk")).toBe(true);
     expect(isPublicPath("/api/webhooks/email")).toBe(true);
     expect(isPublicPath("/api/integrations/shopify/callback")).toBe(true);
     expect(isPublicPath("/api/agent/internal")).toBe(true);

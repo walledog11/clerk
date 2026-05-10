@@ -1,5 +1,5 @@
 import { db } from '@clerk/db';
-import { ApiError } from '@/lib/api/errors';
+import { ApiError, NotFoundError } from '@/lib/api/errors';
 
 const BLOCKED_WRITE_STATUSES = new Set(['past_due', 'canceled']);
 
@@ -30,7 +30,8 @@ export async function assertBillingWriteAllowedForOrgId(orgId: string): Promise<
     select: { stripeStatus: true },
   });
 
-  if (org) {
-    assertBillingWriteAllowed(org);
+  if (!org) {
+    throw new NotFoundError('Organization not found');
   }
+  assertBillingWriteAllowed(org);
 }

@@ -25,6 +25,7 @@ function createDashboardLaunchEnv(overrides = {}) {
     SHOPIFY_APP_SECRET: 'shopify-app-secret',
     STRIPE_SECRET_KEY: 'sk_live_stripe',
     STRIPE_WEBHOOK_SECRET: 'whsec_live_stripe',
+    CLERK_WEBHOOK_SECRET: 'whsec_live_clerk',
     PRICE_ID_STARTER: 'price_starter',
     PRICE_ID_PRO: 'price_pro',
     ...overrides,
@@ -107,7 +108,21 @@ test('dashboard launch contract requires Sentry for production observability', (
   );
 });
 
-test('gateway launch contract requires the Twilio webhook path to match the gateway route', () => {
+test('dashboard launch contract requires Clerk webhook signing secret', () => {
+  const result = validateProductionEnv('dashboard', {
+    scope: 'launch',
+    env: createDashboardLaunchEnv({
+      CLERK_WEBHOOK_SECRET: '',
+    }),
+  });
+
+  assert.equal(
+    result.errors.includes('Missing required environment variable: CLERK_WEBHOOK_SECRET'),
+    true
+  );
+});
+
+test('gateway launch contract validates optional Twilio webhook path when provided', () => {
   const result = validateProductionEnv('gateway', {
     scope: 'launch',
     env: createGatewayLaunchEnv({

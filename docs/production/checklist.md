@@ -1,6 +1,6 @@
 # Production Checklist
 
-Scoped to the **ideal customer: a solo Shopify merchant or 2–3 person team using email as their primary support channel**, with Instagram DM as the most likely second channel. Audit refreshed **May 8, 2026**.
+Scoped to the **ideal customer: a solo Shopify merchant or 2–3 person team using email as their primary support channel**, with Instagram DM as the most likely second channel. Audit refreshed **May 10, 2026**.
 
 - **Blockers** — must be done before the app is production-ready.
 - **Before first customers** — should be done before onboarding paying merchants, but not hard launch blockers.
@@ -37,15 +37,15 @@ Status legend: `[x]` done, `[ ]` pending, `(external)` depends on third-party se
 
 ### Security
 
-- [ ] Confirm Clerk webhooks for org/user lifecycle are wired (or document why they're not) — orphan rows after Clerk-side deletion will leak data across tenants over time.
-- [x] Audit every dashboard API route for `getOrCreateOrg()` (or equivalent org scoping). All 66 dashboard API routes verified: 52 use `getOrCreateOrg()` / `auth()`, 6 use `x-internal-secret`, 5 use signed webhooks (Stripe HMAC, Shopify HMAC, OAuth state cookie), 2 are public proxies to the gateway, 1 is `/api/health`. All `[id]`-style routes verify `organizationId` in the WHERE clause or post-fetch. Cross-org regression guard at `src/lib/security/cross-org-isolation.test.ts` (12 cases: canned responses, KB articles, KB bases, playbooks, integrations, AI summary). Per-route 404 tests already cover threads, messages, and agent plan.
+- [x] Clerk lifecycle webhook is wired at `POST /api/webhooks/clerk` using Clerk's signed webhook verifier. It handles `organization.deleted` by deleting the local organization and relying on Prisma cascades, `user.deleted` by removing local `OrgMember` rows for that Clerk user, and `organizationMembership.deleted` by removing the matching org-member row. Covered by `src/app/api/webhooks/clerk/route.test.ts`.
+- [x] Audit every dashboard API route for `getOrCreateOrg()` (or equivalent org scoping). All 67 dashboard API routes verified: 52 use `getOrCreateOrg()` / `auth()`, 6 use `x-internal-secret`, 6 use signed inbound/callback validation (Stripe HMAC, Clerk verifier, Shopify HMAC, OAuth state cookies), 2 are public proxies to the gateway, 1 is `/api/health`. All `[id]`-style routes verify `organizationId` in the WHERE clause or post-fetch. Cross-org regression guard at `src/lib/security/cross-org-isolation.test.ts` (12 cases: canned responses, KB articles, KB bases, playbooks, integrations, AI summary). Per-route 404 tests already cover threads, messages, and agent plan.
 - [x] Verify OAuth callback routes (Shopify, Meta) bind the `state` param to the originating user's session, not just check it for presence. Both auth routes now persist `userId` alongside the state nonce; both callbacks call `auth()` and reject if the current Clerk userId doesn't match. State compares run through `timingSafeIncludes`. `returnTo` validated via shared `safeReturnTo()` to block protocol-relative open redirects.
 - [x] Add a CI step that runs `npm audit --audit-level=high` and fails on high/critical findings.
 - [x] Confirm dashboard API routes that mutate state (`/api/messages`, `/api/agent/*`, `/api/threads/*`) reject unauthenticated requests with 401 — not 500 or HTML redirect. All 16 mutating handlers already returned 401 via `handleApiError` / explicit checks; the gap was at the middleware layer (`src/proxy.ts`), where `auth.protect()` was returning Next.js `notFound()` (404) for unauthenticated API requests. Fixed: middleware now returns JSON 401 for unauthenticated API paths and only calls `auth.protect()` for page paths. Covered by `src/proxy.test.ts` (7 cases: API 401 / org-optional 401 / public passthrough / API 403 no-org / page redirect to sign-in / page redirect to /select-org / fully authenticated passthrough).
 
 ### Testing & CI
 
-- [x] `npm test` passes reliably (46 unit + 198 dashboard integration + 120 gateway integration after dependency and billing-gate updates). Test-only `ioredis` mock gap that was silently swallowing alert-path TypeErrors is fixed.
+- [x] `npm test` passes reliably (46 unit + 205 dashboard integration + 120 gateway integration after Clerk webhook coverage). Test-only `ioredis` mock gap that was silently swallowing alert-path TypeErrors is fixed.
 - [x] True end-to-end launch flow test: inbound message → thread → plan → approval → outbound reply (`e2e/core-agent-flow.spec.ts`).
 - [x] Browser E2E for the main support flow with Clerk auth and outbound provider interception.
 
@@ -62,12 +62,12 @@ Status legend: `[x]` done, `[ ]` pending, `(external)` depends on third-party se
 
 ### Legal
 
-- [ ] Privacy Policy and Terms of Service published and linked from the app footer and signup page.
-- [ ] Data deletion request process documented. If submitting to the Shopify App Store: implement the GDPR mandatory webhooks (`customers/data_request`, `customers/redact`, `shop/redact`).
+- [x] Privacy Policy and Terms of Service published at `/privacy` and `/terms`; existing footer and signup links already point there. Drafts should still receive legal review before broad public launch.
+- [x] Data deletion request process documented in [`data-deletion.md`](data-deletion.md). Shopify App Store GDPR webhooks (`customers/data_request`, `customers/redact`, `shop/redact`) are explicitly deferred until an App Store submission path exists.
 
 ### Production environment variables (external)
 
-**Dashboard (Vercel)** — required: `DATABASE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `ANTHROPIC_API_KEY`, `INTERNAL_API_SECRET`, `POSTMARK_API_KEY`, `APP_URL`, `INBOUND_EMAIL_DOMAIN`, `GATEWAY_INTERNAL_URL`, `SHOPIFY_APP_SECRET`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PRICE_ID_STARTER`, `PRICE_ID_PRO`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `SENTRY_DSN`. Optional: `NEXT_PUBLIC_APP_URL` (must equal `APP_URL` if set).
+**Dashboard (Vercel)** — required: `DATABASE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `INTERNAL_API_SECRET`, `POSTMARK_API_KEY`, `APP_URL`, `INBOUND_EMAIL_DOMAIN`, `GATEWAY_INTERNAL_URL`, `SHOPIFY_APP_SECRET`, `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `PRICE_ID_STARTER`, `PRICE_ID_PRO`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `SENTRY_DSN`. Optional: `NEXT_PUBLIC_APP_URL` (must equal `APP_URL` if set).
 
 **Gateway (Railway)** — required: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `INTERNAL_API_SECRET`, `DASHBOARD_URL`, `SHOPIFY_APP_SECRET`, `BLOB_READ_WRITE_TOKEN`, `SENTRY_DSN`.
 
@@ -115,4 +115,4 @@ Items previously on the checklist that the ICP does not need. Revisit only if a 
 ## Notes
 
 - Repo-side deploy support exists via `scripts/check-production-env.mjs`, `scripts/verify-production.mjs`, and [`runbook.md`](runbook.md), but those scripts don't substitute for the live deployment, migration, webhook console, or provider account steps.
-- Launch is gated on: deploy infra, secrets rotation + Sentry, the reliability/security audit items, Stripe + Postmark production accounts, legal pages published, and the two open "Before first customers" gaps (onboarding polish, past-due UX).
+- Launch is gated on: deploy infra, secrets rotation + Sentry, the reliability audit items, Stripe + Postmark production accounts, and the two open "Before first customers" gaps (onboarding polish, past-due UX).

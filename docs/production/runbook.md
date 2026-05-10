@@ -94,6 +94,8 @@ Rules:
 - `SHOPIFY_APP_SECRET`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
+- `CLERK_WEBHOOK_SECRET`
+  Used by `POST /api/webhooks/clerk` to verify Clerk lifecycle webhooks.
 - `PRICE_ID_STARTER`
 - `PRICE_ID_PRO`
 
@@ -220,20 +222,36 @@ Automated health checks are necessary but not sufficient. Before marking the dep
 4. Trigger one supported order event.
 5. Confirm the inbound event reaches the gateway and appears in the dashboard where applicable.
 
+### Clerk Lifecycle
+
+1. In the Clerk Dashboard, create or update a webhook endpoint for `https://<dashboard>/api/webhooks/clerk`.
+2. Subscribe it to `organization.deleted`, `user.deleted`, and `organizationMembership.deleted`.
+3. Store the endpoint signing secret as dashboard `CLERK_WEBHOOK_SECRET`.
+4. Use the Clerk webhook testing tab or a safe staging organization deletion to confirm the dashboard returns `200`.
+5. Confirm local rows are cleaned up: deleted organizations should cascade through workspace data, deleted users should remove matching `org_members`, and deleted memberships should remove only that organization's member row.
+
 ## Production-Only Webhook Routing
 
-The dashboard webhook proxy routes are for local development convenience. In production, point providers directly at the gateway:
+The dashboard webhook proxy routes are for local development convenience. In production, point provider traffic directly at the gateway:
 
 - Meta -> `https://<gateway>/webhooks/meta`
 - Twilio -> `https://<gateway>/webhooks/twilio`
 - Postmark inbound -> `https://<gateway>/webhooks/email/inbound`
 - Shopify -> `https://<gateway>/webhooks/shopify`
 
+Clerk lifecycle webhooks are the exception because they clean up dashboard-owned tenant records:
+
+- Clerk -> `https://<dashboard>/api/webhooks/clerk`
+
 Relevant proxy routes:
 
 - [apps/dashboard/src/app/api/webhooks/meta/route.ts](../../apps/dashboard/src/app/api/webhooks/meta/route.ts)
 - [apps/dashboard/src/app/api/webhooks/twilio/route.ts](../../apps/dashboard/src/app/api/webhooks/twilio/route.ts)
 - [apps/dashboard/src/app/api/webhooks/email/route.ts](../../apps/dashboard/src/app/api/webhooks/email/route.ts)
+
+Relevant signed dashboard webhook route:
+
+- [apps/dashboard/src/app/api/webhooks/clerk/route.ts](../../apps/dashboard/src/app/api/webhooks/clerk/route.ts)
 
 ## Operational Guardrails
 
