@@ -81,7 +81,7 @@ export async function GET(request: Request) {
           AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60)::float AS avg_minutes,
           COUNT(*)::bigint AS closed_count
         FROM threads
-        WHERE organization_id = ${org.id}
+        WHERE organization_id = ${org.id}::uuid
           AND status = 'closed'
           AND deleted_at IS NULL
           AND created_at >= ${from}
@@ -92,7 +92,7 @@ export async function GET(request: Request) {
         SELECT m.sender_type, COUNT(*) AS count
         FROM messages m
         INNER JOIN threads t ON t.id = m.thread_id
-        WHERE t.organization_id = ${org.id}
+        WHERE t.organization_id = ${org.id}::uuid
           AND t.created_at >= ${from}
           AND t.created_at <= ${to}
           AND m.deleted_at IS NULL
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
       db.$queryRaw<{ day: Date; count: bigint }[]>`
         SELECT DATE_TRUNC('day', created_at) AS day, COUNT(*) AS count
         FROM threads
-        WHERE organization_id = ${org.id}
+        WHERE organization_id = ${org.id}::uuid
           AND created_at >= ${from}
           AND created_at <= ${to}
           AND deleted_at IS NULL
@@ -118,7 +118,7 @@ export async function GET(request: Request) {
             MIN(CASE WHEN m.sender_type IN ('agent', 'ai') THEN m.sent_at END) AS first_response
           FROM threads t
           INNER JOIN messages m ON m.thread_id = t.id AND m.deleted_at IS NULL
-          WHERE t.organization_id = ${org.id}
+          WHERE t.organization_id = ${org.id}::uuid
             AND t.created_at >= ${from}
             AND t.created_at <= ${to}
             AND t.deleted_at IS NULL

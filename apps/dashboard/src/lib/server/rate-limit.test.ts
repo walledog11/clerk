@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
   rateLimit as RateLimitFn,
   isE2ERateLimitBypassEnabled as IsE2ERateLimitBypassEnabledFn,
@@ -6,7 +6,6 @@ import type {
 } from './rate-limit';
 import type { getRedis as GetRedisFn } from '@/lib/server/redis';
 
-vi.unmock('@/lib/server/rate-limit');
 vi.mock('@/lib/server/redis', () => ({
   getRedis: vi.fn(),
 }));
@@ -27,13 +26,6 @@ describe('server rateLimit', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.clearAllMocks();
-  });
-
-  afterAll(() => {
-    vi.doMock('@/lib/server/rate-limit', () => ({
-      rateLimit: vi.fn().mockResolvedValue({ success: true, remaining: 100, reset: 9999999999 }),
-      tooManyRequests: vi.fn(),
-    }));
   });
 
   it('bypasses Redis for explicit non-production E2E runs', async () => {

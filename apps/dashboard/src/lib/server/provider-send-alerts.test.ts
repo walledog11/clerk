@@ -31,6 +31,158 @@ const LOG_ONLY_RESULT: EmitOpsAlertResult = {
   reason: 'missing_dsn',
 };
 
+type ProviderCase = {
+  provider: Parameters<typeof recordProviderSendFailure>[0];
+  channel: Parameters<typeof recordProviderSendFailure>[1];
+  orgId: string;
+  metadata?: Partial<ProviderSendAlertDependencies>;
+};
+
+const PROVIDER_CASES: ProviderCase[] = [
+  { provider: 'meta', channel: 'ig_dm', orgId: 'org_meta' },
+  {
+    provider: 'postmark',
+    channel: 'email',
+    orgId: 'org_postmark',
+    metadata: {
+      threadId: 'thread_123',
+      integrationId: 'integration_123',
+      detail: 'Postmark timeout',
+    },
+  },
+  { provider: 'twilio', channel: 'sms', orgId: 'org_twilio' },
+  { provider: 'shopify', channel: 'webhook_registration', orgId: 'org_shopify' },
+];
+
+describe('recordProviderSendFailure', () => {
+  it('does not emit below the threshold and emits once at the threshold', async () => {
+    const { client } = createCounterClient();
+    const emitAlert = createEmitAlert();
+    const firstCase = PROVIDER_CASES[0];
+
+    for (let i = 1; i < CONFIG.providerSendThreshold; i++) {
+      const result = await recordProviderSendFailure(
+        firstCase.provider,
+        firstCase.channel,
+        firstCase.orgId,
+        makeDeps(client, { emitAlert }),
+      );
+      expect(result.emitted).toBe(false);
+    }
+
+    expect(emitAlert).not.toHaveBeenCalled();
+
+    await recordProviderSendFailure(
+      firstCase.provider,
+      firstCase.channel,
+      firstCase.orgId,
+      makeDeps(client, { emitAlert }),
+    );
+
+    expect(emitAlert).toHaveBeenCalledTimes(1);
+    expect(emitAlert.mock.calls[0]?.[0]).toMatchObject({
+      category: 'provider_send',
+      level: 'error',
+      tags: { provider: firstCase.provider, channel: firstCase.channel },
+      extra: {
+        orgId: firstCase.orgId,
+        count: CONFIG.providerSendThreshold,
+        threshold: CONFIG.providerSendThreshold,
+      },
+    });
+  });
+
+  it.each(PROVIDER_CASES)('emits provider metadata for $provider / $channel', async (testCase) => {
+    const { client } = createCounterClient();
+    const emitAlert = createEmitAlert();
+
+    for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
+      await recordProviderSendFailure(
+        testCase.provider,
+        testCase.channel,
+        testCase.orgId,
+        makeDeps(client, { emitAlert, ...testCase.metadata }),
+      );
+    }
+
+    expect(emitAlert).toHaveBeenCalledTimes(1);
+    expect(emitAlert.mock.calls[0]?.[0]).toMatchObject({
+      category: 'provider_send',
+      level: 'error',
+      tags: { provider: testCase.provider, channel: testCase.channel },
+      extra: {
+        orgId: testCase.orgId,
+        ...(testCase.metadata ?? {}),
+      },
+    });
+  });
+
+  it('does not emit again after the threshold is crossed in the same window', async () => {
+    const { client } = createCounterClient();
+    const emitAlert = createEmitAlert();
+    const deps = makeDeps(client, { emitAlert });
+
+    for (let i = 1; i <= CONFIG.providerSendThreshold + 2; i++) {
+      await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', deps);
+    }
+
+    expect(emitAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not capture to Sentry when alerts are disabled', async () => {
+    const { client } = createCounterClient();
+    const sentryCalls: string[] = [];
+    const mockSentry: OpsAlertSentryClient = {
+      captureMessage: vi.fn((msg: string) => { sentryCalls.push(msg); return 'event-id'; }),
+      captureException: vi.fn(),
+    };
+
+    const realEmitDisabled: typeof emitOpsAlert = (input) =>
+      emitOpsAlert(input, {
+        config: DISABLED_CONFIG,
+        env: { ...process.env, SENTRY_DSN: 'https://example.invalid/1' },
+        sentry: mockSentry,
+      });
+
+    for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
+      await recordProviderSendFailure(
+        'meta',
+        'ig_dm',
+        'org_abc',
+        makeDeps(client, { config: DISABLED_CONFIG, emitAlert: realEmitDisabled }),
+      );
+    }
+
+    expect(sentryCalls).toHaveLength(0);
+    expect(mockSentry.captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('re-alerts in a new window after the previous window expires', async () => {
+    const { client } = createCounterClient();
+    const emitAlert = createEmitAlert();
+
+    for (const nowMs of [301_000, 601_000]) {
+      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
+        await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', makeDeps(client, { emitAlert, nowMs }));
+      }
+    }
+
+    expect(emitAlert).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts separately per orgId', async () => {
+    const { client } = createCounterClient();
+    const emitAlert = createEmitAlert();
+
+    for (let i = 1; i < CONFIG.providerSendThreshold; i++) {
+      await recordProviderSendFailure('meta', 'ig_dm', 'org_a', makeDeps(client, { emitAlert }));
+      await recordProviderSendFailure('meta', 'ig_dm', 'org_b', makeDeps(client, { emitAlert }));
+    }
+
+    expect(emitAlert).not.toHaveBeenCalled();
+  });
+});
+
 function createCounterClient(): { client: OpsAlertCounterClient } {
   const counts = new Map<string, number>();
   return {
@@ -55,187 +207,3 @@ function makeDeps(
 ): ProviderSendAlertDependencies {
   return { counterClient: client, config: CONFIG, nowMs: 301_000, ...overrides };
 }
-
-describe('recordProviderSendFailure', () => {
-  describe('Meta — ig_dm', () => {
-    it('does not emit an alert below the threshold', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      for (let i = 1; i < CONFIG.providerSendThreshold; i++) {
-        const result = await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', makeDeps(client, { emitAlert }));
-        expect(result.emitted).toBe(false);
-      }
-
-      expect(emitAlert).not.toHaveBeenCalled();
-    });
-
-    it('emits an alert exactly at the threshold', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', makeDeps(client, { emitAlert }));
-      }
-
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-      const alertInput = emitAlert.mock.calls[0]?.[0];
-      expect(alertInput).toMatchObject({
-        category: 'provider_send',
-        level: 'error',
-        tags: { provider: 'meta', channel: 'ig_dm' },
-        extra: {
-          orgId: 'org_abc',
-          count: CONFIG.providerSendThreshold,
-          threshold: CONFIG.providerSendThreshold,
-        },
-      });
-    });
-
-    it('does not emit again after the threshold is crossed in the same window', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-      const deps = makeDeps(client, { emitAlert });
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold + 2; i++) {
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', deps);
-      }
-
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('Postmark — email', () => {
-    it('emits at threshold with correct provider/channel tags', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('postmark', 'email', 'org_xyz', makeDeps(client, {
-          emitAlert,
-          threadId: 'thread_123',
-          integrationId: 'integration_123',
-          detail: 'Postmark timeout',
-        }));
-      }
-
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-      const alertInput = emitAlert.mock.calls[0]?.[0];
-      expect(alertInput).toMatchObject({
-        category: 'provider_send',
-        level: 'error',
-        tags: { provider: 'postmark', channel: 'email' },
-        extra: {
-          orgId: 'org_xyz',
-          threadId: 'thread_123',
-          integrationId: 'integration_123',
-          detail: 'Postmark timeout',
-        },
-      });
-    });
-  });
-
-  describe('Twilio — sms', () => {
-    it('emits at threshold with correct provider/channel tags', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('twilio', 'sms', 'org_xyz', makeDeps(client, { emitAlert }));
-      }
-
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-      const alertInput = emitAlert.mock.calls[0]?.[0];
-      expect(alertInput).toMatchObject({
-        category: 'provider_send',
-        level: 'error',
-        tags: { provider: 'twilio', channel: 'sms' },
-        extra: { orgId: 'org_xyz' },
-      });
-    });
-  });
-
-  describe('Shopify — webhook_registration', () => {
-    it('emits at threshold with correct provider/channel tags', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('shopify', 'webhook_registration', 'org_shop', makeDeps(client, { emitAlert }));
-      }
-
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-      const alertInput = emitAlert.mock.calls[0]?.[0];
-      expect(alertInput).toMatchObject({
-        category: 'provider_send',
-        level: 'error',
-        tags: { provider: 'shopify', channel: 'webhook_registration' },
-        extra: { orgId: 'org_shop' },
-      });
-    });
-  });
-
-  describe('OPS_ALERTS_ENABLED=false', () => {
-    it('does not capture to Sentry when alerts are disabled', async () => {
-      const { client } = createCounterClient();
-      const sentryCalls: string[] = [];
-      const mockSentry: OpsAlertSentryClient = {
-        captureMessage: vi.fn((msg: string) => { sentryCalls.push(msg); return 'event-id'; }),
-        captureException: vi.fn(),
-      };
-
-      const realEmitDisabled: typeof emitOpsAlert = (input) =>
-        emitOpsAlert(input, {
-          config: DISABLED_CONFIG,
-          env: { ...process.env, SENTRY_DSN: 'https://example.invalid/1' },
-          sentry: mockSentry,
-        });
-
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure(
-          'meta',
-          'ig_dm',
-          'org_abc',
-          makeDeps(client, { config: DISABLED_CONFIG, emitAlert: realEmitDisabled }),
-        );
-      }
-
-      expect(sentryCalls).toHaveLength(0);
-      expect(mockSentry.captureMessage).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('window reset', () => {
-    it('re-alerts in a new window after the previous window expires', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      // First window: nowMs=301_000 → windowStart=1
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', makeDeps(client, { emitAlert, nowMs: 301_000 }));
-      }
-      expect(emitAlert).toHaveBeenCalledTimes(1);
-
-      // Second window: nowMs=601_000 → windowStart=2 — new counter key
-      for (let i = 1; i <= CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_abc', makeDeps(client, { emitAlert, nowMs: 601_000 }));
-      }
-      expect(emitAlert).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  describe('counter isolation by org', () => {
-    it('counts separately per orgId', async () => {
-      const { client } = createCounterClient();
-      const emitAlert = createEmitAlert();
-
-      // Each org gets 2 failures (below threshold of 3)
-      for (let i = 1; i < CONFIG.providerSendThreshold; i++) {
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_a', makeDeps(client, { emitAlert }));
-        await recordProviderSendFailure('meta', 'ig_dm', 'org_b', makeDeps(client, { emitAlert }));
-      }
-
-      expect(emitAlert).not.toHaveBeenCalled();
-    });
-  });
-});

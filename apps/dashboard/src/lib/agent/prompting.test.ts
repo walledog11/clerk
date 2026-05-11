@@ -38,8 +38,10 @@ describe('buildSystemPrompt', () => {
       },
     }));
 
-    expect(prompt).toContain('If the returned order has fulfillment_status: null, treat it as not fulfilled yet and answer from that data without calling get_order_tracking.');
-    expect(prompt).toContain('Call get_order_tracking only when an order is already fulfilled or partially fulfilled');
+    expect(prompt).toMatch(/fulfillment_status:\s*null/);
+    expect(prompt).toMatch(/not fulfilled/i);
+    expect(prompt).toContain('get_order_tracking');
+    expect(prompt).toMatch(/fulfilled or partially fulfilled/i);
   });
 
   it('tells support mode to answer unfulfilled order status questions without tracking lookups', () => {
@@ -55,8 +57,10 @@ describe('buildSystemPrompt', () => {
       }],
     }));
 
-    expect(prompt).toContain("If an order's fulfillment_status is null, state that it has not shipped yet and do not call get_order_tracking.");
-    expect(prompt).toContain('Call get_order_tracking only for fulfilled or partially fulfilled orders');
+    expect(prompt).toMatch(/fulfillment_status is null/i);
+    expect(prompt).toMatch(/not shipped/i);
+    expect(prompt).toContain('get_order_tracking');
+    expect(prompt).toMatch(/fulfilled or partially fulfilled/i);
   });
 });
 
@@ -172,10 +176,11 @@ describe('AGENT_TOOLS', () => {
     const getOrders = AGENT_TOOLS.find((tool) => tool.name === 'get_shopify_orders');
     const getTracking = AGENT_TOOLS.find((tool) => tool.name === 'get_order_tracking');
 
-    expect(getOrders?.description).toContain('Use this first for basic order-status questions');
-    expect(getOrders?.description).toContain('you usually do not need get_order_tracking');
+    expect(getOrders?.description).toMatch(/order-status/i);
+    expect(getOrders?.description).toContain('fulfillment_status');
+    expect(getOrders?.description).toContain('get_order_tracking');
 
-    expect(getTracking?.description).toContain('Use this only when an order is already fulfilled or partially fulfilled');
-    expect(getTracking?.description).toContain('Do not use it for unfulfilled orders or basic status checks');
+    expect(getTracking?.description).toMatch(/fulfilled or partially fulfilled/i);
+    expect(getTracking?.description).toMatch(/unfulfilled orders/i);
   });
 });

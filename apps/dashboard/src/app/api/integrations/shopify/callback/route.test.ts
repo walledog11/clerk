@@ -1,0 +1,160 @@
+import { createHmac } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ChannelType, db } from '@clerk/db';
+import { cleanupTestData, createTestOrg } from '@clerk/db/test-helpers';
+
+const {
+  mockCookieDelete,
+  mockCookieGet,
+  mockFetch,
+  mockRecordProviderSendFailure,
+} = vi.hoisted(() => ({
+  mockCookieDelete: vi.fn(),
+  mockCookieGet: vi.fn(),
+  mockFetch: vi.fn(),
+  mockRecordProviderSendFailure: vi.fn(),
+}));
+
+vi.mock('@clerk/nextjs/server', () => ({
+  auth: vi.fn(),
+}));
+
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(() => ({
+    get: mockCookieGet,
+    delete: mockCookieDelete,
+  })),
+}));
+
+vi.mock('@/lib/server/provider-send-alerts', () => ({
+  recordProviderSendFailure: mockRecordProviderSendFailure,
+}));
+
+vi.mock('@/lib/server/redis', () => ({
+  getRedis: vi.fn(() => ({
+    incr: vi.fn(),
+    expire: vi.fn(),
+  })),
+}));
+
+vi.stubGlobal('fetch', mockFetch);
+
+import { auth } from '@clerk/nextjs/server';
+import { GET } from './route';
+
+let org: Awaited<ReturnType<typeof createTestOrg>> | null;
+
+beforeEach(async () => {
+  org = await createTestOrg();
+  vi.stubEnv('APP_URL', 'http://dashboard.test');
+  vi.stubEnv('SHOPIFY_CLIENT_ID', 'shopify-client-id');
+  vi.stubEnv('SHOPIFY_CLIENT_SECRET', 'shopify-client-secret');
+  vi.stubEnv('GATEWAY_INTERNAL_URL', 'http://gateway.test');
+  vi.stubEnv('GATEWAY_PUBLIC_URL', 'http://gateway.test');
+  vi.mocked(auth).mockResolvedValue({
+    userId: 'usr_oauth',
+    orgId: org.clerkOrgId,
+  } as ReturnType<typeof auth> extends Promise<infer T> ? T : never);
+  mockRecordProviderSendFailure.mockResolvedValue({ emitted: false });
+});
+
+afterEach(async () => {
+  await cleanupTestData(org?.id);
+  org = null;
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe('GET /api/integrations/shopify/callback', () => {
+  it('rejects a callback for a different shop before token exchange', async () => {
+    mockSavedCookies({
+      shopify_oauth_state: 'state_123',
+      shopify_oauth_org: org!.clerkOrgId,
+      shopify_oauth_user: 'usr_oauth',
+      shopify_oauth_shop: 'fixture-shop.myshopify.com',
+    });
+
+    const res = await GET(new Request('http://localhost/api/integrations/shopify/callback?code=abc&shop=evil-shop.myshopify.com&state=state_123&hmac=bad'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://dashboard.test/dashboard/integrations?error=shopify_shop_mismatch');
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCookieDelete).toHaveBeenCalledWith('shopify_oauth_shop');
+  });
+
+  it('persists the active org integration and soft-fails webhook registration errors', async () => {
+    mockSavedCookies({
+      shopify_oauth_state: 'state_123',
+      shopify_oauth_org: org!.clerkOrgId,
+      shopify_oauth_user: 'usr_oauth',
+      shopify_oauth_shop: 'fixture-shop.myshopify.com',
+      shopify_oauth_return: '/dashboard/settings',
+    });
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'shpat_fixture' }))
+      .mockResolvedValueOnce(jsonResponse({ shop: { name: 'Fixture Shop' } }))
+      .mockResolvedValueOnce(jsonResponse({ webhook: { id: 1 } }))
+      .mockResolvedValueOnce(jsonResponse({ errors: 'topic disabled' }, { status: 422 }))
+      .mockResolvedValueOnce(jsonResponse({ webhook: { id: 3 } }))
+      .mockResolvedValueOnce(jsonResponse({ webhook: { id: 4 } }));
+
+    const res = await GET(new Request(signedCallbackUrl({
+      code: 'oauth_code',
+      shop: 'fixture-shop.myshopify.com',
+      state: 'state_123',
+    })));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://dashboard.test/dashboard/settings');
+
+    const integration = await db.integration.findFirstOrThrow({
+      where: { organizationId: org!.id, platform: ChannelType.shopify },
+    });
+    expect(integration.externalAccountId).toBe('fixture-shop.myshopify.com');
+    expect(integration.accessToken).toBe('shpat_fixture');
+    expect(integration.fromEmail).toBe('Fixture Shop');
+
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(String(mockFetch.mock.calls[0][0])).toBe('https://fixture-shop.myshopify.com/admin/oauth/access_token');
+    expect(String(mockFetch.mock.calls[1][0])).toBe('https://fixture-shop.myshopify.com/admin/api/2024-01/shop.json');
+    expect(String(mockFetch.mock.calls[2][0])).toBe('https://fixture-shop.myshopify.com/admin/api/2024-01/webhooks.json');
+    expect(mockRecordProviderSendFailure).toHaveBeenCalledWith(
+      'shopify',
+      'webhook_registration',
+      org!.id,
+      expect.objectContaining({
+        integrationId: integration.id,
+        detail: 'Shopify webhook registration failed for orders/fulfilled',
+        extra: { topic: 'orders/fulfilled', shop: 'fixture-shop.myshopify.com' },
+      }),
+    );
+  });
+});
+
+function mockSavedCookies(values: Record<string, string>) {
+  mockCookieGet.mockImplementation((name: string) => {
+    const value = values[name];
+    return value ? { value } : undefined;
+  });
+}
+
+function signedCallbackUrl(params: Record<string, string>) {
+  const message = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join('&');
+  const hmac = createHmac('sha256', 'shopify-client-secret').update(message).digest('hex');
+  const url = new URL('http://localhost/api/integrations/shopify/callback');
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  url.searchParams.set('hmac', hmac);
+  return url.toString();
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}

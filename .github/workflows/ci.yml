@@ -90,6 +90,17 @@ jobs:
         run: npm ci
       - name: Run integration tests
         run: npm run test:integration
+      - name: Generate coverage reports
+        run: npm run test:coverage
+      - name: Upload coverage reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage
+          path: |
+            apps/dashboard/coverage/
+            apps/gateway/coverage/
+          retention-days: 7
 
   e2e:
     name: E2E Tests

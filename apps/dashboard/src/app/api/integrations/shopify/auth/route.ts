@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
 import { safeReturnTo } from '@/lib/security/safe-return-to';
+import { normalizeShopifyShopDomain } from '@/lib/shopify/oauth';
 
 export async function GET(request: Request) {
   const { userId, orgId } = await auth();
@@ -21,18 +22,15 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const shop = searchParams.get('shop')?.trim().toLowerCase();
+  const shop = searchParams.get('shop');
   const returnTo = safeReturnTo(searchParams.get('returnTo'));
 
-  if (!shop) {
+  if (!shop?.trim()) {
     return NextResponse.json({ error: 'Missing shop parameter' }, { status: 400 });
   }
 
-  // Normalize: accept "mystore" or "mystore.myshopify.com"
-  const shopDomain = shop.includes('.') ? shop : `${shop}.myshopify.com`;
-
-  // Basic domain validation
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$/.test(shopDomain)) {
+  const shopDomain = normalizeShopifyShopDomain(shop);
+  if (!shopDomain) {
     return NextResponse.json({ error: 'Invalid shop domain' }, { status: 400 });
   }
 
@@ -59,6 +57,7 @@ export async function GET(request: Request) {
   cookieStore.set('shopify_oauth_state', state, cookieOpts);
   cookieStore.set('shopify_oauth_org', orgId, cookieOpts);
   cookieStore.set('shopify_oauth_user', userId, cookieOpts);
+  cookieStore.set('shopify_oauth_shop', shopDomain, cookieOpts);
   if (returnTo) {
     cookieStore.set('shopify_oauth_return', returnTo, cookieOpts);
   }

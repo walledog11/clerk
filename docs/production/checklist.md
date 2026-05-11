@@ -48,6 +48,8 @@ Status legend: `[x]` done, `[ ]` pending, `(external)` depends on third-party se
 - [x] `npm test` passes reliably (46 unit + 205 dashboard integration + 120 gateway integration after Clerk webhook coverage). Test-only `ioredis` mock gap that was silently swallowing alert-path TypeErrors is fixed.
 - [x] True end-to-end launch flow test: inbound message → thread → plan → approval → outbound reply (`e2e/core-agent-flow.spec.ts`).
 - [x] Browser E2E for the main support flow with Clerk auth and outbound provider interception.
+- [x] Critical-path route test checklist documented for auth, org scope, validation, provider failure, billing gates, and webhook idempotency. See [`critical-path-test-checklist.md`](critical-path-test-checklist.md).
+- [x] Dashboard and gateway integration coverage reports are generated in CI artifacts without enforcing global thresholds.
 
 ### Billing (external)
 

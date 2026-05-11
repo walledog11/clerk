@@ -66,7 +66,7 @@ export async function GET(request: Request) {
             MIN(CASE WHEN m.sender_type IN ('agent', 'ai') THEN m.sent_at END) AS first_response
           FROM threads t
           INNER JOIN messages m ON m.thread_id = t.id AND m.deleted_at IS NULL
-          WHERE t.organization_id = ${org.id}
+          WHERE t.organization_id = ${org.id}::uuid
             AND t.created_at >= ${from}
             AND t.created_at <= ${to}
             AND t.deleted_at IS NULL
@@ -91,7 +91,7 @@ export async function GET(request: Request) {
         FROM (
           SELECT customer_id, COUNT(*) AS thread_count
           FROM threads
-          WHERE organization_id = ${org.id}
+          WHERE organization_id = ${org.id}::uuid
             AND created_at >= ${from}
             AND created_at <= ${to}
             AND deleted_at IS NULL
@@ -103,7 +103,7 @@ export async function GET(request: Request) {
         SELECT c.name, c.platform_id, COUNT(t.id)::bigint AS ticket_count
         FROM threads t
         INNER JOIN customers c ON c.id = t.customer_id
-        WHERE t.organization_id = ${org.id}
+        WHERE t.organization_id = ${org.id}::uuid
           AND t.created_at >= ${from}
           AND t.created_at <= ${to}
           AND t.deleted_at IS NULL

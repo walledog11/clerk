@@ -9,6 +9,7 @@ import { recordProviderSendFailure } from '@/lib/server/provider-send-alerts';
 import { getRedis } from '@/lib/server/redis';
 import { timingSafeIncludes } from '@/lib/auth-utils';
 import { safeReturnTo } from '@/lib/security/safe-return-to';
+import { normalizeShopifyShopDomain } from '@/lib/shopify/oauth';
 
 export async function GET(request: Request) {
   const appUrl = process.env.APP_URL;
@@ -33,10 +34,12 @@ export async function GET(request: Request) {
   const savedState = cookieStore.get('shopify_oauth_state')?.value;
   const clerkOrgId = cookieStore.get('shopify_oauth_org')?.value;
   const savedUserId = cookieStore.get('shopify_oauth_user')?.value;
+  const savedShop = cookieStore.get('shopify_oauth_shop')?.value;
   const returnTo = safeReturnTo(cookieStore.get('shopify_oauth_return')?.value);
   cookieStore.delete('shopify_oauth_state');
   cookieStore.delete('shopify_oauth_org');
   cookieStore.delete('shopify_oauth_user');
+  cookieStore.delete('shopify_oauth_shop');
   cookieStore.delete('shopify_oauth_return');
 
   if (!savedState || !state || !timingSafeIncludes([savedState], state)) {
@@ -54,6 +57,12 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=shopify_invalid_callback`);
   }
 
+  const shopDomain = normalizeShopifyShopDomain(shop);
+  if (!shopDomain || !savedShop || shopDomain !== savedShop) {
+    logger.error({ shop, savedShop }, '[Shopify OAuth] Shop domain mismatch — possible CSRF attempt');
+    return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=shopify_shop_mismatch`);
+  }
+
   // ---------------------------------------------------------------
   // Step 2: Verify Shopify HMAC signature
   // Shopify signs all query params (except hmac) alphabetically with client secret.
@@ -68,7 +77,7 @@ export async function GET(request: Request) {
     .join('&');
   const digest = crypto.createHmac('sha256', clientSecret).update(message).digest('hex');
 
-  if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac))) {
+  if (!timingSafeIncludes([digest], hmac)) {
     logger.error('[Shopify OAuth] HMAC verification failed');
     return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=shopify_hmac_invalid`);
   }
@@ -77,7 +86,7 @@ export async function GET(request: Request) {
   // Step 3: Exchange code for permanent access token
   // ---------------------------------------------------------------
   try {
-    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    const tokenRes = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
@@ -93,11 +102,11 @@ export async function GET(request: Request) {
     // ---------------------------------------------------------------
     // Step 4: Fetch shop info for display name
     // ---------------------------------------------------------------
-    const shopRes = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
+    const shopRes = await fetch(`https://${shopDomain}/admin/api/2024-01/shop.json`, {
       headers: { 'X-Shopify-Access-Token': accessToken },
     });
     const shopData = await shopRes.json();
-    const shopName: string = shopData.shop?.name ?? shop;
+    const shopName: string = shopData.shop?.name ?? shopDomain;
 
     // ---------------------------------------------------------------
     // Step 5: Save integration to database
@@ -114,14 +123,14 @@ export async function GET(request: Request) {
       logger.error({ clerkOrgId }, '[Shopify OAuth] Org not found');
       return NextResponse.redirect(`${appUrl}/dashboard/integrations?error=shopify_server_error`);
     }
-    const shopifyKey = { organizationId: org.id, platform: 'shopify' as const, externalAccountId: shop };
+    const shopifyKey = { organizationId: org.id, platform: 'shopify' as const, externalAccountId: shopDomain };
     const existingShopify = await db.integration.findUnique({ where: { organizationId_platform_externalAccountId: shopifyKey } });
     let shopifyIntegrationId: string | null = existingShopify?.id ?? null;
     if (existingShopify) {
       await db.integration.update({ where: { id: existingShopify.id }, data: { accessToken, fromEmail: shopName } });
     } else {
       try {
-        const created = await db.integration.create({ data: { organizationId: org.id, platform: 'shopify', externalAccountId: shop, accessToken, fromEmail: shopName } });
+        const created = await db.integration.create({ data: { organizationId: org.id, platform: 'shopify', externalAccountId: shopDomain, accessToken, fromEmail: shopName } });
         shopifyIntegrationId = created.id;
       } catch (err) {
         if ((err as { code?: string }).code !== 'P2002') throw err;
@@ -131,7 +140,7 @@ export async function GET(request: Request) {
       }
     }
 
-    logger.info({ shopName, shop, orgId: org.id }, '[Shopify OAuth] Integration saved');
+    logger.info({ shopName, shop: shopDomain, orgId: org.id }, '[Shopify OAuth] Integration saved');
 
     // Register order webhooks so the gateway receives Shopify order events for this store.
     // Soft-fail: a registration error should not break the OAuth flow.
@@ -139,35 +148,35 @@ export async function GET(request: Request) {
     try {
       gatewayUrl = getGatewayBaseUrl();
     } catch (error) {
-      logger.warn({ err: error, shop }, '[Shopify OAuth] Gateway URL invalid — skipping webhook registration');
+      logger.warn({ err: error, shop: shopDomain }, '[Shopify OAuth] Gateway URL invalid — skipping webhook registration');
     }
 
     if (gatewayUrl) {
       const webhookTopics = ['orders/created', 'orders/fulfilled', 'orders/updated', 'orders/cancelled'];
       await Promise.allSettled(
         webhookTopics.map((topic) =>
-          fetch(`https://${shop}/admin/api/2024-01/webhooks.json`, {
+          fetch(`https://${shopDomain}/admin/api/2024-01/webhooks.json`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
             body: JSON.stringify({ webhook: { topic, address: `${gatewayUrl}/webhooks/shopify`, format: 'json' } }),
           }).then(async (r) => {
             if (!r.ok) {
               const err = await r.json().catch(() => ({}));
-              logger.warn({ topic, shop, err }, '[Shopify OAuth] Webhook registration failed');
+              logger.warn({ topic, shop: shopDomain, err }, '[Shopify OAuth] Webhook registration failed');
               void recordProviderSendFailure('shopify', 'webhook_registration', org.id, {
                 counterClient: getRedis(),
                 integrationId: shopifyIntegrationId,
                 detail: `Shopify webhook registration failed for ${topic}`,
-                extra: { topic, shop },
+                extra: { topic, shop: shopDomain },
               });
             } else {
-              logger.info({ topic, shop }, '[Shopify OAuth] Webhook registered');
+              logger.info({ topic, shop: shopDomain }, '[Shopify OAuth] Webhook registered');
             }
           })
         )
       );
     } else {
-      logger.warn({ shop }, '[Shopify OAuth] Gateway URL not set — skipping webhook registration');
+      logger.warn({ shop: shopDomain }, '[Shopify OAuth] Gateway URL not set — skipping webhook registration');
     }
 
     const successUrl = returnTo
