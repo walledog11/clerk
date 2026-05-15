@@ -438,6 +438,7 @@ export function registerTelegramWebhookRoutes(router: Router): void {
           instruction: body,
           ...(orderNumber ? { orderNumber } : {}),
           ...(ctx.lastThreadId ? { threadId: ctx.lastThreadId } : {}),
+          senderPhone: `telegram:${chatId}`,
           telegramChatId: chatId,
           clerkUserId: member.clerkUserId,
         }),
