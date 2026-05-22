@@ -4,37 +4,29 @@
  */
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { UnauthorizedError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import {
   archiveDashboardAgentSessions,
   listDashboardAgentSessions,
 } from "@/lib/agent/api/sessions";
 
-export async function GET() {
-  try {
+export const GET = withOrgRoute(
+  { context: "GET /api/agent/sessions", errorMessage: "Failed to fetch sessions" },
+  async ({ org }) => {
     const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const org = await getOrCreateOrg();
+    if (!userId) throw new UnauthorizedError();
     const sessions = await listDashboardAgentSessions(org.id, userId);
-
     return NextResponse.json(sessions);
-  } catch (error) {
-    return handleApiError(error, "GET /api/agent/sessions", "Failed to fetch sessions");
-  }
-}
+  },
+);
 
-export async function DELETE() {
-  try {
+export const DELETE = withOrgRoute(
+  { context: "DELETE /api/agent/sessions", errorMessage: "Failed to clear sessions" },
+  async ({ org }) => {
     const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const org = await getOrCreateOrg();
+    if (!userId) throw new UnauthorizedError();
     await archiveDashboardAgentSessions(org.id, userId);
-
     return NextResponse.json({ ok: true });
-  } catch (error) {
-    return handleApiError(error, "DELETE /api/agent/sessions", "Failed to clear sessions");
-  }
-}
+  },
+);

@@ -11,9 +11,7 @@
  * Response: { entries: ActionLogEntry[], nextCursor: string | null }
  */
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import {
   listAgentActionLogEntries,
   listAllAgentActionLogEntries,
@@ -24,15 +22,13 @@ import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  try {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const org = await getOrCreateOrg();
+export const GET = withOrgRoute(
+  { context: "GET /api/agent/actions", errorMessage: "Failed to fetch action log" },
+  async ({ org, request }) => {
     const { searchParams } = new URL(request.url);
     const format = searchParams.get("format");
 
+    // Two different rate-limit keys (export vs read) — keep inline.
     const rl = await rateLimit(
       format === "csv" ? `agent-actions:export:${org.id}` : `agent-actions:${org.id}`,
       format === "csv" ? 5 : 60,
@@ -63,7 +59,5 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ entries, nextCursor });
-  } catch (error) {
-    return handleApiError(error, "GET /api/agent/actions", "Failed to fetch action log");
-  }
-}
+  },
+);

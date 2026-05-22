@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { UnauthorizedError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import { getDashboardAgentSession } from "@/lib/agent/api/sessions";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
+export const GET = withOrgRoute<{ id: string }>(
+  { context: "GET /api/agent/sessions/[id]", errorMessage: "Failed to fetch session" },
+  async ({ org, params }) => {
     const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const org = await getOrCreateOrg();
-    const { id } = await params;
-    const session = await getDashboardAgentSession(org.id, userId, id);
-
+    if (!userId) throw new UnauthorizedError();
+    const session = await getDashboardAgentSession(org.id, userId, params.id);
     return NextResponse.json(session);
-  } catch (error) {
-    return handleApiError(error, "GET /api/agent/sessions/[id]", "Failed to fetch session");
-  }
-}
+  },
+);

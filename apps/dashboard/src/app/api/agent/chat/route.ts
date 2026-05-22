@@ -12,8 +12,8 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 import { db, Prisma, createMessage } from "@clerk/db";
 import { auth } from "@clerk/nextjs/server";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { UnauthorizedError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import { executeAgentTurn } from "@/lib/agent/api/execution";
 import { buildContext, hashInstructionForLog, planAgent } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
@@ -23,10 +23,8 @@ import {
   resolveDashboardAgentSession,
 } from "@/lib/agent/api/sessions";
 import { parseAgentChatBody } from "@/lib/agent/api/validation";
-import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { recordAgentRouteFailure } from "@/lib/server/agent-failure-alerts";
 import { getRedis } from "@/lib/server/redis";
-import { assertBillingWriteAllowed } from "@/lib/billing/write-gate";
 import logger from "@/lib/server/logger";
 import type { AgentPlan, OrgSettings, RawToolCall } from "@/types";
 
@@ -296,21 +294,29 @@ async function planDashboardApproval(params: {
   return { approval };
 }
 
-export async function POST(request: Request) {
-  let orgId: string | null = null;
-
-  try {
+export const POST = withOrgRoute(
+  {
+    context: "Agent chat POST",
+    errorMessage: "Failed to run agent",
+    requireBillingWriteAllowed: true,
+    rateLimit: { key: "agent:chat", limit: 10, windowSecs: 60 },
+    onError: async (error, orgId) => {
+      logger.error({ err: error }, "[agent/chat] error");
+      await recordAgentRouteFailure({
+        route: "/api/agent/chat",
+        orgId,
+        error,
+      }, {
+        getCounterClient: getRedis,
+        onError: (alertError) => {
+          logger.error({ err: alertError }, "[agent/chat] failure alert error");
+        },
+      });
+    },
+  },
+  async ({ org, request }) => {
     const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const org = await getOrCreateOrg();
-    assertBillingWriteAllowed(org);
-    orgId = org.id;
-
-    const rl = await rateLimit(`agent:chat:${org.id}`, 10, 60);
-    if (!rl.success) return tooManyRequests(rl.reset);
+    if (!userId) throw new UnauthorizedError();
 
     const { instruction, sessionId } = parseAgentChatBody(await request.json());
     const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
@@ -424,20 +430,5 @@ export async function POST(request: Request) {
       summary: result.summary,
       actionsPerformed: result.actionsPerformed,
     });
-  } catch (error) {
-    logger.error({ err: error }, "[agent/chat] error");
-
-    await recordAgentRouteFailure({
-      route: "/api/agent/chat",
-      orgId,
-      error,
-    }, {
-      getCounterClient: getRedis,
-      onError: (alertError) => {
-        logger.error({ err: alertError }, "[agent/chat] failure alert error");
-      },
-    });
-
-    return handleApiError(error, "Agent chat POST", "Failed to run agent");
-  }
-}
+  },
+);
