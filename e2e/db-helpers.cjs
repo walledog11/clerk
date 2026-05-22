@@ -40,6 +40,7 @@ const AGENT_SETTINGS_DEFAULTS = {
   businessHoursTimezoneOffset: 0,
   autoAckMessage: "Thanks for reaching out! We're currently outside business hours and will get back to you soon.",
   spamFilterEnabled: true,
+  autonomyTier: 'trusted',
 };
 
 async function createTestOrg() {
