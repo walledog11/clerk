@@ -63,6 +63,9 @@ export interface OrgSettings {
 
   // Spam filter
   spamFilterEnabled?: boolean;
+
+  // Onboarding — chosen autonomy preset (see lib/agent/settings.ts mapping)
+  autonomyTier?: 'watch' | 'guarded' | 'trusted' | 'broad' | 'full';
 }
 
 // Database models

@@ -9,13 +9,11 @@ export default async function OnboardingLayout({ children }: { children: React.R
     const org = await db.organization.findUnique({
       where: { clerkOrgId: orgId },
       select: {
-        stripeStatus: true,
         _count: { select: { integrations: true } },
       },
     });
-    const isSubscribed = org?.stripeStatus === "active" || org?.stripeStatus === "trialing";
     const hasIntegration = (org?._count.integrations ?? 0) > 0;
-    if (isSubscribed && hasIntegration) {
+    if (hasIntegration) {
       redirect("/dashboard");
     }
   }

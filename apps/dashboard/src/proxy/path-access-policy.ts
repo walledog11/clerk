@@ -20,9 +20,8 @@ export const publicRoutePatterns = [
 ] as const;
 
 export const signedInNoOrgRoutePatterns = [
-  "/welcome(.*)",
   "/select-org(.*)",
-  "/create-org(.*)",
+  "/onboarding(.*)",
 ] as const;
 
 export const orgOptionalApiRoutePatterns = ["/api/feedback(.*)"] as const;

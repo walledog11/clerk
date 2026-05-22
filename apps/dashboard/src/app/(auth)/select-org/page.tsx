@@ -1,27 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useOrganizationList } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   ArrowRight,
-  Building2,
   CheckCircle2,
   Loader2,
-  Plus,
   ShieldCheck,
   Workflow,
 } from "lucide-react";
 import AuthShell from "../_components/AuthShell";
 import { OrgAvatar } from "@/components/OrgAvatar";
 import { formatRole } from "@/lib/format/role";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -48,8 +43,8 @@ const highlights = [
   },
   {
     icon: CheckCircle2,
-    title: "Create another team space anytime",
-    description: "Spin up a new workspace when you need a separate brand or operation.",
+    title: "Pick up where you left off",
+    description: "Selecting a workspace drops you straight back into its inbox and settings.",
   },
 ];
 
@@ -62,6 +57,12 @@ export default function SelectOrgPage() {
   const [error, setError] = useState<string | null>(null);
 
   const orgs = (userMemberships?.data ?? []) as MembershipItem[];
+
+  useEffect(() => {
+    if (isLoaded && orgs.length === 0) {
+      router.replace("/onboarding");
+    }
+  }, [isLoaded, orgs.length, router]);
 
   async function handleSelect(orgId: string) {
     if (!setActive || pendingOrgId) return;
@@ -114,30 +115,9 @@ export default function SelectOrgPage() {
         </CardHeader>
 
         <CardContent className="p-0">
-          {!isLoaded ? (
+          {!isLoaded || orgs.length === 0 ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="size-5 animate-spin text-white/45" />
-            </div>
-          ) : orgs.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
-              <div className="flex size-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-                <Building2 className="size-6 text-white/45" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-base font-semibold text-white">No workspaces yet</p>
-                <p className="text-sm leading-relaxed text-white/55">
-                  Create your first workspace to start organizing tickets, teammates, and integrations.
-                </p>
-              </div>
-              <Button
-                asChild
-                className="mt-2 h-10 rounded-xl bg-green-400 px-4 text-sm font-semibold text-black hover:bg-green-300"
-              >
-                <Link href="/create-org">
-                  <Plus className="size-4" />
-                  Create workspace
-                </Link>
-              </Button>
             </div>
           ) : (
             <ul className="divide-y divide-white/10">
@@ -186,21 +166,6 @@ export default function SelectOrgPage() {
             </div>
           ) : null}
         </CardContent>
-
-        {orgs.length > 0 ? (
-          <CardFooter className="border-t border-white/10 px-5 py-4">
-            <Button
-              asChild
-              variant="outline"
-              className="h-10 w-full rounded-xl border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.06] hover:text-white"
-            >
-              <Link href="/create-org">
-                <Plus className="size-4" />
-                Create another workspace
-              </Link>
-            </Button>
-          </CardFooter>
-        ) : null}
       </Card>
     </AuthShell>
   );

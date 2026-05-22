@@ -5,6 +5,8 @@ import type { Prisma } from '@prisma/client';
 import { getOrCreateOrg } from '@/lib/server/org';
 import { handleApiError } from '@/lib/api/errors';
 import { assertBillingWriteAllowed } from '@/lib/billing/write-gate';
+import stripe from '@/lib/billing/stripe';
+import logger from '@/lib/server/logger';
 import type { OrgSettings } from '@/types';
 
 function resolvePlanName(priceId: string | null): string {
@@ -95,5 +97,46 @@ export async function PATCH(request: Request) {
     });
   } catch (error) {
     return handleApiError(error, 'Org PATCH', 'Failed to update org');
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { orgId, userId, orgRole } = await auth();
+    if (!orgId || !userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (orgRole !== 'org:admin') {
+      return NextResponse.json({ error: 'Admin role required' }, { status: 403 });
+    }
+
+    const org = await getOrCreateOrg();
+
+    const body = await request.json().catch(() => ({}));
+    const { confirmName } = body as { confirmName?: string };
+    if (typeof confirmName !== 'string' || confirmName !== org.name) {
+      return NextResponse.json({ error: 'Confirmation name does not match' }, { status: 400 });
+    }
+
+    if (org.stripeSubscriptionId) {
+      try {
+        await stripe.subscriptions.cancel(org.stripeSubscriptionId);
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        if (code !== 'resource_missing') {
+          logger.error({ err, orgId: org.id }, '[Org DELETE] Failed to cancel Stripe subscription');
+          throw err;
+        }
+      }
+    }
+
+    const client = await clerkClient();
+    await client.organizations.deleteOrganization(org.clerkOrgId);
+
+    await db.organization.deleteMany({ where: { id: org.id } });
+
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    return handleApiError(error, 'Org DELETE', 'Failed to delete workspace');
   }
 }

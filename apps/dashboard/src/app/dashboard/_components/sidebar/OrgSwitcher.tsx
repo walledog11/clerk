@@ -1,13 +1,11 @@
 "use client"
 
-import Link from "next/link"
 import { ChevronDown } from "lucide-react"
 import { OrgAvatar } from "@/components/OrgAvatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/ui/cn"
@@ -102,22 +100,6 @@ export function OrgSwitcher({
               </DropdownMenuItem>
             )
           })}
-        <DropdownMenuSeparator className="bg-white/[0.08]" />
-        <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/[0.07]">
-          <Link
-            href="/create-org"
-            className="flex items-center gap-2.5"
-            onClick={() => {
-              onClose?.()
-              dispatchNavProgressStart()
-            }}
-          >
-            <div className="w-5 h-5 rounded bg-white/[0.06] flex items-center justify-center text-white/30 text-sm font-light leading-none shrink-0">
-              +
-            </div>
-            <span className="text-xs font-medium text-white/40">Create workspace</span>
-          </Link>
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

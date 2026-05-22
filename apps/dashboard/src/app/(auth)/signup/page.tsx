@@ -142,7 +142,7 @@ export default function SignUpPage() {
       <SignUp
         routing="hash"
         signInUrl="/login"
-        fallbackRedirectUrl="/welcome"
+        fallbackRedirectUrl="/onboarding"
         appearance={getAuthClerkAppearance({
           header: "hidden",
           headerTitle: "hidden",

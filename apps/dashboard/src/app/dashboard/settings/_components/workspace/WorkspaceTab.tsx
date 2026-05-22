@@ -1,11 +1,20 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Download, Loader2, Upload } from "lucide-react"
-import { useOrganization } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
+import { Download, Loader2, Trash2, Upload } from "lucide-react"
+import { useOrganization, useOrganizationList } from "@clerk/nextjs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { OrgAvatar } from "@/components/OrgAvatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SaveButton, SectionCard } from "../shared"
 
 interface Props {
@@ -16,7 +25,11 @@ interface Props {
 const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 export default function WorkspaceTab({ orgName, version }: Props) {
-  const { organization } = useOrganization()
+  const router = useRouter()
+  const { organization, membership } = useOrganization()
+  const { setActive } = useOrganizationList()
+  const isAdmin = membership?.role === "org:admin"
+
   const [workspaceName, setWorkspaceName] = useState(orgName)
   const [currentVersion, setCurrentVersion] = useState(version)
   const [saving, setSaving] = useState(false)
@@ -34,6 +47,11 @@ export default function WorkspaceTab({ orgName, version }: Props) {
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState<string | null>(null)
   const [clearSuccess, setClearSuccess] = useState(false)
+
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function save() {
     setSaving(true)
@@ -134,6 +152,28 @@ export default function WorkspaceTab({ orgName, version }: Props) {
       setClearError('Failed to clear tickets. Please try again.')
     } finally {
       setClearing(false)
+    }
+  }
+
+  async function deleteWorkspace() {
+    if (deleteConfirmName !== orgName) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch('/api/org', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmName: deleteConfirmName }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(body.error ?? 'Failed')
+      }
+      if (setActive) await setActive({ organization: null })
+      router.replace('/select-org')
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete workspace.')
+      setDeleting(false)
     }
   }
 
@@ -239,7 +279,7 @@ export default function WorkspaceTab({ orgName, version }: Props) {
           <h2 className="text-sm font-semibold text-red-400">Danger Zone</h2>
           <p className="text-xs text-white/35 mt-0.5">These actions are permanent and cannot be undone.</p>
         </div>
-        <div className="p-5 sm:p-6">
+        <div className="p-5 sm:p-6 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
             <div>
               <p className="text-sm font-semibold text-white/70">Clear all ticket history</p>
@@ -276,8 +316,85 @@ export default function WorkspaceTab({ orgName, version }: Props) {
               </Button>
             )}
           </div>
+
+          {isAdmin && (
+            <div className="pt-5 border-t border-red-500/15 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+              <div>
+                <p className="text-sm font-semibold text-white/70">Delete workspace</p>
+                <p className="text-xs text-white/35 mt-0.5">
+                  Permanently delete <span className="text-white/60 font-medium">{orgName}</span> and all of its data — conversations, customers, integrations, knowledge base, and billing. Every member will lose access.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDeleteConfirmName("")
+                  setDeleteError(null)
+                  setDeleteOpen(true)
+                }}
+                className="h-7 px-3 text-xs font-semibold text-red-400 border-red-500/30 bg-red-500/[0.06] hover:bg-red-500/[0.12] hover:text-red-300 self-start shrink-0"
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete workspace
+              </Button>
+            </div>
+          )}
         </div>
       </div>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (deleting) return
+          setDeleteOpen(open)
+          if (!open) {
+            setDeleteConfirmName("")
+            setDeleteError(null)
+          }
+        }}
+      >
+        <DialogContent className="border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white">Delete {orgName}?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the workspace, all conversations, customers, integrations, and knowledge base. Any active subscription will be cancelled. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-white/60">
+              Type <span className="text-white/85 font-mono">{orgName}</span> to confirm
+            </label>
+            <Input
+              autoFocus
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={orgName}
+              disabled={deleting}
+              className="h-9 text-sm bg-white/[0.06] border-white/[0.12] text-white/85 placeholder:text-white/25"
+            />
+            {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+              className="border-white/[0.12] text-white/70 hover:bg-white/[0.06]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={deleteWorkspace}
+              disabled={deleting || deleteConfirmName !== orgName}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Delete forever
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   )

@@ -187,6 +187,19 @@ body,
   to   { background-position: 20px 20px; }
 }
 
+@keyframes ob-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes ob-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes ob-pulse-bg {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
 /* ── Marketing page design tokens ── */
 :root {
   --m-ink: #161413;

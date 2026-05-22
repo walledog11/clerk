@@ -24,7 +24,7 @@ describe("proxy path access policy", () => {
   });
 
   it("requires auth but not an org for signed-in onboarding and workspace selection pages", () => {
-    expect(getPathAccessPolicy("/welcome")).toEqual({
+    expect(getPathAccessPolicy("/onboarding")).toEqual({
       requiresAuth: true,
       requiresOrganization: false,
       missingOrganizationAction: "none",
@@ -34,24 +34,9 @@ describe("proxy path access policy", () => {
       requiresOrganization: false,
       missingOrganizationAction: "none",
     });
-    expect(getPathAccessPolicy("/create-org")).toEqual({
-      requiresAuth: true,
-      requiresOrganization: false,
-      missingOrganizationAction: "none",
-    });
   });
 
   it("requires an org for private pages and redirects when missing", () => {
-    expect(getPathAccessPolicy("/connect")).toEqual({
-      requiresAuth: true,
-      requiresOrganization: true,
-      missingOrganizationAction: "redirect",
-    });
-    expect(getPathAccessPolicy("/plan")).toEqual({
-      requiresAuth: true,
-      requiresOrganization: true,
-      missingOrganizationAction: "redirect",
-    });
     expect(getPathAccessPolicy("/dashboard/settings")).toEqual({
       requiresAuth: true,
       requiresOrganization: true,
