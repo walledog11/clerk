@@ -11,6 +11,9 @@ export interface OrgRouteOptions {
   errorMessage: string;
   requireBillingWriteAllowed?: boolean;
   rateLimit?: { key: string; limit: number; windowSecs: number };
+  // Called from the catch before handleApiError so routes can record failure
+  // side effects (e.g. agent-failure alerts) without re-wrapping the handler.
+  onError?: (err: unknown, orgId: string | null) => Promise<void> | void;
 }
 
 export interface OrgRouteContext<P> {
@@ -31,8 +34,10 @@ export function withOrgRoute<P = Record<string, never>>(
     // so the wrapper is assignable for both no-param and dynamic-segment routes.
     routeCtx?: { params: Promise<unknown> },
   ): Promise<Response> => {
+    let orgId: string | null = null;
     try {
       const org = await getOrCreateOrg();
+      orgId = org.id;
       if (options.requireBillingWriteAllowed) assertBillingWriteAllowed(org);
       if (options.rateLimit) {
         const { key, limit, windowSecs } = options.rateLimit;
@@ -43,6 +48,13 @@ export function withOrgRoute<P = Record<string, never>>(
       const req = request ?? new Request(PLACEHOLDER_REQUEST_URL);
       return await handler({ org, request: req, params });
     } catch (error) {
+      if (options.onError) {
+        try {
+          await options.onError(error, orgId);
+        } catch {
+          // Swallow — onError must not mask the original error.
+        }
+      }
       return handleApiError(error, options.context, options.errorMessage);
     }
   };

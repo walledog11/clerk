@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { BadRequestError, handleApiError } from "@/lib/api/errors";
+import { BadRequestError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { executeAgentTurn } from "@/lib/agent/api/execution";
 import { isAgentPlanCacheHit, readAgentPlanCache } from "@/lib/agent/api/plan-cache";
@@ -10,7 +10,6 @@ import { resolveAgentSettings } from "@/lib/agent/settings";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { recordAgentRouteFailure } from "@/lib/server/agent-failure-alerts";
 import { getRedis } from "@/lib/server/redis";
-import { assertBillingWriteAllowed } from "@/lib/billing/write-gate";
 import type { OrgSettings } from "@/types";
 import logger from "@/lib/server/logger";
 
@@ -18,14 +17,27 @@ function serializeToolInput(input: unknown): string {
   return JSON.stringify(input ?? null);
 }
 
-export async function POST(request: Request) {
-  const startedAt = Date.now();
-  let orgId: string | null = null;
-
-  try {
-    const org = await getOrCreateOrg();
-    assertBillingWriteAllowed(org);
-    orgId = org.id;
+export const POST = withOrgRoute(
+  {
+    context: "Agent POST",
+    errorMessage: "Failed to run agent",
+    requireBillingWriteAllowed: true,
+    onError: async (error, orgId) => {
+      logger.error({ err: error }, '[agent] error');
+      await recordAgentRouteFailure({
+        route: "/api/agent",
+        orgId,
+        error,
+      }, {
+        getCounterClient: getRedis,
+        onError: (alertError) => {
+          logger.error({ err: alertError }, "[agent] failure alert error");
+        },
+      });
+    },
+  },
+  async ({ org, request }) => {
+    const startedAt = Date.now();
 
     const rl = await rateLimit(`agent:${org.id}`, 10, 60, {
       forceForE2E: request.headers.get("x-e2e-rate-limit") === "enforce",
@@ -91,20 +103,5 @@ export async function POST(request: Request) {
     }, "[agent] result");
 
     return NextResponse.json(result);
-  } catch (error) {
-    logger.error({ err: error }, '[agent] error');
-
-    await recordAgentRouteFailure({
-      route: "/api/agent",
-      orgId,
-      error,
-    }, {
-      getCounterClient: getRedis,
-      onError: (alertError) => {
-        logger.error({ err: alertError }, "[agent] failure alert error");
-      },
-    });
-
-    return handleApiError(error, "Agent POST", "Failed to run agent");
-  }
-}
+  },
+);

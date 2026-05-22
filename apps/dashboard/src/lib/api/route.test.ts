@@ -151,6 +151,39 @@ describe('withOrgRoute', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('invokes onError with the org id and original error before responding', async () => {
+    const onError = vi.fn();
+    const route = withOrgRoute(
+      { context: 'Test', errorMessage: 'failed', onError },
+      async () => {
+        throw new BadRequestError('bad input');
+      },
+    );
+
+    const res = await route(makeRequest());
+
+    expect(res.status).toBe(400);
+    expect(onError).toHaveBeenCalledOnce();
+    const [err, orgId] = onError.mock.calls[0];
+    expect(err).toBeInstanceOf(BadRequestError);
+    expect(orgId).toBe('org_1');
+  });
+
+  it('still returns the mapped error when onError itself throws', async () => {
+    const onError = vi.fn().mockRejectedValue(new Error('alert system down'));
+    const route = withOrgRoute(
+      { context: 'Test', errorMessage: 'failed', onError },
+      async () => {
+        throw new BadRequestError('bad input');
+      },
+    );
+
+    const res = await route(makeRequest());
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad input' });
+  });
+
   it('lets the handler run when rate limit allows it', async () => {
     const handler = vi.fn(async () => NextResponse.json({ ok: true }));
     const route = withOrgRoute(

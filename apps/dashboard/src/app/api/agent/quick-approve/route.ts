@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma, db } from "@clerk/db";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { BadRequestError, handleApiError } from "@/lib/api/errors";
+import { BadRequestError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { executeAgentTurn } from "@/lib/agent/api/execution";
 import { isAgentPlanCacheHit, readAgentPlanCache } from "@/lib/agent/api/plan-cache";
@@ -9,28 +9,36 @@ import { parseAgentQuickApproveBody } from "@/lib/agent/api/validation";
 import { hashInstructionForLog } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
 import { classifyHomePlan } from "@/lib/agent/plan-preview";
-import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import {
   recordAgentFailure,
   recordAgentRouteFailure,
 } from "@/lib/server/agent-failure-alerts";
 import { getRedis } from "@/lib/server/redis";
-import { assertBillingWriteAllowed } from "@/lib/billing/write-gate";
 import type { OrgSettings } from "@/types";
 import logger from "@/lib/server/logger";
 
-export async function POST(request: Request) {
-  const startedAt = Date.now();
-  let orgId: string | null = null;
-
-  try {
-    const org = await getOrCreateOrg();
-    assertBillingWriteAllowed(org);
-    orgId = org.id;
-
-    const rl = await rateLimit(`agent:quick-approve:${org.id}`, 20, 60);
-    if (!rl.success) return tooManyRequests(rl.reset);
-
+export const POST = withOrgRoute(
+  {
+    context: "Agent quick approve POST",
+    errorMessage: "Failed to approve reply",
+    requireBillingWriteAllowed: true,
+    rateLimit: { key: "agent:quick-approve", limit: 20, windowSecs: 60 },
+    onError: async (error, orgId) => {
+      logger.error({ err: error }, "[agent:quick-approve] error");
+      await recordAgentRouteFailure({
+        route: "/api/agent/quick-approve",
+        orgId,
+        error,
+      }, {
+        getCounterClient: getRedis,
+        onError: (alertError) => {
+          logger.error({ err: alertError }, "[agent:quick-approve] failure alert error");
+        },
+      });
+    },
+  },
+  async ({ org, request }) => {
+    const startedAt = Date.now();
     const { threadId } = parseAgentQuickApproveBody(await request.json());
     const thread = await requireOrgThread(threadId, org.id);
     const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
@@ -111,20 +119,5 @@ export async function POST(request: Request) {
     }, "[agent:quick-approve] result");
 
     return NextResponse.json(result);
-  } catch (error) {
-    logger.error({ err: error }, "[agent:quick-approve] error");
-
-    await recordAgentRouteFailure({
-      route: "/api/agent/quick-approve",
-      orgId,
-      error,
-    }, {
-      getCounterClient: getRedis,
-      onError: (alertError) => {
-        logger.error({ err: alertError }, "[agent:quick-approve] failure alert error");
-      },
-    });
-
-    return handleApiError(error, "Agent quick approve POST", "Failed to approve reply");
-  }
-}
+  },
+);

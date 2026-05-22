@@ -1,26 +1,27 @@
 import { NextResponse } from "next/server";
 import { createMessage } from "@clerk/db";
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { withOrgRoute } from "@/lib/api/route";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { parseAgentAskBody } from "@/lib/agent/api/validation";
 import { buildContext, hashInstructionForLog, runAgent } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
 import { serializeAgentTurn } from "@/lib/agent/api/turns";
-import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import logger from "@/lib/server/logger";
 import type { OrgSettings } from "@/types";
 
 export const maxDuration = 60;
 
-export async function POST(request: Request) {
-  const startedAt = Date.now();
-
-  try {
-    const org = await getOrCreateOrg();
-    const rl = await rateLimit(`agent:ask:${org.id}`, 20, 60);
-    if (!rl.success) return tooManyRequests(rl.reset);
-
+export const POST = withOrgRoute(
+  {
+    context: "Agent ask POST",
+    errorMessage: "Failed to answer composer question",
+    rateLimit: { key: "agent:ask", limit: 20, windowSecs: 60 },
+    onError: (error) => {
+      logger.error({ err: error }, "[agent:ask] error");
+    },
+  },
+  async ({ org, request }) => {
+    const startedAt = Date.now();
     const { threadId, instruction } = parseAgentAskBody(await request.json());
     const instructionHash = hashInstructionForLog(instruction);
     await requireOrgThread(threadId, org.id);
@@ -56,8 +57,5 @@ export async function POST(request: Request) {
     }, "[agent:ask] result");
 
     return NextResponse.json(result);
-  } catch (error) {
-    logger.error({ err: error }, "[agent:ask] error");
-    return handleApiError(error, "Agent ask POST", "Failed to answer composer question");
-  }
-}
+  },
+);

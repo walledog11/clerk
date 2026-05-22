@@ -1,28 +1,25 @@
 import { NextResponse } from "next/server";
-
-export const maxDuration = 60;
-import { getOrCreateOrg } from "@/lib/server/org";
-import { handleApiError } from "@/lib/api/errors";
+import { db } from "@clerk/db";
+import { withOrgRoute } from "@/lib/api/route";
 import { requireOrgThread } from "@/lib/agent/api/auth";
 import { buildAgentPlanCacheRecord, isAgentPlanCacheHit, readAgentPlanCache } from "@/lib/agent/api/plan-cache";
 import { parseAgentPlanBody } from "@/lib/agent/api/validation";
 import { buildContext, hashInstructionForLog, planAgent } from "@/lib/agent/runner";
 import { resolveAgentSettings } from "@/lib/agent/settings";
-import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
-import { assertBillingWriteAllowed } from "@/lib/billing/write-gate";
-import { db } from "@clerk/db";
 import type { OrgSettings } from "@/types";
 import logger from "@/lib/server/logger";
 
-export async function POST(request: Request) {
-  const startedAt = Date.now();
-  try {
-    const org = await getOrCreateOrg();
-    assertBillingWriteAllowed(org);
+export const maxDuration = 60;
 
-    const rl = await rateLimit(`agent:plan:${org.id}`, 20, 60);
-    if (!rl.success) return tooManyRequests(rl.reset);
-
+export const POST = withOrgRoute(
+  {
+    context: "Agent plan POST",
+    errorMessage: "Failed to generate plan",
+    requireBillingWriteAllowed: true,
+    rateLimit: { key: "agent:plan", limit: 20, windowSecs: 60 },
+  },
+  async ({ org, request }) => {
+    const startedAt = Date.now();
     const { threadId, instruction, force } = parseAgentPlanBody(await request.json());
     const settings = resolveAgentSettings(org.settings as Partial<OrgSettings> | null);
     const instructionHash = hashInstructionForLog(instruction);
@@ -96,7 +93,5 @@ export async function POST(request: Request) {
     }, "[agent:plan] response");
 
     return NextResponse.json(plan);
-  } catch (error) {
-    return handleApiError(error, "Agent plan POST", "Failed to generate plan");
-  }
-}
+  },
+);
