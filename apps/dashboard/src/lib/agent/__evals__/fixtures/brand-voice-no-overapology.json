@@ -1,0 +1,44 @@
+{
+  "id": "brand-voice-no-overapology",
+  "description": "Brand voice forbids over-apologetic phrases. Customer complains about a delayed order; agent should reply without the banned phrases ('so sorry', 'deeply apologize').",
+  "setup": {
+    "channelType": "email",
+    "tag": "Support",
+    "customerName": "Marcus Lee",
+    "customerPlatformId": "marcus@example.com",
+    "shopifyCustomerId": "10000002002",
+    "shopify": { "shop": "test-store.myshopify.com", "accessToken": "shpat_test_fixture" },
+    "orgSettings": { "brandVoice": "Confident and direct. Never over-apologize. Do NOT use the phrases 'so sorry' or 'deeply apologize' — they sound performative. Acknowledge the issue briefly and move straight to what's happening and what's next." },
+    "messages": [
+      { "senderType": "customer", "contentText": "My order #2002 is taking forever to arrive. This is really frustrating, when will it actually ship?" }
+    ],
+    "recentOrders": [
+      {
+        "id": "9000002002",
+        "name": "#2002",
+        "created_at": "2026-05-12T10:00:00-07:00",
+        "financial_status": "paid",
+        "fulfillment_status": null,
+        "total_price": "74.00",
+        "currency": "USD",
+        "items": [
+          {
+            "line_item_id": "lineitem_2002",
+            "title": "Wool Beanie",
+            "quantity": 1,
+            "variant_id": "variant_2002",
+            "fulfillable_quantity": 1,
+            "current_quantity": 1,
+            "fulfillment_status": null
+          }
+        ]
+      }
+    ]
+  },
+  "instruction": "Reply to the customer about their delayed order.",
+  "expectedPlan": {
+    "mustCallTools": ["send_reply"],
+    "mustNotCallTools": ["escalate_to_human"],
+    "replyMustNotInclude": ["so sorry", "deeply apologize"]
+  }
+}

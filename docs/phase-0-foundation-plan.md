@@ -213,7 +213,7 @@ Insertion points:
 
 ---
 
-### Step 2.3 — UI: sample replies editor in AgentTab (~3–4 hours)
+### Step 2.3 — UI: sample replies editor in AgentTab (~3–4 hours) [COMPLETED]
 
 **`apps/dashboard/src/app/dashboard/settings/_components/AgentTab.tsx`**
 
