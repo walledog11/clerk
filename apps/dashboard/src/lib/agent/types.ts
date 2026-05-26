@@ -39,9 +39,18 @@ export interface AgentContext {
   kbArticles: { title: string; body: string }[];
 }
 
+export type AgentActionStatus = "success" | "error" | "policy_block" | "escalated";
+export type AgentActionMode = "human_approved" | "auto_executed" | "read_only";
+
 export interface ActionEntry {
   tool: string;
   result: string;
+  input?: unknown;
+  durationMs?: number;
+  status?: AgentActionStatus;
+  mode?: AgentActionMode;
+  errorDetail?: string;
+  category?: string;
 }
 
 export interface AgentResult {

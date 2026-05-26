@@ -350,7 +350,7 @@ Broken into 3 sub-steps. Total: ~2 hours sequential. 3A and 3B are conceptually 
 
 ---
 
-## Step 4 — Autonomy tier wiring (M, depends on Steps 1–3)
+## Step 4 — Autonomy tier wiring (M, depends on Steps 1–3) [COMPLETED]
 
 The 5 tiers (`watch`/`guarded`/`trusted`/`broad`/`full`) exist as labels collected at onboarding but the runtime doesn't read them. They're flattened into legacy booleans + caps at onboarding, then the tier name is stored but ignored downstream. Wire them properly so picking a tier (or changing one later) actually changes runtime behavior.
 
@@ -515,7 +515,15 @@ Small pill: "Autopilot: Trusted" with a tier-tinted background (e.g., yellow for
 
 Stop overloading `Message.note` rows with parsed JSON. Make action records first-class.
 
-**Schema migration** in `packages/db/prisma/schema.prisma`:
+Broken into 8 sub-steps. Total: ~5 working days. 5.1 is pure schema and lands alone. 5.2 + 5.3 are coupled (the helper is dead code until it's wired into the run loop) and ship together as "dark write" — table is populated but nothing reads it yet, so the change is reversible by deleting rows. 5.4 layers approval context onto the writer. 5.5 + 5.6 flip the read source of truth and backfill historic data — ship together so the dashboard doesn't show an empty list during the gap. 5.7 (UI) and 5.8 (evals) are independent and can land in either order.
+
+**Layout decision.** Dark-write first, then flip readers. The new `AgentAction` table is populated by 5.2 + 5.3 while `action-log.ts` keeps parsing `__clerk_agent__` notes. Only in 5.5 does the read path switch over, with 5.6 backfilling history in the same PR window. This means the writer can soak in production for a few days before any user surface depends on it.
+
+---
+
+### Step 5.1 — Schema migration (~0.5 day) [COMPLETED]
+
+Pure additive change in `packages/db/prisma/schema.prisma`. No reads, no writes — the table just exists.
 
 ```prisma
 model AgentAction {
@@ -546,37 +554,145 @@ model AgentAction {
 }
 ```
 
+Field semantics:
 - `status`: `success` | `error` | `policy_block` | `escalated`
 - `mode`: `human_approved` | `auto_executed` | `read_only`
-- `category`: mirrors `TOOL_CATEGORIES` value
+- `category`: mirrors `TOOL_CATEGORIES` value from `lib/agent/tools/registry.ts`
 - `approvedPlanHash`: hash of the cached plan at approval time, lets you verify "the executed plan matches what the merchant approved"
+- `instructionHash`: hash of the instruction that produced the action (manual-invoke flows)
 
-Run the migration. Add the back-relation on `Organization` and `Thread`.
+Add back-relations on `Organization` and `Thread`. Run `npx prisma migrate dev` locally, then apply to Neon.
 
-**Writer** — change `apps/dashboard/src/lib/agent/run.ts`:
-- Currently `actionsPerformed.push({ tool, result })`. Extend `ActionEntry` in `types.ts` to include `input`, `durationMs`, `status`, `mode`.
-- In `executeToolCall`, capture start time, input (already in scope), and stash everything.
-- After each tool call, write to `AgentAction` via a new helper `recordAgentAction(orgId, threadId, customerId, action, mode, approvalContext)`. Don't write inside the loop synchronously — buffer and flush at finish to avoid blocking the agent loop, but flush before `finish()` returns.
-- Pass the approval context (approverId, approvedAt, approvedPlanHash) through to the executor when the run is from `approvedToolCalls`. Pass `mode: "auto_executed"` when from `auto_execute` classification.
+**Done when.** Migration applied locally and on staging Neon; `prisma generate` produces the `AgentAction` client; `db.agentAction.findMany({ where: { organizationId } })` returns `[]` without errors.
 
-**Read path** — `apps/dashboard/src/lib/agent/api/action-log.ts`:
-- Rewrite to query `AgentAction` instead of parsing `__clerk_agent__` notes.
-- Keep the parse-from-notes path as fallback for historic data, or run a one-shot backfill script (`packages/db/scripts/backfill-agent-actions.ts`) to migrate existing notes. Lean backfill — clean break is better.
-- CSV export endpoint at `/api/agent/actions` reads from the new table.
+---
 
-**UI consumer** — the agent action log page wherever it lives (`/dashboard/activity` likely):
-- New columns become available: input (rendered as JSON), mode (human-approved vs auto-executed), approver, duration. Add at least mode as a column since merchants will want to filter on "what did the agent do without asking me?"
+### Step 5.2 — Writer scaffolding: types + helper (~0.5 day) [COMPLETED]
 
-**Side effect**: the existing `lib/agent/api/turns.ts:serializeAgentTurn` writes the JSON-into-a-note pattern. Once `AgentAction` is the source of truth, the note becomes optional. Keep writing a thread-scoped summary note (human-readable, no parsing required) for the threads UI to render the agent's turn in-line, but the structured record lives in `AgentAction`.
+Build the helper in isolation so it's testable before wiring into the agent loop.
 
-**New eval fixtures**: validate that runs against `AgentAction` rows match the plan. After running a fixture, query `AgentAction` for the test thread and assert `tool`, `status`, `mode` match the expected plan.
+**`apps/dashboard/src/lib/agent/types.ts`**
+- Extend `ActionEntry` with `input: unknown`, `durationMs: number`, `status: "success" | "error" | "policy_block" | "escalated"`, `mode: "human_approved" | "auto_executed" | "read_only"`, `errorDetail?: string`, `category: string`.
 
-**Effort.** 4–5 days. The migration is small, the writer is straightforward, the read-path rewrite is the bulk of it, and there's a small backfill script.
+**New file `apps/dashboard/src/lib/agent/api/agent-actions.ts`**
+- `recordAgentAction(params: { orgId, threadId?, customerId?, action: ActionEntry, mode, approval?: { approverId, approvedAt, approvedPlanHash, instructionHash? } })` — single insert into `AgentAction`.
+- `recordAgentActionsBatch(params: { orgId, threadId?, customerId?, actions: ActionEntry[], mode, approval? })` — batched insert via `createMany` so the agent loop can flush N actions in one round-trip.
+- Helper computes `approvedPlanHash` / `instructionHash` via a small `hashPlan(plan)` / `hashInstruction(instruction)` utility (SHA-256, hex, 64 chars to match the column).
+
+**Done when.** Unit test in `agent-actions.test.ts` (real DB via `createTestOrg`) inserts an `AgentAction` row through the helper and reads it back with all fields populated.
+
+---
+
+### Step 5.3 — Wire writer into the agent loop (~1 day)
+
+This is the dark-write step. After this lands, every agent run writes `AgentAction` rows but nothing reads them yet.
+
+**`apps/dashboard/src/lib/agent/run.ts`**
+- In `executeToolCall`, capture `startedAt = Date.now()`, the tool `input` (already in scope), the post-call `status` (`success` / `error` / `policy_block`), `errorDetail` when applicable, and `durationMs = Date.now() - startedAt`. Push the enriched `ActionEntry` to `actionsPerformed`.
+- After the agent loop terminates and before `finish()` returns, call `recordAgentActionsBatch` once with the full buffer. Do not write inside the loop — that adds DB latency to every tool call and a partial write on crash is harder to reason about than an all-or-nothing flush.
+- For `readOnly` runs (composer-ask flow), pass `mode: "read_only"`. For runs from `approvedToolCalls`, pass `mode: "human_approved"`. For runs from `auto_execute` classification (Step 4.5), pass `mode: "auto_executed"`. Leave `approval` undefined here — it's plumbed in 5.4.
+- Escalation: when the agent calls `escalate_to_human`, record the action with `status: "escalated"` so the audit log shows it as a deliberate choice, not a missing row.
+
+**Done when.** Running a real thread through `runAgent` produces one `AgentAction` row per tool call; rows have correct `mode`, `status`, `durationMs`; existing dashboard surfaces are unaffected (still reading from notes).
+
+---
+
+### Step 5.4 — Approval context plumbing (~0.5 day)
+
+Layer approver identity onto the rows so the audit log answers "who said yes."
+
+**`apps/dashboard/src/app/api/agent/quick-approve/route.ts`** — already authenticates the merchant. Pass `{ approverId: clerkUserId, approverDisplayName, approvedAt: new Date(), approvedPlanHash: hashPlan(cachedPlan) }` through to `runAgent`.
+
+**`apps/dashboard/src/app/api/agent/route.ts`** — same treatment for the standard approval path.
+
+**`apps/dashboard/src/lib/agent/run.ts`** — accept an optional `approval` param on the entry point; forward to `recordAgentActionsBatch`.
+
+**`apps/dashboard/src/app/api/agent/internal/route.ts`** — Telegram-driven runs. Pass `approverId` derived from the Telegram operator's bound Clerk user (via `OrgMember.userId`).
+
+**Denorm decision** (per Open decisions): store `approverId` as `"clerk_user_id:Display Name"` so the audit UI doesn't need a Clerk lookup per row. Cheap, keeps the read path single-table.
+
+**Done when.** A quick-approved run produces an `AgentAction` with `mode: "human_approved"` and all approval fields populated; an auto-execute run has `mode: "auto_executed"` and `approverId` null; a composer-ask run has `mode: "read_only"` and `approverId` null.
+
+---
+
+### Step 5.5 — Read path rewrite + CSV (~1 day)
+
+Flip the source of truth. Ship in the same PR as 5.6 so historic data is present when the new reader goes live.
+
+**`apps/dashboard/src/lib/agent/api/action-log.ts`**
+- Replace the `__clerk_agent__` note parser with a query against `AgentAction`: filter by `organizationId`, order by `executedAt desc`, paginate, optionally filter by `tool` / `status` / `mode` / `threadId`.
+- Delete the parse-from-notes code path entirely once 5.6's backfill has run (the legacy notes will already have been migrated into `AgentAction` rows).
+
+**`apps/dashboard/src/app/api/agent/actions/route.ts`** — CSV export reads from `AgentAction`. Stream rows to avoid loading all history into memory for large orgs.
+
+**`apps/dashboard/src/lib/agent/api/turns.ts:serializeAgentTurn`** — keep writing a human-readable summary note (e.g. "Refunded $25 to Jane (Order #1234)") for the threads UI to render inline. Drop the structured JSON payload from the note — that data now lives in `AgentAction` and `turns.ts` no longer needs to be the canonical record.
+
+**Done when.** Action-log page renders entries sourced from `AgentAction`; CSV export downloads; threads UI still shows agent turns inline via the summary note.
+
+---
+
+### Step 5.6 — One-shot backfill (~0.5 day)
+
+**New file `packages/db/scripts/backfill-agent-actions.ts`**
+- Iterates `Message` rows with `senderType: "note"` and body prefixed `__clerk_agent__`.
+- Parses each note's JSON payload (the same parser `action-log.ts` used to run).
+- Inserts an `AgentAction` row per parsed action. Idempotent: skip if a row already exists with the same `(threadId, tool, executedAt)` tuple (or fingerprint a deterministic id derived from the note's `messageId`).
+- Supports `--dry-run` (counts only) and `--org <id>` (one tenant at a time) for safe staging runs.
+- Records inferred `mode` from note metadata where present; defaults to `human_approved` for old rows (historic auto-execute is unlikely since the path didn't exist).
+
+**Run order.** Land 5.5 + 5.6 in the same PR. Deploy the schema (5.1) → deploy 5.2/5.3 (dark write) → wait ~1 day so the new table has fresh rows → deploy 5.5 + run backfill → verify counts match → flip readers.
+
+**Done when.** Script runs against staging dump, populates `AgentAction` rows for every historic `__clerk_agent__` note; re-running is a no-op; row count in `AgentAction` ≈ row count of `__clerk_agent__` notes.
+
+---
+
+### Step 5.7 — UI: mode / approver / duration columns (~0.5 day)
+
+**`apps/dashboard/src/app/dashboard/activity/`** (or wherever the action log lives — confirm path by grepping for the existing log component).
+
+- Add columns: `mode` (chip — distinct color per value), `approver` (display name from denorm; "—" for auto/read-only), `duration` (`{durationMs}ms`), `input` (collapsible JSON viewer, lazy-rendered).
+- Add a mode filter chip row at the top — merchants will reach for "show me everything the agent did without asking" the first day this ships.
+- Input column: redact on display (emails, phone numbers, Shopify customer IDs) via a small `redactPii(input)` helper. Raw inputs stay in the DB per the retention decision (Open decisions).
+
+**Done when.** Activity page renders the new columns; mode filter narrows results correctly; input JSON viewer expands on click and shows redacted values.
+
+---
+
+### Step 5.8 — Eval fixtures + verify (~0.5 day)
+
+**`apps/dashboard/src/lib/agent/__evals__/types.ts`** — extend `ExpectedPlan` with optional `expectedAgentActions?: { tool: string, status: string, mode: string }[]`.
+
+**`apps/dashboard/src/lib/agent/__evals__/runner.ts`** — after the run completes, if `expectedAgentActions` is set, query `AgentAction` for the test thread and assert the array matches (ordered, by `tool` + `status` + `mode`). Cleanup in `cleanupTestData` already cascades to `AgentAction` via the `Organization` cascade — no extra teardown needed.
+
+**Coverage.** Add `expectedAgentActions` to at least 3 fixtures across the existing suite — one read-only (composer-ask), one human-approved (refund under cap), one auto-executed (trusted tier + shipping reply). Total new fixtures: 0 — this is assertion-only on existing fixtures.
+
+**Manual sanity check.**
+1. Run a real refund through quick-approve. Verify `AgentAction` row has `mode: "human_approved"`, `approverId` populated, `approvedPlanHash` matches the cached plan's hash.
+2. Toggle a test org to `trusted` tier, run an auto-execute thread. Verify `mode: "auto_executed"`, `approverId` null.
+3. Run a composer-ask. Verify `mode: "read_only"`, `status: "success"` for the read tools.
+
+**Done when.** All existing ~30 fixtures pass; the 3 with `expectedAgentActions` catch a deliberate mismatch when one is injected; manual flow above completes cleanly.
+
+---
+
+**Sub-step summary.**
+
+| Sub-step | Files | Effort |
+|----------|-------|--------|
+| 5.1 Schema migration | `packages/db/prisma/schema.prisma` (+ migration) | 0.5 day |
+| 5.2 Writer scaffolding | `lib/agent/types.ts`, new `lib/agent/api/agent-actions.ts` | 0.5 day |
+| 5.3 Wire writer into loop | `lib/agent/run.ts` | 1 day |
+| 5.4 Approval context | `api/agent/quick-approve/route.ts`, `api/agent/route.ts`, `api/agent/internal/route.ts`, `lib/agent/run.ts` | 0.5 day |
+| 5.5 Read path + CSV | `lib/agent/api/action-log.ts`, `api/agent/actions/route.ts`, `lib/agent/api/turns.ts` | 1 day |
+| 5.6 Backfill script | `packages/db/scripts/backfill-agent-actions.ts` | 0.5 day |
+| 5.7 UI columns | `app/dashboard/activity/**` | 0.5 day |
+| 5.8 Eval assertions | `__evals__/types.ts`, `__evals__/runner.ts`, 3 fixture updates | 0.5 day |
 
 **Open decisions.**
-- **Backfill old `__clerk_agent__` note rows into `AgentAction` once, or leave as-is and start fresh?** Backfill — the dashboard will show a more useful action history immediately, and the legacy parsing code can be deleted.
-- **`approverId` format**: Clerk user ID, or Clerk user ID + display name denormalized? Denorm trades a small storage hit for not needing to join into Clerk's user store every time. Recommend denorm.
-- **Input redaction**: tool inputs may contain customer PII (emails, addresses). Audit-log retention policy needs to align with PII policy. Keep raw inputs but redact on display, or redact on write? Probably keep raw + redact-on-read.
+- **Backfill old `__clerk_agent__` note rows into `AgentAction` once, or leave as-is and start fresh?** Backfill (settled — 5.6) — the dashboard will show a more useful action history immediately, and the legacy parsing code can be deleted.
+- **`approverId` format**: Clerk user ID, or Clerk user ID + display name denormalized? Denorm (settled — 5.4) trades a small storage hit for not needing to join into Clerk's user store every time.
+- **Input redaction**: tool inputs may contain customer PII (emails, addresses). Audit-log retention policy needs to align with PII policy. Keep raw inputs but redact on display, or redact on write? Probably keep raw + redact-on-read (settled — 5.7), so raw payloads remain available for incident review.
+- **PR shape**: 8 sub-steps could collapse to 5 PRs — (5.1), (5.2 + 5.3), (5.4), (5.5 + 5.6), (5.7), (5.8). Recommended over 8 separate PRs because dark-write only earns its keep if 5.2/5.3 land together and 5.5/5.6 ship together (the read flip needs history).
 
 ---
 

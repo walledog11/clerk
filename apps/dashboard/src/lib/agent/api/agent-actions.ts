@@ -1,0 +1,105 @@
+import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import { db } from "@clerk/db";
+import { TOOL_CATEGORIES } from "@/lib/agent/tools/registry";
+import type {
+  ActionEntry,
+  AgentActionMode,
+  AgentActionStatus,
+} from "@/lib/agent/types";
+import type { AgentPlan } from "@/types";
+
+export interface AgentActionApproval {
+  approverId: string;
+  approvedAt: Date;
+  approvedPlanHash: string;
+  instructionHash?: string;
+}
+
+interface CommonRecordParams {
+  orgId: string;
+  threadId?: string | null;
+  customerId?: string | null;
+  mode: AgentActionMode;
+  approval?: AgentActionApproval;
+}
+
+export interface RecordAgentActionParams extends CommonRecordParams {
+  action: ActionEntry;
+}
+
+export interface RecordAgentActionsBatchParams extends CommonRecordParams {
+  actions: ActionEntry[];
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+// Hashes the executable shape of a plan. Mirrors what an approver actually
+// agreed to (instruction + tool calls), so a backend change to readResults
+// or warnings between approval and execution does not invalidate the hash.
+export function hashPlan(plan: AgentPlan): string {
+  return sha256Hex(JSON.stringify({
+    instruction: plan.instruction,
+    steps: plan.steps,
+    rawToolCalls: plan.rawToolCalls,
+  }));
+}
+
+export function hashInstruction(instruction: string): string {
+  return sha256Hex(instruction);
+}
+
+function deriveStatus(entry: ActionEntry): AgentActionStatus {
+  if (entry.status) return entry.status;
+  return entry.result.toLowerCase().startsWith("error:") ? "error" : "success";
+}
+
+function deriveErrorDetail(entry: ActionEntry, status: AgentActionStatus): string | null {
+  if (entry.errorDetail) return entry.errorDetail;
+  if (status === "error" || status === "policy_block") return entry.result;
+  return null;
+}
+
+function deriveCategory(entry: ActionEntry): string {
+  return entry.category ?? TOOL_CATEGORIES[entry.tool] ?? "unknown";
+}
+
+function toJsonInput(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+}
+
+function entryToRow(params: CommonRecordParams & { entry: ActionEntry }) {
+  const status = deriveStatus(params.entry);
+  return {
+    organizationId: params.orgId,
+    threadId: params.threadId ?? null,
+    customerId: params.customerId ?? null,
+    tool: params.entry.tool,
+    category: deriveCategory(params.entry),
+    input: toJsonInput(params.entry.input),
+    output: params.entry.result,
+    status,
+    errorDetail: deriveErrorDetail(params.entry, status),
+    mode: params.entry.mode ?? params.mode,
+    approverId: params.approval?.approverId ?? null,
+    approvedAt: params.approval?.approvedAt ?? null,
+    approvedPlanHash: params.approval?.approvedPlanHash ?? null,
+    instructionHash: params.approval?.instructionHash ?? null,
+    durationMs: params.entry.durationMs ?? 0,
+  };
+}
+
+export async function recordAgentAction(params: RecordAgentActionParams): Promise<void> {
+  await db.agentAction.create({
+    data: entryToRow({ ...params, entry: params.action }),
+  });
+}
+
+export async function recordAgentActionsBatch(params: RecordAgentActionsBatchParams): Promise<void> {
+  if (params.actions.length === 0) return;
+  await db.agentAction.createMany({
+    data: params.actions.map((action) => entryToRow({ ...params, entry: action })),
+  });
+}

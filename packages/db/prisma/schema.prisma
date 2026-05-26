@@ -51,23 +51,23 @@ enum ThreadFilterFeedback {
 // One Organization = one Shopify business using the app.
 // clerkOrgId maps to the organization ID from Clerk.com (e.g. org_xxxx).
 model Organization {
-  id          String   @id @default(uuid()) @db.Uuid
-  clerkOrgId  String   @unique @map("clerk_org_id")
-  name        String   @db.VarChar(255)
-  settings    Json?    @default("{}") @map("settings") @db.JsonB
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id         String   @id @default(uuid()) @db.Uuid
+  clerkOrgId String   @unique @map("clerk_org_id")
+  name       String   @db.VarChar(255)
+  settings   Json?    @default("{}") @map("settings") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  stripeCustomerId     String?  @unique @map("stripe_customer_id") @db.VarChar(255)
-  stripeSubscriptionId String?  @unique @map("stripe_subscription_id") @db.VarChar(255)
-  stripePriceId        String?  @map("stripe_price_id") @db.VarChar(255)
-  stripeStatus         String?  @map("stripe_status") @db.VarChar(50)
+  stripeCustomerId     String?   @unique @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id") @db.VarChar(255)
+  stripePriceId        String?   @map("stripe_price_id") @db.VarChar(255)
+  stripeStatus         String?   @map("stripe_status") @db.VarChar(50)
   trialEndsAt          DateTime? @map("trial_ends_at") @db.Timestamptz
 
-  customers    Customer[]
-  threads      Thread[]
-  integrations Integration[]
-  members      OrgMember[]
+  customers        Customer[]
+  threads          Thread[]
+  integrations     Integration[]
+  members          OrgMember[]
   operatorContexts OperatorContext[]
   cannedResponses  CannedResponse[]
   knowledgeBases   KnowledgeBase[]
@@ -75,6 +75,8 @@ model Organization {
   kbCitations      KbCitation[]
   feedbacks        Feedback[]
   playbooks        Playbook[]
+  agentActions     AgentAction[]
+
   @@index([clerkOrgId])
   @@map("organizations")
 }
@@ -93,7 +95,7 @@ model Integration {
   metadata          Json?       @default("{}") @db.JsonB
   createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, platform, externalAccountId])
   @@index([organizationId])
@@ -101,16 +103,16 @@ model Integration {
 }
 
 model Customer {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  name           String?      @db.VarChar(255)
-  platformId     String       @map("platform_id") @db.VarChar(255)
-  profilePicUrl  String?      @map("profile_pic_url") @db.Text
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  deletedAt      DateTime?    @map("deleted_at") @db.Timestamptz
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String?   @db.VarChar(255)
+  platformId     String    @map("platform_id") @db.VarChar(255)
+  profilePicUrl  String?   @map("profile_pic_url") @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  threads        Thread[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  threads      Thread[]
 
   // platformId is unique per org, not globally — two orgs can share the same customer email
   @@unique([organizationId, platformId])
@@ -120,33 +122,34 @@ model Customer {
 }
 
 model Thread {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  customerId     String       @map("customer_id") @db.Uuid
-  channelType    ChannelType  @map("channel_type")
-  status         ThreadStatus @default(open)
-  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-  lastMessageAt  DateTime     @default(now()) @map("last_message_at") @db.Timestamptz
-  lastMessageSenderType SenderType? @map("last_message_sender_type")
-  aiSummary            String?  @map("ai_summary")
-  subject              String?
-  tag                  String?  @default("Support")
-  shopifyCustomerId    String?  @map("shopify_customer_id") @db.VarChar(255)
-  cachedPlanMessageId  String?  @map("cached_plan_message_id") @db.Uuid
-  cachedPlan           Json?    @map("cached_plan") @db.JsonB
-  archivedAt           DateTime? @map("archived_at") @db.Timestamptz
-  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz
-  filterStatus     ThreadFilterStatus   @default(genuine) @map("filter_status")
-  filterReason     String?              @map("filter_reason") @db.Text
-  filterDecidedAt  DateTime?            @map("filter_decided_at") @db.Timestamptz
-  filterFeedback   ThreadFilterFeedback @default(none) @map("filter_feedback")
+  id                    String               @id @default(uuid()) @db.Uuid
+  organizationId        String               @map("organization_id") @db.Uuid
+  customerId            String               @map("customer_id") @db.Uuid
+  channelType           ChannelType          @map("channel_type")
+  status                ThreadStatus         @default(open)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  lastMessageAt         DateTime             @default(now()) @map("last_message_at") @db.Timestamptz
+  lastMessageSenderType SenderType?          @map("last_message_sender_type")
+  aiSummary             String?              @map("ai_summary")
+  subject               String?
+  tag                   String?              @default("Support")
+  shopifyCustomerId     String?              @map("shopify_customer_id") @db.VarChar(255)
+  cachedPlanMessageId   String?              @map("cached_plan_message_id") @db.Uuid
+  cachedPlan            Json?                @map("cached_plan") @db.JsonB
+  archivedAt            DateTime?            @map("archived_at") @db.Timestamptz
+  deletedAt             DateTime?            @map("deleted_at") @db.Timestamptz
+  filterStatus          ThreadFilterStatus   @default(genuine) @map("filter_status")
+  filterReason          String?              @map("filter_reason") @db.Text
+  filterDecidedAt       DateTime?            @map("filter_decided_at") @db.Timestamptz
+  filterFeedback        ThreadFilterFeedback @default(none) @map("filter_feedback")
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  messages       Message[]
-  playbookRuns   PlaybookRun[]
-  kbCitations    KbCitation[]
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  playbookRuns PlaybookRun[]
+  kbCitations  KbCitation[]
+  agentActions AgentAction[]
 
   @@index([organizationId, status])
   @@index([organizationId, updatedAt])
@@ -170,7 +173,7 @@ model Message {
   sentAt            DateTime   @default(now()) @map("sent_at") @db.Timestamptz
   deletedAt         DateTime?  @map("deleted_at") @db.Timestamptz
 
-  thread      Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId])
   @@index([sentAt])
@@ -191,7 +194,7 @@ model OperatorContext {
   pendingDigest   Json?    @map("pending_digest") @db.JsonB
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, chatId])
   @@index([organizationId])
@@ -201,14 +204,14 @@ model OperatorContext {
 // Extends Clerk.com org membership with a bound Telegram chat so team members
 // can interact with the AI agent over Telegram.
 model OrgMember {
-  id              String      @id @default(uuid()) @db.Uuid
-  organizationId  String      @map("organization_id") @db.Uuid
-  clerkUserId     String      @map("clerk_user_id") @db.VarChar(255)
-  telegramChatId  String?     @unique @map("telegram_chat_id") @db.VarChar(64)
-  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  clerkUserId    String   @map("clerk_user_id") @db.VarChar(255)
+  telegramChatId String?  @unique @map("telegram_chat_id") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, clerkUserId])
   @@index([organizationId])
@@ -227,39 +230,39 @@ model CannedResponse {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("canned_responses")
 }
 
 model KnowledgeBase {
-  id             String      @id @default(uuid()) @db.Uuid
-  organizationId String      @map("organization_id") @db.Uuid
-  name           String      @db.VarChar(255)
-  source         String      @default("user") @db.VarChar(50)
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(255)
+  source         String   @default("user") @db.VarChar(50)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  articles       KbArticle[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  articles     KbArticle[]
 
   @@index([organizationId])
   @@map("knowledge_bases")
 }
 
 model KbArticle {
-  id               String        @id @default(uuid()) @db.Uuid
-  organizationId   String        @map("organization_id") @db.Uuid
-  knowledgeBaseId  String        @map("knowledge_base_id") @db.Uuid
-  title            String        @db.VarChar(255)
-  body             String        @db.Text
-  tags             String[]      @default([])
-  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  knowledgeBaseId String   @map("knowledge_base_id") @db.Uuid
+  title           String   @db.VarChar(255)
+  body            String   @db.Text
+  tags            String[] @default([])
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  knowledgeBase    KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
-  citations        KbCitation[]
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  citations     KbCitation[]
 
   @@index([organizationId])
   @@index([knowledgeBaseId])
@@ -267,15 +270,15 @@ model KbArticle {
 }
 
 model KbCitation {
-  id              String   @id @default(uuid()) @db.Uuid
-  organizationId  String   @map("organization_id") @db.Uuid
-  kbArticleId     String   @map("kb_article_id") @db.Uuid
-  threadId        String?  @map("thread_id") @db.Uuid
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  kbArticleId    String   @map("kb_article_id") @db.Uuid
+  threadId       String?  @map("thread_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  article         KbArticle    @relation(fields: [kbArticleId], references: [id], onDelete: Cascade)
-  thread          Thread?      @relation(fields: [threadId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  article      KbArticle    @relation(fields: [kbArticleId], references: [id], onDelete: Cascade)
+  thread       Thread?      @relation(fields: [threadId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([kbArticleId, createdAt])
@@ -293,8 +296,8 @@ model Playbook {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  runs           PlaybookRun[]
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  runs         PlaybookRun[]
 
   @@index([organizationId])
   @@map("playbooks")
@@ -306,27 +309,59 @@ model PlaybookRun {
   threadId   String   @map("thread_id") @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  playbook   Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
-  thread     Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  playbook Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+  thread   Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@unique([playbookId, threadId])
   @@map("playbook_runs")
 }
 
 model Feedback {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String?   @map("organization_id") @db.Uuid
-  userId         String    @map("user_id") @db.VarChar(255)
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.VarChar(255)
   rating         Int
-  comment        String?   @db.Text
-  categories     String[]  @default([])
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  comment        String?  @db.Text
+  categories     String[] @default([])
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([createdAt])
   @@map("feedback")
 }
 
+// First-class audit record for every agent tool call. Replaces the
+// __clerk_agent__ note-row parsing in lib/agent/api/action-log.ts.
+//   status:   success | error | policy_block | escalated
+//   mode:     human_approved | auto_executed | read_only
+//   category: mirrors TOOL_CATEGORIES from lib/agent/tools/registry.ts
+model AgentAction {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id") @db.Uuid
+  threadId         String?   @map("thread_id") @db.Uuid
+  customerId       String?   @map("customer_id") @db.Uuid
+  tool             String    @db.VarChar(64)
+  category         String    @db.VarChar(32)
+  input            Json      @db.JsonB
+  output           String?   @db.Text
+  status           String    @db.VarChar(32)
+  errorDetail      String?   @map("error_detail") @db.Text
+  mode             String    @db.VarChar(32)
+  approverId       String?   @map("approver_id") @db.VarChar(255)
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz
+  approvedPlanHash String?   @map("approved_plan_hash") @db.VarChar(64)
+  instructionHash  String?   @map("instruction_hash") @db.VarChar(64)
+  executedAt       DateTime  @default(now()) @map("executed_at") @db.Timestamptz
+  durationMs       Int       @map("duration_ms")
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread       Thread?      @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, executedAt(sort: Desc)])
+  @@index([organizationId, threadId])
+  @@index([organizationId, tool, executedAt])
+  @@index([organizationId, status])
+  @@map("agent_actions")
+}
