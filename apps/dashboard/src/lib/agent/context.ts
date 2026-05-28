@@ -82,7 +82,7 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
       : Promise.resolve(null);
 
     const ordersFetch = fetch(
-      `https://${externalAccountId}/admin/api/${SHOPIFY_API_VERSION}/orders.json?customer_id=${shopifyCustomerId}&status=any&limit=5&fields=id,name,created_at,financial_status,fulfillment_status,current_total_price,line_items`,
+      `https://${externalAccountId}/admin/api/${SHOPIFY_API_VERSION}/orders.json?customer_id=${shopifyCustomerId}&status=any&limit=5&fields=id,name,created_at,financial_status,fulfillment_status,current_total_price,line_items,shipping_address`,
       { headers }
     ).then(async r => ({ ok: r.ok, data: await r.json() })).catch(() => null);
 
@@ -111,6 +111,15 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
           fulfillment_status?: string | null;
           variant_id: number | string | null;
         }[];
+        shipping_address?: {
+          address1?: string | null;
+          address2?: string | null;
+          city?: string | null;
+          province?: string | null;
+          zip?: string | null;
+          country?: string | null;
+          country_name?: string | null;
+        } | null;
       }) => ({
         id: String(o.id),
         name: o.name,
@@ -128,6 +137,16 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
           fulfillment_status: li.fulfillment_status ?? null,
           variant_id: li.variant_id ? String(li.variant_id) : null,
         })),
+        shipping_address: o.shipping_address
+          ? {
+              address1: o.shipping_address.address1 ?? null,
+              address2: o.shipping_address.address2 ?? null,
+              city: o.shipping_address.city ?? null,
+              province: o.shipping_address.province ?? null,
+              zip: o.shipping_address.zip ?? null,
+              country: o.shipping_address.country_name ?? o.shipping_address.country ?? null,
+            }
+          : null,
       }));
     }
   }

@@ -152,6 +152,7 @@ describe('buildSystemPrompt', () => {
         fulfillment_status: null,
         total_price: '74.95',
         items: [],
+        shipping_address: null,
       }],
     }));
 

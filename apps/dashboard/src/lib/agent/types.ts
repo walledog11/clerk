@@ -17,6 +17,14 @@ export interface ShopifyOrderSummary {
     current_quantity: number | null;
     fulfillment_status: string | null;
   }[];
+  shipping_address: {
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    province: string | null;
+    zip: string | null;
+    country: string | null;
+  } | null;
 }
 
 export interface AgentContext {
