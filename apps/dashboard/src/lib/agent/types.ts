@@ -40,6 +40,7 @@ export interface AgentContext {
   openThreadCount: number;
   shopify: { shop: string; accessToken: string } | null;
   recentOrders: ShopifyOrderSummary[];
+  linkedShopifyCustomerName: string | null;
   kbArticles: { title: string; body: string }[];
 }
 

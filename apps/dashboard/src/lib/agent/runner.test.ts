@@ -73,6 +73,7 @@ function makeCtx(overrides: Partial<AgentContext> = {}): AgentContext {
     openThreadCount: 1,
     shopify: null,
     recentOrders: [],
+    linkedShopifyCustomerName: null,
     kbArticles: [],
     thread: {
       id: thread.id,

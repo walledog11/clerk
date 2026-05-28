@@ -53,6 +53,7 @@ function buildContext(fixture: Fixture, orgId: string, threadId: string, custome
     openThreadCount: setup.openThreadCount ?? 1,
     shopify: setup.shopify ?? null,
     recentOrders: setup.recentOrders ?? [],
+    linkedShopifyCustomerName: setup.linkedShopifyCustomerName ?? null,
     kbArticles: setup.kbArticles ?? [],
   };
 }

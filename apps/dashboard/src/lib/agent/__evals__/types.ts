@@ -26,6 +26,7 @@ export interface ThreadSetup {
   messages: FixtureMessage[];
   kbArticles?: FixtureKbArticle[];
   recentOrders?: ShopifyOrderSummary[];
+  linkedShopifyCustomerName?: string | null;
   shopify?: { shop: string; accessToken: string } | null;
   shopifyCustomerId?: string | null;
   openThreadCount?: number;

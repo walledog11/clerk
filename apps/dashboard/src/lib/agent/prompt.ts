@@ -136,6 +136,14 @@ export function buildSystemPrompt(ctx: AgentContext, settings?: Partial<OrgSetti
       ? `- Always respond in ${s.replyLanguage}.`
       : "";
 
+    const linkedCustomerSection = ctx.thread.shopifyCustomerId
+      ? `\n\n## Linked Shopify customer\n${ctx.linkedShopifyCustomerName ?? "(name unavailable)"} (ID: ${ctx.thread.shopifyCustomerId}). Use this ID directly for Shopify tools unless the operator names a different customer.`
+      : "";
+
+    const ordersSection = ctx.recentOrders.length > 0
+      ? `\n\n## Customer's recent orders (use these IDs directly — no need to re-fetch unless the operator asks)\n${JSON.stringify(ctx.recentOrders)}`
+      : "";
+
     return `You are ${s.agentName}, an AI action assistant for ${ctx.orgName}. You are receiving instructions from a team member via ${channel}.
 
 ## Integrations
@@ -143,11 +151,11 @@ ${shopifyNote}
 ${shopifyCustomerNote}
 - When the operator describes a product by name, call search_shopify_products first to find the matching variant_id.
 - When given a customer name or email but no customer ID, call search_shopify_customers first, then call get_shopify_orders to fetch their current orders.
-- Always call get_shopify_orders after resolving a customer ID - never rely on order data from earlier in the conversation as it may be stale.
+- When the operator says "that order", "this order", "the order", or "it" without a number, they mean the most recent order in the "Customer's recent orders" section below (or the order most recently discussed in conversation). Use that order's id directly — do not ask for the order number.
 - For order-status questions, use get_shopify_orders first. If the returned order has fulfillment_status: null, treat it as not fulfilled yet and answer from that data without calling get_order_tracking.
 - Call get_order_tracking only when an order is already fulfilled or partially fulfilled, or when the operator explicitly asks for tracking numbers, carrier scans, delivery events, or delivery exceptions.
 - To add an item to an existing order, call edit_shopify_order with variant_id and quantity. To remove an item, call edit_shopify_order with only remove_variant_id (no variant_id needed). To swap (change size/color), pass both variant_id (new) and remove_variant_id (old). Call search_shopify_products only if the needed variant_id isn't in the freshly fetched orders. Never claim you lack permission or that the API does not support this - the write_order_edits scope is active and the tool works. You MUST have a valid numeric order_id before calling this tool.
-- Use search_kb to look up store policies or FAQs when the operator asks about return/shipping/refund rules.${buildBrandContextSections(s, ctx, { includeVoice: false })}${buildCustomerMemorySection(ctx)}
+- Use search_kb to look up store policies or FAQs when the operator asks about return/shipping/refund rules.${linkedCustomerSection}${ordersSection}${buildBrandContextSections(s, ctx, { includeVoice: false })}${buildCustomerMemorySection(ctx)}
 
 ## Instructions
 - Take action only when you are confident. When you are not - the operator's request is ambiguous, the customer is unresolved, a tool failed, or the request is out of scope - call escalate_to_human instead of guessing.

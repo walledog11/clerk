@@ -76,12 +76,12 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
     const { externalAccountId, accessToken } = shopifyIntegration;
     const headers = { "X-Shopify-Access-Token": accessToken };
 
-    const nameFetch = (!dbName && !shopifyCustomerName)
+    const nameFetch = (!shopifyCustomerName && (isOperatorChannel || !dbName))
       ? fetch(`https://${externalAccountId}/admin/api/${SHOPIFY_API_VERSION}/customers/${shopifyCustomerId}.json?fields=first_name,last_name`, { headers })
           .then(r => r.json()).catch(() => null)
       : Promise.resolve(null);
 
-    const ordersFetch = isOperatorChannel ? Promise.resolve(null) : fetch(
+    const ordersFetch = fetch(
       `https://${externalAccountId}/admin/api/${SHOPIFY_API_VERSION}/orders.json?customer_id=${shopifyCustomerId}&status=any&limit=5&fields=id,name,created_at,financial_status,fulfillment_status,current_total_price,line_items`,
       { headers }
     ).then(async r => ({ ok: r.ok, data: await r.json() })).catch(() => null);
@@ -167,6 +167,7 @@ export async function buildContext(threadId: string, orgId: string): Promise<Age
         ? { shop: shopifyIntegration.externalAccountId, accessToken: shopifyIntegration.accessToken }
         : null,
     recentOrders,
+    linkedShopifyCustomerName: isOperatorChannel ? shopifyCustomerName : null,
     kbArticles: kbArticles.map(a => ({ title: a.title, body: a.body })),
   };
 }
