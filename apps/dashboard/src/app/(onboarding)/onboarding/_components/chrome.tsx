@@ -12,12 +12,12 @@ export function Header({ idx, onGoto, exitLabel, onExit }: {
   return (
     <header className="relative z-20 flex items-center gap-3.5 border-b border-white/[0.06] bg-background/80 px-7 py-[18px] backdrop-blur-md">
       <div className="flex items-center gap-2.5">
-        <span className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-md bg-green-400 text-[14px] font-bold text-green-950 shadow-[0_2px_4px_rgba(74,222,128,0.3)]">
-          <Sparkles className="h-3.5 w-3.5" />
+        <span className="inline-flex size-[26px] items-center justify-center rounded-md bg-green-400 text-[14px] font-bold text-green-950 shadow-[0_2px_4px_rgba(74,222,128,0.3)]">
+          <Sparkles className="size-3.5" />
         </span>
         <div className="leading-tight">
           <div className="text-[13px] font-semibold text-white">Concierge</div>
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-white/45">Briefing in progress</div>
+          <div className="font-mono text-xs font-semibold uppercase tracking-wider text-white/45">Briefing in progress</div>
         </div>
       </div>
 
@@ -26,7 +26,7 @@ export function Header({ idx, onGoto, exitLabel, onExit }: {
           const active = i === idx;
           const done = i < idx;
           return (
-            <button
+            <button type="button"
               key={s.id}
               onClick={() => onGoto(i)}
               disabled={i > idx}
@@ -38,7 +38,7 @@ export function Header({ idx, onGoto, exitLabel, onExit }: {
             >
               <span className={cn(
                 "rounded-full transition-all",
-                active ? "h-2 w-2 bg-green-400" : done ? "h-1.5 w-1.5 bg-green-400" : "h-1.5 w-1.5 bg-white/15"
+                active ? "size-2 bg-green-400" : done ? "size-1.5 bg-green-400" : "size-1.5 bg-white/15"
               )} />
               {active && (
                 <span className="whitespace-nowrap font-mono text-[10.5px] font-bold uppercase tracking-wider text-white">
@@ -50,18 +50,18 @@ export function Header({ idx, onGoto, exitLabel, onExit }: {
         })}
       </div>
 
-      <div className="flex shrink-0 items-center gap-3 whitespace-nowrap font-mono text-[11px] text-white/45">
+      <div className="flex shrink-0 items-center gap-3 whitespace-nowrap font-mono text-xs text-white/45">
         {exitLabel && onExit && (
           <button
             type="button"
             onClick={() => { void onExit(); }}
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
-            <LogOut className="h-3 w-3" />
+            <LogOut className="size-3" />
             <span className="text-[11.5px] font-medium normal-case tracking-normal">{exitLabel}</span>
           </button>
         )}
-        <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400 animate-[ob-pulse-bg_2s_ease-in-out_infinite]" />
+        <span className="inline-block size-1.5 rounded-full bg-green-400 animate-[ob-pulse-bg_2s_ease-in-out_infinite]" />
         ≈ {Math.max(1, 4 - idx)} min left
       </div>
     </header>
@@ -77,7 +77,7 @@ export function Footer({ idx, canContinue, saving, onNext, onBack }: {
       <div className="mx-auto flex w-full max-w-[820px] items-center gap-2.5">
         {idx > 0 ? (
           <Button variant="ghost" size="sm" onClick={onBack} className="text-white/70 hover:bg-white/[0.06] hover:text-white">
-            <ChevronLeft className="mr-1 h-4 w-4" /> Back
+            <ChevronLeft className="mr-1 size-4" /> Back
           </Button>
         ) : (
           <span className="font-mono text-[11.5px] text-white/45">
@@ -96,7 +96,7 @@ export function Footer({ idx, canContinue, saving, onNext, onBack }: {
               : "cursor-not-allowed bg-white/[0.06] text-white/35"
           )}
         >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{label} <ChevronRight className="h-4 w-4" /></>}
+          {saving ? <Loader2 className="size-4 animate-spin" /> : <>{label} <ChevronRight className="size-4" /></>}
         </Button>
       </div>
     </footer>
@@ -105,7 +105,7 @@ export function Footer({ idx, canContinue, saving, onNext, onBack }: {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <span className="ml-0.5 inline-flex items-center justify-center rounded border border-white/15 bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/70">
+    <span className="ml-0.5 inline-flex items-center justify-center rounded border border-white/15 bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-white/70">
       {children}
     </span>
   );

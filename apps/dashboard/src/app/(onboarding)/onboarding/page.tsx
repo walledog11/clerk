@@ -39,7 +39,7 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const orgCreationInFlight = useRef(false);
 
-  // OAuth popup landed back on /onboarding — notify opener and close.
+  // OAuth popup landed back on /onboarding , notify opener and close.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.opener && window.opener !== window && window.name === POPUP_NAME) {
@@ -215,8 +215,8 @@ export default function OnboardingPage() {
 
   return (
     <div className="dark relative flex min-h-screen w-full flex-col overflow-hidden bg-background text-foreground">
-      <div aria-hidden className="pointer-events-none fixed -right-52 -top-64 h-[640px] w-[640px] rounded-full bg-[radial-gradient(circle,rgba(74,222,128,0.18)_0%,transparent_60%)] opacity-60" />
-      <div aria-hidden className="pointer-events-none fixed -bottom-72 -left-52 h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.10)_0%,transparent_70%)] opacity-60" />
+      <div aria-hidden className="pointer-events-none fixed -right-52 -top-64 size-[640px] rounded-full bg-[radial-gradient(circle,rgba(74,222,128,0.18)_0%,transparent_60%)] opacity-60" />
+      <div aria-hidden className="pointer-events-none fixed -bottom-72 -left-52 size-[560px] rounded-full bg-[radial-gradient(circle,rgba(251,191,36,0.10)_0%,transparent_70%)] opacity-60" />
 
       <Header idx={idx} onGoto={i => i <= idx && setIdx(i)} exitLabel={exit.label} onExit={exit.action} />
 
