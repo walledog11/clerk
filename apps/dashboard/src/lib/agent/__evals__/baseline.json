@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-06-01T01:32:42.541Z",
+  "total": 39,
+  "passed": 30,
+  "passRate": 0.7692307692307693,
+  "categories": {
+    "address-change": {
+      "total": 3,
+      "passed": 3,
+      "passRate": 1
+    },
+    "brand-voice": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "cancel": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "escalate": {
+      "total": 3,
+      "passed": 0,
+      "passRate": 0
+    },
+    "kb": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "memory": {
+      "total": 3,
+      "passed": 2,
+      "passRate": 0.6666666666666666
+    },
+    "multi-step": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "no-tool": {
+      "total": 1,
+      "passed": 1,
+      "passRate": 1
+    },
+    "operator": {
+      "total": 3,
+      "passed": 3,
+      "passRate": 1
+    },
+    "order-status": {
+      "total": 5,
+      "passed": 5,
+      "passRate": 1
+    },
+    "prompt-injection": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "quick-reply": {
+      "total": 2,
+      "passed": 2,
+      "passRate": 1
+    },
+    "refund": {
+      "total": 3,
+      "passed": 1,
+      "passRate": 0.3333333333333333
+    },
+    "sample-reply": {
+      "total": 1,
+      "passed": 0,
+      "passRate": 0
+    },
+    "tier": {
+      "total": 5,
+      "passed": 3,
+      "passRate": 0.6
+    }
+  }
+}

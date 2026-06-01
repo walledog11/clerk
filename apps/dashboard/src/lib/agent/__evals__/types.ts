@@ -104,3 +104,17 @@ export interface EvalResult {
   usage: EvalUsage;
   latencyMs: number;
 }
+
+export interface CategoryScore {
+  total: number;
+  passed: number;
+  passRate: number;
+}
+
+export interface EvalBaseline {
+  generatedAt: string;
+  total: number;
+  passed: number;
+  passRate: number;
+  categories: Record<string, CategoryScore>;
+}

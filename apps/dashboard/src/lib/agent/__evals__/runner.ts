@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { db, isEmptyMemory, SenderType, type DbChannelType, type DbSenderType } from "@clerk/db";
 import {
   createTestOrg,
@@ -18,7 +20,123 @@ import { hashInstruction, hashPlan, type AgentActionApproval } from "../api/agen
 import type { AgentActionMode, AgentContext } from "../types";
 import type { AgentPlan, OrgSettings } from "@/types";
 import { judgeReply } from "./judge";
-import type { ExpectedAgentAction, Fixture, EvalResult, EvalUsage, ToolInputExpectation } from "./types";
+import type {
+  ExpectedAgentAction,
+  Fixture,
+  EvalResult,
+  EvalUsage,
+  ToolInputExpectation,
+  EvalBaseline,
+  CategoryScore,
+} from "./types";
+
+// Longest-prefix match groups fixtures into domains for per-category scoring.
+// A fixture whose id matches no prefix becomes its own category (visible, not silently dropped).
+const CATEGORY_PREFIXES = [
+  "address-change",
+  "brand-voice",
+  "cancel",
+  "escalate",
+  "kb",
+  "memory",
+  "multi-step",
+  "no-tool",
+  "operator",
+  "order-status",
+  "prompt-injection",
+  "quick-reply",
+  "refund",
+  "sample-reply",
+  "tier",
+];
+
+const BASELINE_PATH = join(__dirname, "baseline.json");
+const DEFAULT_REGRESSION_THRESHOLD = 0.05;
+
+export function categoryOf(id: string): string {
+  return CATEGORY_PREFIXES.find((p) => id === p || id.startsWith(`${p}-`)) ?? id;
+}
+
+export function summarizeResults(results: readonly EvalResult[]): EvalBaseline {
+  const categories: Record<string, CategoryScore> = {};
+  for (const r of results) {
+    const cat = categoryOf(r.id);
+    const score = categories[cat] ?? { total: 0, passed: 0, passRate: 0 };
+    score.total += 1;
+    if (r.pass) score.passed += 1;
+    score.passRate = score.passed / score.total;
+    categories[cat] = score;
+  }
+  const total = results.length;
+  const passed = results.filter((r) => r.pass).length;
+  return {
+    generatedAt: new Date().toISOString(),
+    total,
+    passed,
+    passRate: total === 0 ? 0 : passed / total,
+    categories: Object.fromEntries(Object.keys(categories).sort().map((k) => [k, categories[k]])),
+  };
+}
+
+export function formatSummary(summary: EvalBaseline): string {
+  const lines = [
+    `[eval:summary] aggregate ${summary.passed}/${summary.total} (${(summary.passRate * 100).toFixed(1)}%)`,
+  ];
+  for (const [cat, score] of Object.entries(summary.categories)) {
+    lines.push(`  ${cat}: ${score.passed}/${score.total} (${(score.passRate * 100).toFixed(1)}%)`);
+  }
+  return lines.join("\n");
+}
+
+export function shouldUpdateBaseline(): boolean {
+  const flag = process.env.UPDATE_EVAL_BASELINE;
+  if (flag === undefined) return false;
+  const normalized = flag.trim().toLowerCase();
+  return normalized !== "" && normalized !== "0" && normalized !== "false";
+}
+
+export function regressionThreshold(): number {
+  const raw = process.env.EVAL_BASELINE_THRESHOLD;
+  if (raw === undefined) return DEFAULT_REGRESSION_THRESHOLD;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : DEFAULT_REGRESSION_THRESHOLD;
+}
+
+export function writeBaseline(summary: EvalBaseline): void {
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(summary, null, 2)}\n`);
+}
+
+export function loadBaseline(): EvalBaseline | null {
+  if (!existsSync(BASELINE_PATH)) return null;
+  return JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as EvalBaseline;
+}
+
+// The aggregate pass rate is the hard gate (returned as `aggregate`); per-category drops are
+// reported separately so a localized regression is visible/flagged even when the aggregate stays
+// within threshold.
+export function compareToBaseline(
+  current: EvalBaseline,
+  baseline: EvalBaseline,
+  threshold: number,
+): { aggregate: string | null; categories: string[] } {
+  const drop = (cur: number, base: number) =>
+    `${(cur * 100).toFixed(1)}% dropped > ${(threshold * 100).toFixed(1)} pts below baseline ${(base * 100).toFixed(1)}%`;
+
+  const aggregate =
+    current.passRate < baseline.passRate - threshold
+      ? `aggregate pass rate ${drop(current.passRate, baseline.passRate)}`
+      : null;
+
+  const categories: string[] = [];
+  for (const [cat, baseScore] of Object.entries(baseline.categories)) {
+    const curScore = current.categories[cat];
+    if (!curScore) continue;
+    if (curScore.passRate < baseScore.passRate - threshold) {
+      categories.push(`category "${cat}" pass rate ${drop(curScore.passRate, baseScore.passRate)}`);
+    }
+  }
+  return { aggregate, categories };
+}
 
 const SENDER_TYPE_MAP: Record<string, DbSenderType> = {
   customer: SenderType.customer,
@@ -224,13 +342,22 @@ export async function runFixture(fixture: Fixture): Promise<EvalResult> {
 
     await createFixtureMessages(0);
 
+    // Plain monkey-patch instead of vi.spyOn: tinyspy tracks every call's settled
+    // result via returnValue.then(...), which overflows the stack under the live
+    // client's APIPromise + retry volume. We only need to tally usage, so wrap
+    // create() directly and restore it in finally.
     type CreateFn = typeof anthropic.messages.create;
-    const originalCreate = anthropic.messages.create.bind(anthropic.messages) as CreateFn;
-    spy = vi.spyOn(anthropic.messages, "create").mockImplementation((async (body, options) => {
-      const response = await originalCreate(body, options);
+    const messages = anthropic.messages;
+    const originalCreate = messages.create;
+    const wrappedCreate = (async (body: unknown, options: unknown) => {
+      const response = await (originalCreate as CreateFn).call(messages, body as never, options as never);
       recordEvalUsage(usage, response);
       return response;
-    }) as CreateFn);
+    }) as CreateFn;
+    messages.create = wrappedCreate;
+    // Only restore if our wrapper is still installed: if a prior fixture timed out and its
+    // restore fires late (mid-way through this fixture), it must not clobber our patch.
+    spy = { mockRestore: () => { if (messages.create === wrappedCreate) messages.create = originalCreate; } };
 
     const simulatedResults = new Map<string, string>(
       (fixture.setup.simulateToolResults ?? []).map((r) => [r.tool, r.result]),
