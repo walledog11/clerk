@@ -6,11 +6,17 @@ on:
       - 'apps/dashboard/src/lib/agent/**'
       - 'apps/dashboard/src/lib/messaging/**'
       - '.github/workflows/evals.yml'
+  # Judge-scored run (Phase 0.2): nightly drift tracking + on-demand.
+  schedule:
+    - cron: '0 7 * * *'
   workflow_dispatch:
 
 jobs:
   agent-evals:
     name: Agent Eval Suite
+    # PR gate + manual dispatch. The nightly schedule is reserved for the judge-scored
+    # job below, so this judge-off gate doesn't double-run (or double-spend) on cron.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -67,6 +73,76 @@ jobs:
             fi
             echo ""
             echo '```'
-            grep -E '^\[eval(:cache)?\]' eval-output.log || echo "(no per-fixture lines captured)"
+            grep -E '^\[eval(:summary|:cache)?\]' eval-output.log || echo "(no per-fixture lines captured)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  agent-evals-judge:
+    name: Agent Eval Suite (judge-scored)
+    # Phase 0.2: runs WITH the LLM judge (RUN_JUDGE_EVALS=1) to track subjective rubric
+    # drift. On-demand (workflow_dispatch) + nightly (schedule) only — never on PRs, to
+    # keep per-push spend in check. Non-blocking: this run compares against the judge-OFF
+    # baseline.json, so extra rubric failures can drop the aggregate; continue-on-error
+    # keeps that from failing the workflow. It's a tracking signal, not a gate.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: clerk_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d clerk_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/clerk_test?schema=public
+      TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      RUN_JUDGE_EVALS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Bootstrap test database
+        run: node ./scripts/test-bootstrap.mjs
+      - name: Run agent eval suite (judge on)
+        id: evals
+        run: |
+          set -o pipefail
+          npm run test:evals -w apps/dashboard 2>&1 | tee eval-output.log
+      - name: Eval summary
+        if: always()
+        run: |
+          {
+            echo "## Agent eval results (judge-scored)"
+            echo ""
+            if [ "${{ steps.evals.outcome }}" = "success" ]; then
+              echo "Suite passed (judge on)."
+            else
+              echo "Suite did not pass clean against the judge-off baseline (expected — tracking signal, non-blocking). Per-fixture log lines:"
+            fi
+            echo ""
+            echo '```'
+            grep -E '^\[eval(:summary|:cache)?\]' eval-output.log || echo "(no per-fixture lines captured)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
