@@ -136,7 +136,8 @@ export async function buildOrgDigest(
   const buckets = bucketDigestThreads(threads, now, since);
   const waitingThreadIds = new Set(waitingItems.map((item) => item.threadId));
 
-  const flaggedCandidates = buckets.questionable.filter((thread) => !rowHasNoRequest(thread));
+  const flaggedCandidates = buckets.questionable.filter((thread) =>
+    !waitingThreadIds.has(thread.id) && !rowHasNoRequest(thread));
   // Ordered after the limit, not before: the cut is about how much of the
   // briefing these are worth, and reordering it would change which ten the
   // merchant sees rather than which one they see first.

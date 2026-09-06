@@ -1083,6 +1083,20 @@ describe('conversation briefing pipeline', () => {
     await cleanupTestData(org.id);
   });
 
+  it('shows a questionable sender with a pending draft only once, as an approval', async () => {
+    const plan = await sarahPlan(org.id);
+    await db.thread.update({
+      where: { id: plan.threadId },
+      data: { filterStatus: ThreadFilterStatus.questionable },
+    });
+    const digest = (await buildOrgDigest(org.id, new Date()))!;
+    expect(digest.pendingDigest.items).toEqual([
+      { threadId: plan.threadId, planId: plan.planId, kind: 'approval' },
+    ]);
+    expect(digest.message).toContain('Shall I send it?');
+    expect(digest.message).not.toContain('Should I keep it or mark it as spam?');
+  });
+
   it('loads the actual source and draft, writes natural copy, and keeps a mixed briefing actionable', async () => {
     const plan = await sarahPlan(org.id);
     const james = await createTestCustomer(org.id, 'james@example.com', { name: 'James' });
