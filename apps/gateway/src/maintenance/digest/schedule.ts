@@ -92,9 +92,8 @@ function timeOfDayGreeting(localHour: number): string {
   return 'Evening';
 }
 
-// The agent says hello in its own name before reporting anything — the same
-// voice `buildBindWelcome` and `buildFirstNightMessage` already use. Only the
-// scheduled send greets; a merchant who just texted SUMMARY gets the answer.
+// Introduce the agent once. Routine briefings start with a simple greeting;
+// an on-demand SUMMARY goes straight to the answer.
 export function buildDigestOpener(
   agentName: string,
   settings: Record<string, unknown>,
@@ -104,5 +103,5 @@ export function buildDigestOpener(
   const greeting = timeOfDayGreeting(localHourAndDay(resolveTz(settings), now).hour);
   return firstBriefing
     ? `${greeting}, ${agentName} here with your first rundown. You'll get one like this every day.`
-    : `${greeting}, ${agentName} here.`;
+    : `${greeting}!`;
 }

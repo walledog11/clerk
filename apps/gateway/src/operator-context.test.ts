@@ -424,8 +424,10 @@ describe('selectPendingPlan', () => {
     expect(selectPendingPlan([])).toEqual({ error: expect.stringContaining('no plan') });
   });
 
-  it('returns the only plan and ignores the ref', () => {
-    expect(selectPendingPlan([a], 'whatever')).toEqual({ plan: a });
+  it('returns the only plan when no ref is supplied and honors an explicit ref', () => {
+    expect(selectPendingPlan([a])).toEqual({ plan: a });
+    expect(selectPendingPlan([a], 'Sarah')).toEqual({ plan: a });
+    expect(selectPendingPlan([a], 'whatever')).toHaveProperty('error');
   });
 
   it('refuses to approve a plan whose briefing requires thread review', () => {
@@ -451,6 +453,36 @@ describe('selectPendingPlan', () => {
     expect(selectPendingPlan([a, b], '2')).toEqual({ plan: b });
     expect(selectPendingPlan([a, b], 'plan-a')).toEqual({ plan: a });
     expect(selectPendingPlan([a, b], 'sarah')).toEqual({ plan: a });
+  });
+
+  it('resolves mixed briefing ordinals even when only one plan is pending', () => {
+    const digest = { items: [
+      { threadId: 'decision-thread', kind: 'decision' as const },
+      { threadId: a.threadId, planId: a.planId, kind: 'approval' as const },
+    ], threadIds: [], sentAt: new Date().toISOString() };
+    expect(selectPendingPlan([a], '1', digest)).toHaveProperty('error');
+    expect(selectPendingPlan([a], '2', digest)).toEqual({ plan: a });
+    expect(selectPendingPlan([a], 'Sarah', digest)).toEqual({ plan: a });
+  });
+
+  it('does not approve a replacement draft via an old briefing ordinal', () => {
+    const replacement = { ...a, planId: 'replacement-plan' };
+    const digest = { items: [{ threadId: a.threadId, planId: a.planId, kind: 'approval' as const }],
+      threadIds: [], sentAt: new Date().toISOString() };
+    expect(selectPendingPlan([replacement], '1', digest)).toEqual({ error: expect.stringContaining('no longer pending') });
+  });
+
+  it('does not approve a merchant question through a name or bare yes', () => {
+    const digest = { items: [{ threadId: a.threadId, planId: a.planId, kind: 'decision' as const }],
+      threadIds: [], sentAt: new Date().toISOString() };
+    expect(selectPendingPlan([a], 'Sarah', digest)).toHaveProperty('error');
+    expect(selectPendingPlan([a], undefined, digest)).toHaveProperty('error');
+  });
+
+  it('requires a specific reference for customers with the same first name', () => {
+    const otherSarah = { ...b, customerName: 'Sarah Jones' };
+    expect(selectPendingPlan([a, otherSarah], 'Sarah')).toHaveProperty('error');
+    expect(selectPendingPlan([a, otherSarah], 'Sarah Chen')).toEqual({ plan: a });
   });
 
   it('asks which one on an out-of-range or unmatched ref', () => {

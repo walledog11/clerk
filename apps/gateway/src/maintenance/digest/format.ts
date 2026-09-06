@@ -1,9 +1,7 @@
 import type { SupportStatsSummary } from '@shopkeeper/agent/support-stats';
 import {
   countWord,
-  formatNeedsYouAsk,
   formatNeedsYouProse,
-  oneSentencePerLine,
 } from '../digest-briefing/index.js';
 import { WEEKLY_SUMMARY_MIN_TICKETS } from './constants.js';
 import type { DigestBuckets, DigestMessageExtras } from './types.js';
@@ -56,24 +54,11 @@ export function formatWeeklySummaryLine(
 // noise every single morning.
 function spamSentence(filteredCount: number): string {
   return filteredCount === 1
-    ? `I filed one as spam.`
-    : `I filed ${countWord(filteredCount)} as spam.`;
+    ? 'I also marked one message as spam.'
+    : `I also marked ${countWord(filteredCount)} messages as spam.`;
 }
 
-/**
- * One message, one list, one ask.
- *
- * This used to print up to four separately-headed sections, each named after an
- * internal lifecycle state, two of them numbered from 1, and three different
- * closing questions. A merchant with seven things to do could not tell which
- * number belonged to which list or which question they were answering. The
- * sections were organised around what the agent knew about a thread; the
- * merchant only ever has one job, which is to clear the things that need them.
- *
- * So: everything needing the merchant is one numbered list, grouped only into
- * "a yes clears this" and "this needs a sentence". Everything needing nothing
- * collapses into the closing tail — it is news, not work, and it goes last.
- */
+/** A short overview, one paragraph per conversation, then completed work. */
 export function formatDigestMessage(
   buckets: DigestBuckets,
   weeklyLine?: string | null,
@@ -82,22 +67,17 @@ export function formatDigestMessage(
   const { filteredCount } = buckets;
   const items = extras?.needsYou ?? [];
   const list = formatNeedsYouProse(items);
-  const ask = formatNeedsYouAsk(items);
   const lines: string[] = [];
 
-  // The opener and the count are one sentence: "Morning, Ada here. Seven things
-  // need you." Two lines for a greeting and a number is a paragraph of throat
-  // clearing above the only thing worth reading.
-  // The group leads carry the counts now ("Two are ready to go the moment you
-  // say"), so a separate "Seven things need you" above them counts the same work
-  // twice before the merchant has read any of it.
+  // Count once, alongside the greeting; each paragraph owns its next step.
   const opener = extras?.opener?.trim();
-  if (opener) lines.push(opener);
+  const overview = items.length === 1 ? 'One conversation needs your attention.'
+    : items.length > 1 ? `${countWord(items.length).replace(/^./, (char) => char.toUpperCase())} conversations need your attention.` : '';
+  if (opener || overview) lines.push([opener, overview].filter(Boolean).join(' '));
   if (list) {
     if (lines.length > 0) lines.push('');
     lines.push(list);
   }
-  if (ask) lines.push('', ask);
 
   // The tail reports completed work only. Threads waiting on customers are
   // normal operational state, not news for the merchant, and are intentionally
@@ -108,7 +88,7 @@ export function formatDigestMessage(
   if (filteredCount > 0) tail.push(spamSentence(filteredCount));
   if (tail.length > 0) {
     if (lines.length > 0) lines.push('');
-    lines.push(oneSentencePerLine(tail.join(' ')));
+    lines.push(tail.join(' '));
   }
 
   for (const line of extras?.garnishLines ?? []) {

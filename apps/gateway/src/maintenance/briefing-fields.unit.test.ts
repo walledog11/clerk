@@ -3,9 +3,11 @@ import { emptyRequestFacts, type RequestFacts } from '@shopkeeper/agent/classifi
 import {
   byDeadlineFirst,
   daysUntilDeadline,
+  formatAlternativeMention,
   formatAskPhrase,
   formatDeadlineLead,
   formatFactsBriefingLine,
+  formatRequestPhrase,
 } from './briefing-fields.js';
 
 const NOW = new Date('2026-08-21T09:00:00.000Z');
@@ -70,6 +72,30 @@ describe('formatAskPhrase', () => {
   it('is null for asks with no label', () => {
     expect(formatAskPhrase(facts({ ask: 'none' }))).toBeNull();
     expect(formatAskPhrase(facts({ ask: 'other' }))).toBeNull();
+  });
+});
+
+describe('formatRequestPhrase', () => {
+  it('uses ask-specific phrasing for questions and complaints', () => {
+    expect(formatRequestPhrase(facts({ ask: 'product_question', subject: 'the lavender candle' })))
+      .toBe('has a question about the lavender candle');
+    expect(formatRequestPhrase(facts({ ask: 'complaint', subject: 'late delivery' })))
+      .toBe('reported a problem with late delivery');
+  });
+
+  it('falls back to noun phrases for generic asks', () => {
+    expect(formatRequestPhrase(facts({ ask: 'refund', subject: 'order #12' })))
+      .toBe('asked for a refund for order #12');
+  });
+});
+
+describe('formatAlternativeMention', () => {
+  it('returns noun phrases for named alternatives', () => {
+    expect(formatAlternativeMention('exchange')).toBe('an exchange');
+  });
+
+  it('is null when the alternative has no label', () => {
+    expect(formatAlternativeMention('none')).toBeNull();
   });
 });
 

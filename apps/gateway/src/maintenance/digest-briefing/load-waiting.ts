@@ -4,6 +4,7 @@ import { getCurrentPlanForThread, readAgentPlanCacheRecordShape } from '@shopkee
 import { resolveAgentSettings } from '@shopkeeper/agent/settings';
 import { canonicalInboxThreadWhere } from '@shopkeeper/agent/inbox-filter';
 import { SENDER_TYPE } from '@shopkeeper/agent/thread-constants';
+import type { RequestFacts } from '@shopkeeper/agent/classifier-signals';
 import { db } from '@shopkeeper/db';
 import { Prisma } from '@prisma/client';
 import { formatFactsBriefingLine } from '../briefing-fields.js';
@@ -14,9 +15,9 @@ import {
   unavailableRequestDisplay,
 } from '../../message-handlers/request-display.js';
 import { WAITING_PLAN_MIN_AGE_MS } from './constants.js';
-import { rowHasNoRequest, rowAskLess, rowRequestFacts } from './request-facts.js';
-import { formatApprovalItemLine } from './ticket-lines.js';
+import { rowAskLess, rowRequestFacts } from './request-facts.js';
 import type { WaitingItem } from './types.js';
+import { buildConversationBrief, type ConversationBrief } from './conversation.js';
 
 async function isPlanExecutionResolved(
   organizationId: string,
@@ -25,6 +26,44 @@ async function isPlanExecutionResolved(
   if (!planId) return false;
   const execution = await getPlanExecution(organizationId, planId);
   return execution != null && execution.status !== 'pending' && execution.status !== 'claimed';
+}
+
+async function loadCustomerSourceMessage(
+  organizationId: string,
+  threadId: string,
+  messageId: string | null,
+): Promise<string | null> {
+  if (!messageId) return null;
+  const message = await db.message.findFirst({
+    where: {
+      id: messageId,
+      organizationId,
+      threadId,
+      senderType: SENDER_TYPE.CUSTOMER,
+      deletedAt: null,
+    },
+    select: { contentText: true },
+  });
+  return message?.contentText ?? null;
+}
+
+function toWaitingItem(params: {
+  conversation: ConversationBrief;
+  dedupeKey: string;
+  threadId: string;
+  planId?: string;
+  requestFacts: RequestFacts | null;
+  hasRequestContext: boolean;
+  sourceMessageText: string | null;
+}): WaitingItem {
+  return {
+    conversation: params.conversation,
+    dedupeKey: params.dedupeKey,
+    threadId: params.threadId,
+    ...(params.planId ? { planId: params.planId } : {}),
+    requestFacts: params.requestFacts,
+    needsThreadReview: !params.hasRequestContext && !params.sourceMessageText?.trim(),
+  };
 }
 
 async function loadOperatorWaitingItems(
@@ -69,6 +108,12 @@ async function loadOperatorWaitingItems(
         },
       });
       if (thread) {
+        const cached = readAgentPlanCacheRecordShape(thread.cachedPlan);
+        // A newer request or replacement draft supersedes this queued item.
+        // Never describe the old draft and let an approval resolve to the new one.
+        if (pendingPlan.planId && cached?.planId && pendingPlan.planId !== cached.planId) continue;
+        if (pendingPlan.sourceMessageId && thread.requestSourceMessageId
+          && pendingPlan.sourceMessageId !== thread.requestSourceMessageId) continue;
         const currentPlan = getCurrentPlanForThread(thread, thread.messages);
         if (
           currentPlan
@@ -77,43 +122,37 @@ async function loadOperatorWaitingItems(
           continue;
         }
       }
-      const dedupeKey = pendingPlan.planId
-        ?? `${pendingPlan.threadId}:${pendingPlan.planHash ?? ''}:${pendingPlan.instructionHash ?? ''}`;
       const requestDisplay = pendingPlan.requestDisplay ?? unavailableRequestDisplay();
       const requestFacts = requestDisplay.kind === 'classified' ? requestDisplay.facts : null;
       const alignedSourceMessageId = thread?.requestSourceMessageId
         && pendingPlan.sourceMessageId === thread.requestSourceMessageId
         ? thread.requestSourceMessageId
         : null;
-      const sourceMessage = alignedSourceMessageId
-        ? await db.message.findFirst({
-            where: {
-              id: alignedSourceMessageId,
-              organizationId,
-              threadId: pendingPlan.threadId,
-              senderType: SENDER_TYPE.CUSTOMER,
-              deletedAt: null,
-            },
-            select: { contentText: true },
-          })
-        : null;
-      const sourceMessageText = sourceMessage?.contentText ?? null;
-      items.push({
-        dedupeKey,
-        threadId: pendingPlan.threadId,
-        ...(pendingPlan.planId ? { planId: pendingPlan.planId } : {}),
-        requestFacts,
-        needsThreadReview: !requestDisplayHasContext(requestDisplay, now) && !sourceMessageText?.trim(),
-        line: formatApprovalItemLine({
+      const sourceMessageText = await loadCustomerSourceMessage(
+        organizationId,
+        pendingPlan.threadId,
+        alignedSourceMessageId,
+      );
+      items.push(toWaitingItem({
+        conversation: buildConversationBrief({
           customerName: thread?.customer?.name ?? pendingPlan.customerName ?? null,
-          channelType: thread?.channelType ?? null,
+          channelType: thread?.channelType,
+          sourceText: sourceMessageText,
+          facts: requestFacts,
+          topic: requestDisplay.kind === 'classified' ? requestDisplay.topic : null,
+          systemEvent: requestDisplay.kind === 'system' ? requestDisplay.event : undefined,
           rawToolCalls: pendingPlan.rawToolCalls,
-          actionLabel: pendingPlan.actionLabel,
-          requestDisplay,
-          sourceMessageText,
+          operatorQuestion: readAgentPlanCacheRecordShape(thread?.cachedPlan)?.plan.routingEvidence?.question,
           now,
         }),
-      });
+        dedupeKey: pendingPlan.planId
+          ?? `${pendingPlan.threadId}:${pendingPlan.planHash ?? ''}:${pendingPlan.instructionHash ?? ''}`,
+        threadId: pendingPlan.threadId,
+        planId: pendingPlan.planId ?? undefined,
+        requestFacts,
+        hasRequestContext: requestDisplayHasContext(requestDisplay, now),
+        sourceMessageText,
+      }));
     }
   }
   return items;
@@ -173,7 +212,6 @@ async function loadStaleThreadWaitingItems(
       continue;
     }
 
-    const dedupeKey = cached.planId ?? `thread:${thread.id}:${cached.instruction}`;
     const requestFacts = rowRequestFacts(thread);
     const requestContext = requestFacts
       ? formatFactsBriefingLine(requestFacts, null, now, rowAskLess(thread))
@@ -181,37 +219,30 @@ async function loadStaleThreadWaitingItems(
     const alignedSourceMessageId = thread.requestSourceMessageId === thread.cachedPlanMessageId
       ? thread.requestSourceMessageId
       : null;
-    const sourceMessage = alignedSourceMessageId
-      ? await db.message.findFirst({
-          where: {
-            id: alignedSourceMessageId,
-            organizationId,
-            threadId: thread.id,
-            senderType: SENDER_TYPE.CUSTOMER,
-            deletedAt: null,
-          },
-          select: { contentText: true },
-        })
-      : null;
-    const sourceMessageText = sourceMessage?.contentText ?? null;
-    items.push({
-      dedupeKey,
+    const sourceMessageText = await loadCustomerSourceMessage(
+      organizationId,
+      thread.id,
+      alignedSourceMessageId,
+    );
+    items.push(toWaitingItem({
+      conversation: buildConversationBrief({
+        customerName: thread.customer?.name ?? null,
+        channelType: thread.channelType,
+        verifiedOrders: verifiedByThread.get(thread.id),
+        sourceText: sourceMessageText,
+        facts: requestFacts,
+        topic: thread.aiTitle,
+        rawToolCalls: plan.rawToolCalls,
+        operatorQuestion: plan.routingEvidence?.question,
+        now,
+      }),
+      dedupeKey: cached.planId ?? `thread:${thread.id}:${cached.instruction}`,
       threadId: thread.id,
       ...(cached.planId ? { planId: cached.planId } : {}),
       requestFacts,
-      needsThreadReview: requestContext === null && !sourceMessageText?.trim(),
-      line: formatApprovalItemLine({
-        customerName: thread.customer?.name ?? null,
-        channelType: thread.channelType,
-        aiTitle: thread.aiTitle,
-        rawToolCalls: plan.rawToolCalls,
-        verifiedOrders: verifiedByThread.get(thread.id) ?? [],
-        requestFacts,
-        noRequest: rowHasNoRequest(thread),
-        sourceMessageText,
-        now,
-      }),
-    });
+      hasRequestContext: requestContext !== null,
+      sourceMessageText,
+    }));
   }
   return items;
 }

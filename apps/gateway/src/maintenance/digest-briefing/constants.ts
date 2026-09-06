@@ -12,5 +12,3 @@ export const BRIEFING_RECITE_MAX = 8;
 export const REQUEST_FACTS_MIN_VERSION = 5;
 
 export const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const;
-
-export const KIND_ORDER = ['approval', 'decision', 'flagged'] as const;

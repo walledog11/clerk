@@ -168,6 +168,49 @@ closing verification passes.
 
 ---
 
+## Build
+
+Application code, not started. An entry names the surface it lands on and what closing
+it costs — not a design.
+
+- [ ] **Outbound attachments.** Inbound attachments already persist to Blob and render in
+  the timeline; the merchant cannot send one back, so a return label, a size chart or a
+  replacement invoice means leaving for Gmail — which is where the inbox loses the
+  thread. `/api/attachments` is read-only, `parseSendMessageBody` accepts
+  `{threadId, text, isNote}`, and every dispatch leg is text-only:
+  `createPendingAgentMessage` takes no attachment argument, `sendInstagramTextMessage`
+  and `sendTikTokShopTextMessage` say so in their names. Closing it is an upload route
+  writing under the org-scoped Blob prefix `attachmentBelongsToOrg` already enforces, a
+  composer control, and a per-channel decision — email carries attachments, Instagram and
+  TikTok Shop take media by URL through separate calls, and storefront chat has no
+  outbound provider at all, so the widget must render the Blob ref itself. Ship the email
+  leg first and have the others refuse with a reason; a channel that silently drops the
+  file is worse than one that cannot take it.
+
+- [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
+  thread's messages, Shopify orders, KB articles and merchant preferences. It counts the
+  customer's other open threads and never reads one. The dashboard already shows what the
+  agent cannot see — `ContextPanel` renders "Past conversations" from
+  `/api/threads/customer/[customerId]` — so a customer refunded last week reads as a
+  repeat to the merchant and as brand new to the agent, which is the employee principle
+  failing on the one signal an employee would certainly have. Bounded version only: the
+  newest few closed threads' `aiSummary`, newest-first, budgeted the way KB articles
+  already are, with its own catch so a failure cannot take the fan-out down. This is
+  deliberately **not** the prior-episode retrieval parked under Episode memory below —
+  that is a ranking problem, and taking the newest N in date order ranks nothing. It
+  changes the planner's prompt input, so it owes the eval gate.
+
+- [ ] **Show LLM spend against the cap.** `dailyLLMSpendCapUsd` is editable on the agent
+  configure page and the refusal tells the merchant to increase the daily limit in
+  settings, but nothing in either app renders `LlmDailySpend` or `AgentTurnUsage`: the cap
+  is set blind, and when it trips the agent goes quiet with no surface saying why. Closing
+  it is a spend-against-cap readout beside that input, summing `llm_daily_spend` for
+  `utcDayString()` and falling back to `DEFAULT_DAILY_LLM_SPEND_CAP_USD` when the org has
+  set no cap. `spentNanoUsd` is a `BigInt` and will not serialize across the route
+  boundary as one — convert with `nanoDollarsToUsd` server-side.
+
+---
+
 ## Parked / decide
 
 Built or decided-deferred. No active build work unless you explicitly choose to resume.

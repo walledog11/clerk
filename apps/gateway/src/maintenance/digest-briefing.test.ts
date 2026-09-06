@@ -12,17 +12,16 @@ import { resolveAgentSettings } from '@shopkeeper/agent/settings';
 import type { RequestFacts } from '@shopkeeper/agent/classifier-signals';
 import {
   DIGEST_CURSOR_KEY,
-  formatApprovalItemLine,
   formatBlockedTicketLine,
-  formatEscalatedTicketLine,
   formatHandledSection,
-  formatNeedsYouAsk,
   formatNeedsYouProse,
   formatTicketLine,
   loadHandledRollup,
   loadWaitingOnYouItems,
   resolveHandledWindowStart,
 } from './digest-briefing/index.js';
+import { buildConversationBrief, formatConversationParagraph } from './digest-briefing/conversation.js';
+import type { BriefingItem } from './digest-briefing/types.js';
 import { appendPendingPlan, updateContext } from '../operator-context.js';
 
 let org!: Awaited<ReturnType<typeof createTestOrg>>;
@@ -366,7 +365,7 @@ describe('formatTicketLine — fields before prose', () => {
   });
 });
 
-describe('handoff and approval lines — fields before prose', () => {
+describe('formatBlockedTicketLine — fields before prose', () => {
   const FACTS = {
     ask: 'refund',
     alternative: 'exchange',
@@ -385,16 +384,6 @@ describe('handoff and approval lines — fields before prose', () => {
     ...overrides,
   });
 
-  it('opens an escalated line with the deadline and keeps the flag clause', () => {
-    expect(formatEscalatedTicketLine(factsRow(), NOW)).toBe(`${LINE}. I flagged it for you.`);
-  });
-
-  it('marks an older escalation unavailable instead of repairing prose', () => {
-    expect(formatEscalatedTicketLine(factsRow({
-      classifierSignals: { version: 4, language: 'en', intents: {} },
-    }), NOW)).toContain('Request details unavailable');
-  });
-
   // The verbatim branch is the one thing fields must not displace: the
   // customer's own words beat any rendering of them, and it only fires when the
   // whole message fits.
@@ -410,57 +399,30 @@ describe('handoff and approval lines — fields before prose', () => {
     }), NOW)).toBe(LINE);
   });
 
-  it('opens an approval line with the deadline, then what a yes sends', () => {
-    expect(formatApprovalItemLine({
-      customerName: 'Dana Reyes',
-      channelType: 'email',
-      aiTitle: 'Napkin Order Question',
-      rawToolCalls: [{ id: 't1', name: 'send_reply', input: { text: 'On its way.' } }],
-      requestFacts: FACTS,
-      now: NOW,
-    })).toBe(`${LINE}. Reply's drafted.`);
-  });
-
-  it('marks an approval unavailable when the classifier wrote no facts', () => {
-    expect(formatApprovalItemLine({
-      customerName: 'Dana Reyes',
-      channelType: 'email',
-      aiTitle: 'Napkin Order Question',
-      rawToolCalls: [{ id: 't1', name: 'send_reply', input: { text: 'On its way.' } }],
-      now: NOW,
-    })).toBe("Request details unavailable — open the thread for the original message. Reply's drafted.");
-  });
-
-  it('uses source-aligned text when an approval predates request snapshots', () => {
-    expect(formatApprovalItemLine({
-      customerName: 'Dana Reyes',
-      channelType: 'email',
-      rawToolCalls: [{ id: 't1', name: 'send_reply', input: { text: 'On its way.' } }],
-      requestDisplay: { version: 1, kind: 'unavailable' },
-      sourceMessageText: 'Can you move order #1043 to 14 Alder Road before Friday?',
-      now: NOW,
-    })).toBe('Dana asked: "Can you move order #1043 to 14 Alder Road before Friday?" Reply\'s drafted.');
-  });
-
-  it('suppresses every shared decision closer when one item needs thread review', () => {
-    const items = [
+  it('keeps a specific approval ask when another item needs thread review', () => {
+    const items: BriefingItem[] = [
       {
         threadId: 'ready',
-        kind: 'approval' as const,
-        line: "Dana: refund. Reply's drafted.",
+        kind: 'approval',
+        conversation: buildConversationBrief({
+          customerName: 'Dana',
+          facts: { ask: 'refund', subject: null, order: null, deadline: null, deadlineText: null, alternative: null },
+          rawToolCalls: [{ name: 'send_reply', input: { text: 'On its way.' } }],
+          now: NOW,
+        }),
       },
       {
         threadId: 'review',
-        kind: 'decision' as const,
+        kind: 'decision',
         needsThreadReview: true,
-        line: 'Request details unavailable — open the thread for the original message.',
+        conversation: buildConversationBrief({ customerName: 'Inez', now: NOW }),
       },
     ];
     const prose = formatNeedsYouProse(items)!;
 
-    expect(prose).toContain('One action is waiting for your approval.');
-    expect(prose).toContain('One needs you to open the thread first.');
-    expect(formatNeedsYouAsk(items)).toBeNull();
+    expect(prose).toContain('refund');
+    expect(prose).toContain('Shall I send it?');
+    expect(prose.split('\n\n')[1]).not.toContain('?');
   });
 });
 
@@ -511,7 +473,9 @@ describe('loadWaitingOnYouItems', () => {
     // Person first, then what a yes does, then what it is about. The action used
     // to lead, which put a tool label in the most scannable position of a line
     // the merchant reads seven of.
-    expect(items[0]?.line).toBe("Sarah: refund — damaged order. I've got $12 ready.");
+    expect(items[0]?.conversation.person).toBe('Sarah');
+    expect(items[0]?.conversation.requestContext).toContain('refund');
+    expect(items[0]?.conversation.actions).toContain('issue a refund of 12');
     expect(items[0]?.needsThreadReview).toBe(false);
 
   });
@@ -532,7 +496,8 @@ describe('loadWaitingOnYouItems', () => {
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ threadId: thread.id, planId, needsThreadReview: true });
-    expect(items[0]?.line).toContain('Request details unavailable — open the thread');
+    expect(formatConversationParagraph(items[0]!.conversation, 'approval', true))
+      .toContain("couldn't retrieve the request details");
   });
 
   it('recovers source text for a legacy operator approval with aligned identity', async () => {
@@ -560,11 +525,10 @@ describe('loadWaitingOnYouItems', () => {
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ threadId: thread.id, planId, needsThreadReview: false });
-    expect(items[0]?.line).toContain('Can you refund the chipped bowl from order #778?');
-    expect(items[0]?.line).not.toContain('Request details unavailable');
+    expect(items[0]?.conversation.request).toContain('Can you refund the chipped bowl from order #778?');
   });
 
-  it('lists several waiting items without numbering them', async () => {
+  it('lists several waiting items with distinct copy per thread', async () => {
     // Two pending plans for the *same* customer: the case the old copy rendered
     // as two identical "Reply to Canary" bullets.
     for (const [index, summary] of [
@@ -606,19 +570,15 @@ describe('loadWaitingOnYouItems', () => {
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items).toHaveLength(2);
     const section = formatNeedsYouProse(items.map((entry) => ({
-      threadId: entry.threadId, kind: 'approval' as const, line: entry.line,
+      threadId: entry.threadId, kind: 'approval' as const, conversation: entry.conversation,
     })))!;
-    expect(section).toContain('Two actions are waiting for your approval.');
-    // Every line differs by subject, so the list is worth reading.
-    expect(section).toContain("Canary · #1042: order status.\nReply's drafted.");
-    expect(section).toContain("Canary: address change.\nReply's drafted.");
+    expect(section.match(/Shall I send it\?/g)).toHaveLength(2);
+    expect(section).toContain('#1042');
+    expect(section).toContain('delivery address');
     expect(section).not.toContain('shipping address');
-    expect(section).not.toMatch(/^\s*\d+\. /m);
-    // A bare "yes" here would approve only the most recent plan. The count ties
-    // the ask to this list rather than to everything else the briefing names.
-    expect(formatNeedsYouAsk(items.map((entry) => ({
-      threadId: entry.threadId, kind: 'approval' as const, line: entry.line,
-    })))).toBe('Should I go ahead?');
+    expect(section).toMatch(/^1\. Canary/);
+    expect(section).toContain('\n\n2. Canary');
+
   });
 
   it('includes stale dashboard plans that still need review', async () => {
@@ -643,8 +603,8 @@ describe('loadWaitingOnYouItems', () => {
 
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items).toHaveLength(1);
-    expect(items[0]?.line).toContain('Bob');
-    expect(items[0]?.line).toBe("Bob: refund. Ask the merchant's drafted.");
+    expect(items[0]?.conversation.person).toContain('Bob');
+    expect(items[0]?.conversation.question).toBe('Can we refund?');
   });
 
   it('recovers source text for a stale pre-v5 dashboard approval', async () => {
@@ -666,8 +626,7 @@ describe('loadWaitingOnYouItems', () => {
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items).toHaveLength(1);
     expect(items[0]?.needsThreadReview).toBe(false);
-    expect(items[0]?.line).toContain('Could I get a refund for the cracked vase?');
-    expect(items[0]?.line).not.toContain('Request details unavailable');
+    expect(items[0]?.conversation.request).toContain('Could I get a refund for the cracked vase?');
   });
 
   it('keeps safe replies out of the merchant queue while preserving real reviews', async () => {
@@ -721,7 +680,7 @@ describe('loadWaitingOnYouItems', () => {
 
     const items = await loadWaitingOnYouItems(org.id, NOW);
     expect(items.map((item) => item.threadId)).toEqual([keptThread.id]);
-    expect(items[0]?.line).not.toContain('Ada');
+    expect(items[0]?.conversation.person).not.toContain('Ada');
   });
 
   it('never names a customer it does not have', async () => {
@@ -758,8 +717,10 @@ describe('loadWaitingOnYouItems', () => {
     const items = await loadWaitingOnYouItems(org.id, NOW);
     // "Customer" is a placeholder, not a name. With nothing to print, the
     // subject falls back to a generic word and the topic carries the line.
-    expect(items[0]?.line).not.toContain('Customer');
-    expect(items[0]?.line).toBe("Someone: return — damaged sweater. Reply's drafted.");
+    expect(items[0]?.conversation.person).not.toBe('Customer');
+    expect(items[0]?.conversation.person).toBe('The customer');
+    expect(formatConversationParagraph(items[0]!.conversation, 'approval', false))
+      .toContain('return');
   });
 
   it('ignores stale plans on threads outside the support inbox', async () => {

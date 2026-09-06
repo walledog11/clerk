@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { db, ThreadFilterStatus } from '@shopkeeper/db';
 import { cleanupTestData, createTestCustomer, createTestMessage, createTestOrg, createTestThread } from '@shopkeeper/db/test-helpers';
 import type { SupportStatsSummary } from '@shopkeeper/agent/support-stats';
@@ -6,12 +6,44 @@ import { buildAgentPlanCacheRecord } from '@shopkeeper/agent/plan-cache';
 import { resolveAgentSettings } from '@shopkeeper/agent/settings';
 import { bucketDigestThreads, buildOrgDigest, digestWindowKey, formatDigestMessage, formatWeeklySummaryLine } from './digest.js';
 import type { BriefingItem } from './digest-briefing/index.js';
+import { buildConversationBrief } from './digest-briefing/conversation.js';
+import { renderOperatorLedger } from '../message-handlers/operator-ledger.js';
+import { selectPendingPlan, updateContext, type PendingPlan } from '../operator-context.js';
+
+const { create } = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock('@shopkeeper/agent/ai', () => ({ anthropic: { messages: { create } } }));
+
+beforeEach(() => {
+  create.mockReset();
+  create.mockRejectedValue(new Error('provider unavailable'));
+});
 
 const NOW = new Date('2026-04-29T12:00:00Z');
 const HOUR = 3_600_000;
 // Stands in for the last-briefing cursor: the spam count reports what was filed
 // since then, not every filtered thread still sitting open.
 const FILED_SINCE = new Date(NOW.getTime() - 24 * HOUR);
+
+async function sarahPlan(orgId: string): Promise<PendingPlan> {
+  const customer = await createTestCustomer(orgId, 'sarah@example.com', { name: 'Sarah Jones' });
+  const thread = await createTestThread(orgId, customer.id, 'email');
+  const source = await createTestMessage(thread.id, 'Does the lavender candle contain paraffin?');
+  await db.thread.update({ where: { id: thread.id }, data: { requestSourceMessageId: source.id } });
+  const plan: PendingPlan = {
+    threadId: thread.id,
+    planId: '11111111-1111-4111-8111-111111111111',
+    sourceMessageId: source.id,
+    instruction: 'Answer the product question',
+    customerName: 'Sarah Jones',
+    rawToolCalls: [{
+      id: 'reply',
+      name: 'send_reply',
+      input: { text: 'The lavender candle is made with soy wax and contains no paraffin.' },
+    }],
+  };
+  await updateContext(orgId, 'member-test', { pendingPlan: plan });
+  return plan;
+}
 
 function makeThread(overrides: Partial<{
   id: string;
@@ -201,7 +233,12 @@ describe('formatDigestMessage', () => {
   const item = (over: Partial<BriefingItem> = {}): BriefingItem => ({
     threadId: `t-${Math.random().toString(16).slice(2)}`,
     kind: 'approval',
-    line: 'Sarah — $12 refund · Damaged mug',
+    conversation: buildConversationBrief({
+      customerName: 'Sarah',
+      sourceText: 'I want a refund for my damaged mug.',
+      now: NOW,
+      rawToolCalls: [{ name: 'create_refund', input: { amount: 12 } }],
+    }),
     ...over,
   });
 
@@ -211,48 +248,60 @@ describe('formatDigestMessage', () => {
   it('never numbers the list, and never explains how to reply', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
       needsYou: [
-        item({ line: 'Sarah — $12 refund · Damaged mug' }),
-        item({ line: 'Aisha — reply · Where is order 1051' }),
-        item({ kind: 'decision', line: 'Dana asked to move order #1043.' }),
-        item({ kind: 'flagged', line: 'Marcus Reed asked when their order ships.' }),
+        item(),
+        item({ conversation: buildConversationBrief({ customerName: 'Aisha', sourceText: 'Where is order 1051?', now: NOW }) }),
+        item({
+          kind: 'decision',
+          conversation: buildConversationBrief({ customerName: 'Dana', sourceText: 'Can you move order #1043?', now: NOW }),
+        }),
+        item({
+          kind: 'flagged',
+          conversation: buildConversationBrief({ customerName: 'Marcus Reed', sourceText: 'When does my order ship?', now: NOW }),
+        }),
       ],
     });
     // Nobody texts a colleague "reply 1 with yes". The numbers only ever existed
     // because the ordinal resolver wanted them, and replies resolve by name.
     expect(msg).not.toMatch(/^\s*\d+\. /m);
     expect(msg).not.toMatch(/Reply with|reply with a number|"1 yes"/);
-    expect(msg).toContain('Two actions are waiting for your approval.');
-    expect(msg).toContain('One needs your decision.');
-    expect(msg).toContain('One sender looks questionable.');
+    expect(msg).not.toContain('actions are waiting for your approval');
+    expect(msg).toContain('How would you like me to handle this?');
+    expect(msg).toContain('Marcus wrote');
   });
 
   // The group lead already carries the count, so a headline above it counts the
   // same work twice before the merchant has read any of it.
-  it('greets without restating the count the groups already give', () => {
+  it('greets and counts the conversations once', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
       opener: 'Morning, Ada here.',
       needsYou: [item(), item()],
     });
-    expect(msg.split('\n')[0]).toBe('Morning, Ada here.');
-    expect(msg).toContain('Two actions are waiting for your approval.');
+    expect(msg.split('\n')[0]).toBe('Morning, Ada here. Two conversations need your attention.');
+    expect(msg).not.toContain('actions are waiting for your approval');
     expect(msg).not.toContain('things need you');
   });
 
   it('closes like a person, not with an instruction', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
-      needsYou: [item(), item({ kind: 'decision', line: 'Dana asked something.' })],
+      needsYou: [
+        item(),
+        item({
+          kind: 'decision',
+          conversation: buildConversationBrief({ customerName: 'Dana', sourceText: 'Dana asked something.', now: NOW }),
+        }),
+      ],
     });
-    expect(msg).toContain('Tell me what you want to do with these.');
+    expect(msg).toContain('Dana wrote: "Dana asked something." How would you like me to handle this?');
     expect(msg).not.toMatch(/Reply with|number/);
   });
 
-  it('uses one lead when everything is the same kind', () => {
+  it('asks about each plan individually', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
       needsYou: [item(), item()],
     });
-    expect(msg).toContain('Two actions are waiting for your approval.');
+    expect(msg).not.toContain('actions are waiting for your approval');
     expect(msg).not.toContain('needs your decision');
-    expect(msg.trimEnd().endsWith('Should I go ahead?')).toBe(true);
+    expect(msg.trimEnd().endsWith('Shall I go ahead with this plan?')).toBe(true);
   });
 
   it('asks for thread review without an approval or decision question', () => {
@@ -261,11 +310,11 @@ describe('formatDigestMessage', () => {
         kind: 'approval',
         planId: 'plan-review',
         needsThreadReview: true,
-        line: "Request details unavailable — open the thread for the original message. Reply's drafted.",
+        conversation: buildConversationBrief({ customerName: 'Inez', now: NOW }),
       })],
     });
 
-    expect(msg).toContain('One needs you to open the thread first.');
+    expect(msg).toContain("couldn't retrieve the request details");
     expect(msg).not.toContain('waiting for your approval');
     expect(msg).not.toMatch(/Should I go ahead\?|What do you want to do\?|Tell me what you want to do/);
   });
@@ -276,10 +325,7 @@ describe('formatDigestMessage', () => {
       needsYou: [item()],
       handledSection: 'Since your last briefing I replied to Bob.',
     });
-    expect(msg.trim().split('\n').slice(-2)).toEqual([
-      'Since your last briefing I replied to Bob.',
-      'I filed one as spam.',
-    ]);
+    expect(msg.trim().split('\n').at(-1)).toBe('Since your last briefing I replied to Bob. I also marked one message as spam.');
     expect(msg).not.toContain('ticking along');
   });
 
@@ -307,7 +353,7 @@ describe('formatDigestMessage', () => {
 
   it('mentions spam filing only when something was filed', () => {
     const filed = bucketDigestThreads([makeThread({ filterStatus: 'filtered' })], NOW, FILED_SINCE);
-    expect(formatDigestMessage(filed, null, { needsYou: [item()] })).toContain('I filed one as spam.');
+    expect(formatDigestMessage(filed, null, { needsYou: [item()] })).toContain('I also marked one message as spam.');
     expect(formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, { needsYou: [item()] }))
       .not.toContain('spam');
   });
@@ -318,14 +364,20 @@ describe('formatDigestMessage', () => {
       garnishLines: ['Two orders came in overnight.'],
     });
     expect(msg).toContain('Two orders came in overnight.');
-    expect(msg.indexOf('1. Sarah')).toBeLessThan(msg.indexOf('Two orders came in overnight.'));
+    expect(msg.indexOf('damaged mug')).toBeLessThan(msg.indexOf('Two orders came in overnight.'));
   });
 
   // Standing invariants, carried over from the shape this replaced.
   it('writes no em-dashes of its own and teaches no command syntax', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
       opener: 'Morning, Ada here.',
-      needsYou: [item({ line: 'Sarah wants a refund.' }), item({ kind: 'flagged', line: 'Marcus Reed wrote in.' })],
+      needsYou: [
+        item({ conversation: buildConversationBrief({ customerName: 'Sarah', sourceText: 'Sarah wants a refund.', now: NOW }) }),
+        item({
+          kind: 'flagged',
+          conversation: buildConversationBrief({ customerName: 'Marcus Reed', sourceText: 'Marcus Reed wrote in.', now: NOW }),
+        }),
+      ],
       handledSection: 'Since your last briefing I replied to Bob.',
     });
     expect(msg).not.toMatch(/<n>|<text>|OPEN|SPAM|REPLY|Shortcuts|"open 1"|"spam 1"/);
@@ -333,9 +385,13 @@ describe('formatDigestMessage', () => {
 
   it('never proposes binning a flagged ticket', () => {
     const msg = formatDigestMessage(bucketDigestThreads([], NOW, FILED_SINCE), null, {
-      needsYou: [item({ kind: 'flagged', line: 'Marcus Reed wrote in.' })],
+      needsYou: [item({
+        kind: 'flagged',
+        conversation: buildConversationBrief({ customerName: 'Marcus Reed', sourceText: 'Marcus Reed wrote in.', now: NOW }),
+      })],
     });
-    expect(msg).not.toMatch(/bin it|spam\?|delete/i);
+    expect(msg).toContain('genuine customer enquiry');
+    expect(msg).not.toMatch(/bin it|delete/i);
   });
 });
 
@@ -396,7 +452,7 @@ describe('buildOrgDigest — inbox scope', () => {
 
     const digest = await buildOrgDigest(org.id, NOW);
     expect(digest?.message).toContain('Nothing needs you right now.');
-    expect(digest?.message).toContain('I filed one as spam.');
+    expect(digest?.message).toContain('I also marked one message as spam.');
   });
 
   // Note-only and answered threads are inbox hygiene, not merchant decisions.
@@ -443,7 +499,8 @@ describe('buildOrgDigest — inbox scope', () => {
 
     const digest = (await buildOrgDigest(org.id, NOW))!;
     expect(digest.message).toContain('Maya');
-    expect(digest.message).toContain('flagged it for you');
+    expect(digest.message).toContain('I need to speak to a person.');
+    expect(digest.message).toContain('How would you like me to handle this?');
     expect(digest.pendingDigest.items.filter((item) => item.threadId === thread.id)).toHaveLength(1);
     expect(digest.pendingDigest.items.find((item) => item.threadId === thread.id)?.kind).toBe('decision');
   });
@@ -540,8 +597,8 @@ describe('buildOrgDigest — inbox scope', () => {
     const digest = (await buildOrgDigest(org.id, NOW))!;
     const pending = digest.pendingDigest.items.find((item) => item.threadId === thread.id);
     expect(pending).toMatchObject({ kind: 'decision', needsThreadReview: true });
-    expect(digest.message).toContain('Request details unavailable — open the thread');
-    expect(digest.message).toContain('One needs you to open the thread first.');
+    expect(digest.message).toContain("I couldn't retrieve the request details");
+    expect(digest.message).toContain('/dashboard/tickets?thread=');
     expect(digest.message).not.toMatch(/Should I go ahead\?|What do you want to do\?|Tell me what you want to do/);
   });
 
@@ -584,11 +641,11 @@ describe('buildOrgDigest — inbox scope', () => {
     const digest = (await buildOrgDigest(org.id, NOW))!;
     const pending = digest.pendingDigest.items.find((item) => item.threadId === thread.id);
     expect(pending).toMatchObject({ kind: 'flagged', needsThreadReview: true });
-    expect(digest.message).toContain('Request details unavailable — open the thread');
+    expect(digest.message).toContain("I couldn't retrieve the request details");
     expect(digest.message).not.toMatch(/Should I go ahead\?|What do you want to do\?|Tell me what you want to do/);
   });
 
-  it('suppresses the shared closer for a mixed actionable and thread-review briefing', async () => {
+  it('keeps approval actionable alongside a conversation requiring thread review', async () => {
     org = await createTestOrg();
     const [approvalCustomer, reviewCustomer] = await Promise.all([
       createTestCustomer(org.id, 'mixed-approval@example.com', { name: 'Cleo' }),
@@ -615,8 +672,8 @@ describe('buildOrgDigest — inbox scope', () => {
     });
 
     const digest = (await buildOrgDigest(org.id, NOW))!;
-    expect(digest.message).toContain('One action is waiting for your approval.');
-    expect(digest.message).toContain('One needs you to open the thread first.');
+    expect(digest.message).toContain('Shall I go ahead with this plan?');
+    expect(digest.message).toContain('/dashboard/tickets?thread=');
     expect(digest.message).not.toMatch(/Should I go ahead\?|What do you want to do\?|Tell me what you want to do/);
     expect(digest.pendingDigest.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ threadId: approvalThread.id, kind: 'approval' }),
@@ -681,7 +738,7 @@ describe('buildOrgDigest — inbox scope', () => {
     const digest = (await buildOrgDigest(org.id, NOW))!;
 
     expect(digest.message).toContain(
-      'Customer deadline: Fri, May 1, 2026 — Dana Reyes · #1024: refund or exchange — the olive linen napkins.',
+      'Customer deadline: Fri, May 1, 2026.',
     );
   });
 
@@ -727,8 +784,8 @@ describe('buildOrgDigest — inbox scope', () => {
     });
 
     const message = (await buildOrgDigest(org.id, NOW))!.message;
-    expect(message).toContain('Ada Frost');
-    expect(message.indexOf('Ada Frost')).toBeLessThan(message.indexOf('Bo Nardi'));
+    expect(message).toContain('Ada wrote:');
+    expect(message.indexOf('Ada wrote:')).toBeLessThan(message.indexOf('Bo wrote:'));
   });
 
   // Same ordering, through the approval group, which reaches it by a different
@@ -898,7 +955,7 @@ describe('buildOrgDigest — inbox scope', () => {
 
     // Only the explicit approval needs the merchant. A missing plan is recovered
     // by the planning sweep and never promoted to a decision by the renderer.
-    const readyAt = message.indexOf('waiting for your approval');
+    const readyAt = message.indexOf('One conversation needs your attention.');
     expect(readyAt).toBeGreaterThanOrEqual(0);
     expect(readyAt).toBeLessThan(message.indexOf('Sarah'));
     expect(message).not.toMatch(/^\s*\d+\. /m);
@@ -917,9 +974,9 @@ describe('buildOrgDigest — inbox scope', () => {
 
     // One ask, and it is the last thing before the tail. The old shape closed
     // with three, in three different places.
-    expect(message).toContain('Should I go ahead?');
+    expect(message).toContain('Shall I go ahead with this plan?');
     expect(message).not.toMatch(/Reply with|"1 yes"/);
-    expect(message.trimEnd().endsWith('Should I go ahead?')).toBe(true);
+    expect(message).toContain('/dashboard/tickets?thread=');
   });
 });
 
@@ -1012,5 +1069,98 @@ describe('digestWindowKey', () => {
   it('falls back to UTC on an unusable timezone', () => {
     expect(digestWindowKey({ digestTimezone: 'Not/AZone' }, new Date('2026-08-11T15:00:00.000Z')))
       .toBe('2026-08-11T15');
+  });
+});
+
+describe('conversation briefing pipeline', () => {
+  let org: Awaited<ReturnType<typeof createTestOrg>>;
+
+  beforeEach(async () => {
+    org = await createTestOrg();
+  });
+
+  afterEach(async () => {
+    await cleanupTestData(org.id);
+  });
+
+  it('loads the actual source and draft, writes natural copy, and keeps a mixed briefing actionable', async () => {
+    const plan = await sarahPlan(org.id);
+    const james = await createTestCustomer(org.id, 'james@example.com', { name: 'James' });
+    const thread = await createTestThread(org.id, james.id, 'email');
+    await db.thread.update({ where: { id: thread.id }, data: { escalatedAt: NOW } });
+    create.mockImplementation(async (input) => {
+      const sources = JSON.parse(input.messages[0].content);
+      expect(sources).toHaveLength(1);
+      expect(sources[0].request).toContain('Does the lavender candle contain paraffin?');
+      expect(sources[0].draft).toContain('soy wax');
+      return {
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 50, output_tokens: 40 },
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ items: [{
+            id: sources[0].id,
+            request: {
+              text: 'asked whether the lavender candle contains paraffin',
+              evidence: 'Does the lavender candle contain paraffin?',
+            },
+            draft: {
+              text: 'explaining that it is made with soy wax and contains no paraffin',
+              evidence: sources[0].draft,
+            },
+          }] }),
+        }],
+      };
+    });
+    const digest = (await buildOrgDigest(org.id, NOW, {}, { opener: 'Morning!' }))!;
+    expect(digest.message).toContain("Morning! Two conversations need your attention.\n\nSarah asked whether the lavender candle contains paraffin. I've drafted a reply explaining that it is made with soy wax and contains no paraffin. Shall I send it?");
+    expect(digest.message).toContain("I couldn't retrieve the request details for James's conversation.");
+    expect(digest.message).toContain(`/dashboard/tickets?thread=${thread.id}`);
+    expect(digest.message).not.toMatch(/Reply's drafted|product question —|I flagged it|I checked/);
+    expect(digest.pendingDigest.items).toEqual([
+      { threadId: plan.threadId, planId: plan.planId, kind: 'approval' },
+      { threadId: thread.id, kind: 'decision', needsThreadReview: true },
+    ]);
+    expect(selectPendingPlan([plan], 'Sarah', digest.pendingDigest)).toEqual({ plan });
+    expect(selectPendingPlan([plan], '2', digest.pendingDigest)).toHaveProperty('error');
+    const ledger = await renderOperatorLedger(org.id, {
+      pendingPlans: [plan],
+      pendingPlan: plan,
+      pendingQuestion: null,
+      pendingDigest: digest.pendingDigest,
+    });
+    expect(ledger).toContain('Sarah Jones');
+    expect(ledger).toContain('James');
+    expect(ledger).toContain('the original request was not shown, so open it before deciding');
+  });
+
+  it('recovers a legacy escalation from the last customer message when no source pointer exists', async () => {
+    const customer = await createTestCustomer(org.id, 'legacy@example.com', { name: 'Rae' });
+    const thread = await createTestThread(org.id, customer.id, 'email');
+    await createTestMessage(thread.id, 'My package arrived broken. Can you help?');
+    await db.thread.update({ where: { id: thread.id }, data: { escalatedAt: NOW } });
+    const digest = (await buildOrgDigest(org.id, NOW))!;
+    expect(digest.message).toContain('My package arrived broken. Can you help?');
+    expect(digest.pendingDigest.items[0]?.needsThreadReview).toBeUndefined();
+  });
+
+  it('does not revive an old approval after a new customer request supersedes it', async () => {
+    const plan = await sarahPlan(org.id);
+    const next = await createTestMessage(plan.threadId, 'Actually, please cancel my order.');
+    await db.thread.update({ where: { id: plan.threadId }, data: { requestSourceMessageId: next.id } });
+    const digest = (await buildOrgDigest(org.id, NOW))!;
+    expect(digest.pendingDigest.items).toEqual([]);
+    expect(digest.message).not.toContain('soy wax');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('honors the stored spend cap for an on-demand briefing and still shows the draft', async () => {
+    await sarahPlan(org.id);
+    await db.organization.update({ where: { id: org.id }, data: { settings: { dailyLLMSpendCapUsd: 0 } } });
+    const digest = (await buildOrgDigest(org.id, NOW))!;
+    expect(create).not.toHaveBeenCalled();
+    expect(digest.message).toContain('Does the lavender candle contain paraffin?');
+    expect(digest.message).toContain('soy wax');
+    expect(digest.message).toContain('Shall I send it?');
   });
 });

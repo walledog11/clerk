@@ -40,7 +40,7 @@ const LEDGER_SUMMARY_TRUNC = 240;
  */
 const DIGEST_LEDGER_ITEM_LIMIT = 12;
 
-export interface DigestThreadRow {
+export interface DigestLedgerThread {
   id: string;
   aiSummary: string | null;
   filterReason: string | null;
@@ -61,7 +61,7 @@ function truncateDigestSummary(text: string, limit: number): string {
 }
 
 export function formatDigestThreadBlurb(
-  thread: Pick<DigestThreadRow, 'aiSummary' | 'filterReason'>,
+  thread: Pick<DigestLedgerThread, 'aiSummary' | 'filterReason'>,
   limit: number = DIGEST_SUMMARY_TRUNC,
 ): string {
   return truncateDigestSummary(thread.aiSummary ?? thread.filterReason ?? '', limit);
@@ -73,7 +73,7 @@ export interface DigestEntry {
   id: string;
   kind: PendingDigestItem['kind'];
   needsThreadReview: boolean;
-  thread: DigestThreadRow | null;
+  thread: DigestLedgerThread | null;
 }
 
 /**
@@ -170,7 +170,7 @@ export function isThreadId(value: string): boolean {
 export async function findInboxThread(
   organizationId: string,
   threadId: string,
-): Promise<DigestThreadRow | null> {
+): Promise<DigestLedgerThread | null> {
   if (!isThreadId(threadId)) return null;
   return db.thread.findFirst({
     where: { ...canonicalInboxThreadWhere(organizationId), id: threadId },

@@ -5,14 +5,13 @@ import {
   loadProposedMerchantPreferences,
 } from '@shopkeeper/agent/merchant-preferences';
 import { SENDER_TYPE } from '@shopkeeper/agent/thread-constants';
+import { getCurrentPlanForThread } from '@shopkeeper/agent/plan-cache-shape';
 import { db } from '@shopkeeper/db';
 import { listVerifiedOrderNamesByThread } from '../../storefront-chat-verified-orders.js';
 import { loadAttributionLine } from '../../message-handlers/conversation-attribution.js';
 import { byDeadlineFirst } from '../briefing-fields.js';
 import { loadDigestShopifyGarnish } from '../digest-shopify-garnish.js';
 import {
-  formatEscalatedTicketLine,
-  formatFlaggedTicketLine,
   formatHandledSection,
   hasHandoffRequestContext,
   loadHandledRollup,
@@ -26,6 +25,10 @@ import { bucketDigestThreads } from './bucket.js';
 import { DIGEST_QUESTIONABLE_LIMIT } from './constants.js';
 import { formatDigestMessage, formatWeeklySummaryLine } from './format.js';
 import type { DigestThreadRow, OrgDigest } from './types.js';
+import { getGatewayDashboardUrl } from '../../config/env.js';
+import { buildConversationBrief } from '../digest-briefing/conversation.js';
+import { narrateBriefingItems } from '../digest-briefing/narrate.js';
+import { isRecord } from '../../lib/typing.js';
 
 /**
  * Build the support-inbox digest for one org from its open threads, ready to
@@ -42,7 +45,7 @@ export async function buildOrgDigest(
   options: { opener?: string | null; includeEmptyInbox?: boolean } = {},
 ): Promise<OrgDigest | null> {
   const since = resolveHandledWindowStart(settings, now);
-  const [openThreads, weeklyStats, handledRollup, waitingItems, garnishLines, attributionLine, proposedPreferences] = await Promise.all([
+  const [openThreads, weeklyStats, handledRollup, waitingItems, garnishLines, attributionLine, proposedPreferences, organization] = await Promise.all([
     db.thread.findMany({
       where: {
         ...canonicalInboxThreadWhere(organizationId),
@@ -80,6 +83,7 @@ export async function buildOrgDigest(
     loadDigestShopifyGarnish(organizationId, settings, now),
     loadAttributionLine(organizationId, since),
     loadProposedMerchantPreferences(organizationId),
+    db.organization.findUnique({ where: { id: organizationId }, select: { settings: true } }),
   ]);
 
   const handledSection = formatHandledSection(handledRollup);
@@ -120,7 +124,8 @@ export async function buildOrgDigest(
       : undefined;
     const pendingMessage = sourceMessage?.threadId === thread.id
       ? sourceMessage.contentText
-      : null;
+      : !thread.requestSourceMessageId && thread.messages[0]?.senderType === SENDER_TYPE.CUSTOMER
+        ? thread.messages[0].contentText : null;
     return {
       ...thread,
       ...(verifiedOrders ? { verifiedOrders } : {}),
@@ -138,38 +143,60 @@ export async function buildOrgDigest(
   const flagged = flaggedCandidates.slice(0, DIGEST_QUESTIONABLE_LIMIT);
   const escalated = buckets.genuine
     .filter((thread) => thread.escalatedAt && !waitingThreadIds.has(thread.id) && !rowHasNoRequest(thread));
-  // Soonest deadline first, within each group. Across groups is not a choice
-  // this can make: `formatNeedsYouProse` renders by kind, so only the order
-  // inside one group ever reaches the merchant. Sorting here rather than at
-  // render time keeps `pendingDigest.items` in the order they read, which is
-  // what a typed digit resolves against.
+  // Keep the display and reply ledger in the same order, with deadlines first
+  // within each kind of work. The formatter must never regroup these items.
+  const handoffConversation = (thread: DigestThreadRow) => {
+    const plan = getCurrentPlanForThread(thread, thread.messages);
+    return buildConversationBrief({
+      customerName: thread.customer.name,
+      channelType: thread.channelType,
+      verifiedOrders: thread.verifiedOrders,
+      sourceText: thread.pendingMessage,
+      facts: rowRequestFacts(thread),
+      topic: thread.aiTitle,
+      rawToolCalls: plan?.rawToolCalls,
+      operatorQuestion: plan?.routingEvidence?.question,
+      escalationReason: plan?.routingEvidence?.escalationReason,
+      now,
+    });
+  };
   const needsYou: BriefingItem[] = [
     ...byDeadlineFirst(waitingItems, (item) => item.requestFacts, now).map((item): BriefingItem => ({
       threadId: item.threadId,
-      kind: 'approval',
+      kind: item.conversation.question ? 'decision' : 'approval',
+      conversation: item.conversation,
       ...(item.planId ? { planId: item.planId } : {}),
       ...(item.needsThreadReview ? { needsThreadReview: true } : {}),
-      line: item.line,
     })),
     ...byDeadlineFirst(escalated, rowRequestFacts, now)
       .map((thread): BriefingItem => ({
         threadId: thread.id,
         kind: 'decision',
+        conversation: handoffConversation(thread),
         ...(!hasHandoffRequestContext(thread, now) ? { needsThreadReview: true } : {}),
-        line: formatEscalatedTicketLine(thread),
       })),
     ...byDeadlineFirst(flagged, rowRequestFacts, now).map((thread): BriefingItem => {
       return {
         threadId: thread.id,
         kind: 'flagged',
+        conversation: handoffConversation(thread),
         ...(!hasHandoffRequestContext(thread, now) ? { needsThreadReview: true } : {}),
-        // No per-item "Real customer?": the group lead already says these are
-        // the ones the agent is unsure about, and repeating the question on
-        // every line is the tell that a template wrote it.
-        line: formatFlaggedTicketLine(thread, now),
       };
     }),
   ];
+
+  const dashboardUrl = getGatewayDashboardUrl();
+  for (const item of needsYou) {
+    if (item.conversation) {
+      const url = new URL('/dashboard/tickets', dashboardUrl);
+      url.searchParams.set('thread', item.threadId);
+      item.conversation.threadUrl = url.toString();
+    }
+  }
+  const spendCap = isRecord(organization?.settings) ? organization.settings.dailyLLMSpendCapUsd : undefined;
+  const narratedItems = await narrateBriefingItems(organizationId, needsYou, {
+    dailyLLMSpendCapUsd: typeof spendCap === 'number' ? spendCap : undefined,
+  });
 
   const weeklyLine = needsYou.length > 0
     ? null
@@ -183,7 +210,7 @@ export async function buildOrgDigest(
       weeklyLine,
       {
         opener: options.opener ?? null,
-        needsYou,
+        needsYou: narratedItems,
         handledSection,
         preferenceBriefingLine,
         // Sits with the sales pulse: same register, same place in the message.

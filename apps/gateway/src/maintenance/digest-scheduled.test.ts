@@ -25,6 +25,10 @@ vi.mock('../clients/spectrum.js', () => ({
 
 import { buildOrgDigest, sendScheduledDigests } from './digest.js';
 
+vi.mock('./digest-briefing/narrate.js', () => ({
+  narrateBriefingItems: async (_org: string, items: unknown[]) => items,
+}));
+
 // shouldSendDigest fires when the local hour equals digestHour; pin the tz to
 // UTC and target the current UTC hour so the sweep runs regardless of clock.
 function armedSettings(extra: Record<string, unknown> = {}): Record<string, unknown> {
@@ -201,7 +205,8 @@ describe('sendScheduledDigests — first-night briefing', () => {
 
     const messages = myMessages();
     expect(messages).toHaveLength(1);
-    expect(messages[0]).toContain('Ari · #4100: refund');
+    expect(messages[0]).toContain('Ari wrote: "Please refund order #4100."');
+    expect(messages[0]).toMatch(/^(Morning|Afternoon|Evening)!/);
     expect(messages[0]).toContain(legacyText);
     expect(messages[0]).not.toContain('Request details unavailable');
     const context = await db.operatorContext.findFirst({

@@ -1,4 +1,5 @@
 import { DIGEST_CURSOR_KEY, COUNT_WORDS, DEFAULT_HANDLED_LOOKBACK_MS } from './constants.js';
+import { isRecord } from '../../lib/typing.js';
 
 export function countWord(count: number): string {
   return COUNT_WORDS[count] ?? String(count);
@@ -6,6 +7,15 @@ export function countWord(count: number): string {
 
 export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function extractRefundAmount(input: unknown): string | null {
+  if (!isRecord(input)) return null;
+  const amount = input.amount;
+  if (typeof amount === 'number' && Number.isFinite(amount)) {
+    return `$${amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2)}`;
+  }
+  return null;
 }
 
 export function resolveHandledWindowStart(
@@ -42,25 +52,4 @@ export function cleanBriefingText(text: string | null | undefined): string {
 
 export function endClause(text: string): string {
   return /[.!?…"']$/.test(text) ? text : `${text}.`;
-}
-
-/**
- * One sentence per line. On a phone, two sentences sharing a line wrap into a
- * paragraph and the eye has to find where one item ends and the next begins.
- */
-export function oneSentencePerLine(text: string): string {
-  let out = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i]!;
-    out += char;
-    if (char === '"') quoted = !quoted;
-    if (quoted || !'.!?'.includes(char)) continue;
-    const rest = text.slice(i + 1);
-    const gap = rest.match(/^[ \t]+/);
-    if (!gap || !/^[A-Z"]/.test(rest.slice(gap[0].length))) continue;
-    out += '\n';
-    i += gap[0].length;
-  }
-  return out;
 }

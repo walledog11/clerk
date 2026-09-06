@@ -500,14 +500,19 @@ function summarizePendingPlan(plan: PendingPlan): string {
   return `${who} — ${what}`;
 }
 
-function pendingPlanOptions(plans: PendingPlan[]): string {
-  return plans.map((plan, index) => `${index + 1}. ${summarizePendingPlan(plan)}`).join('; ');
+function pendingPlanOptions(plans: PendingPlan[], digest?: PendingDigest | null): string {
+  return plans.map((plan, index) => {
+    const item = digest?.items.find((entry) => entry.threadId === plan.threadId);
+    const ordinal = !item?.planId || item.planId === plan.planId
+      ? briefingOrdinal(digest ?? null, plan.threadId) : null;
+    const reference = ordinal ?? (digest?.items.length ? plan.planId ?? plan.customerName : index + 1);
+    return `${reference ?? 'Pending plan'}. ${summarizePendingPlan(plan)}`;
+  }).join('; ');
 }
 
 // Resolve which queued plan a control tool should act on from the model's
 // optional `plan_ref` (an ordinal from the ledger list, a planId, or a customer
-// name). With one plan pending the ref is ignored; with several and no/ambiguous
-// ref the model is told to ask which one rather than guess.
+// name). An explicit ref is always honored, even if only one plan remains.
 export function selectPendingPlan(
   plans: PendingPlan[],
   ref?: string,
@@ -517,6 +522,11 @@ export function selectPendingPlan(
     return { error: 'Error: no plan is awaiting the merchant\'s approval.' };
   }
   const selectable = (plan: PendingPlan): SelectPendingPlanResult => {
+    const briefingItem = digest?.items.find((item) => item.threadId === plan.threadId
+      && (!item.planId || item.planId === plan.planId));
+    if (briefingItem && briefingItem.kind !== 'approval') {
+      return { error: 'This conversation needs an instruction, not approval. Read the request and ask what the merchant wants done.' };
+    }
     if (pendingPlanNeedsThreadReview(plan, digest)) {
       return {
         error: 'The request details were unavailable in the briefing. Open the thread before approving this plan.',
@@ -524,12 +534,14 @@ export function selectPendingPlan(
     }
     return { plan };
   };
-  if (plans.length === 1) {
+  const trimmed = ref?.trim();
+  if (plans.length === 1 && !trimmed) {
     return selectable(plans[0]!);
   }
 
-  const trimmed = ref?.trim();
-  const ambiguous = `Multiple plans are pending — ask which one before acting: ${pendingPlanOptions(plans)}.`;
+  const ambiguous = plans.length > 1
+    ? `Multiple plans are pending — ask which one before acting: ${pendingPlanOptions(plans, digest)}.`
+    : `That reference does not match the pending plan. Ask the merchant to confirm: ${pendingPlanOptions(plans, digest)}.`;
   if (!trimmed) {
     return { error: ambiguous };
   }
@@ -544,13 +556,17 @@ export function selectPendingPlan(
     // list above them.
     const item = digest?.items[ordinal - 1];
     if (item) {
+      if (item.needsThreadReview) {
+        return { error: 'Open the thread to read the original request before acting on this conversation.' };
+      }
       if (item.kind !== 'approval') {
         return {
           error: `Number ${ordinal} in the briefing is not a drafted plan, so there is nothing to approve. Tell the merchant what it is and ask what they want done.`,
         };
       }
-      const byOrdinal = plans.find((plan) => plan.planId && plan.planId === item.planId)
-        ?? plans.find((plan) => plan.threadId === item.threadId);
+      const byOrdinal = item.planId
+        ? plans.find((plan) => plan.planId === item.planId && plan.threadId === item.threadId)
+        : plans.find((plan) => plan.threadId === item.threadId);
       if (byOrdinal) return selectable(byOrdinal);
       return { error: `The plan for number ${ordinal} is no longer pending — it may already have run.` };
     }
@@ -559,7 +575,7 @@ export function selectPendingPlan(
     }
 
     const index = ordinal - 1;
-    if (index >= 0 && index < plans.length) return { plan: plans[index]! };
+    if (index >= 0 && index < plans.length) return selectable(plans[index]!);
     return { error: ambiguous };
   }
 

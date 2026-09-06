@@ -113,10 +113,9 @@ describe('POST /webhooks/telegram — help & summary', () => {
     // On-demand SUMMARY answers straight out — the greeting is the scheduled
     // send's job, not a reply to a merchant who just asked.
     expect(text).not.toContain("didn't send any replies");
-    // A flagged ticket is work: it is in the one numbered list with everything
-    // else, not in a block of its own with its own question.
-    expect(text).toContain('One sender looks questionable.');
-    expect(text).toContain('Dana: policy question — wholesale pricing.');
+    expect(text).toContain('One conversation needs your attention.');
+    expect(text).toContain('Dana wrote: "Do you offer wholesale pricing?"');
+    expect(text).toContain('Should I keep it or mark it as spam?');
 
     const ctx = await getContext(org.id, memberKey);
     expect(ctx.pendingDigest?.items).toEqual([{ threadId: flagged.id, kind: 'flagged' }]);

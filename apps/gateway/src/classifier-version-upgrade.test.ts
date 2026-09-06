@@ -15,7 +15,7 @@ import {
 } from './message-handlers/request-display.js';
 import { formatOperatorPlanMessage } from './message-handlers/planning-notifications.js';
 import {
-  formatEscalatedTicketLine,
+  formatBlockedTicketLine,
   formatTicketLine,
   hasHandoffRequestContext,
   rowRequestFacts,
@@ -174,7 +174,7 @@ describe('persisted classifier versions still render', () => {
       // the source message is quoted rather than paraphrased.
       const row = briefingRow(seeded, CUSTOMER_TEXT);
       expect(hasHandoffRequestContext(row, NOW)).toBe(true);
-      const line = formatEscalatedTicketLine(row, NOW);
+      const line = formatBlockedTicketLine(row, NOW);
       expect(line).toContain('cracked lid');
       expect(line).not.toContain('Request details unavailable');
     });
@@ -283,7 +283,7 @@ describe('persisted classifier versions still render', () => {
       // Source text still rescues the line: the fallback keys off the message,
       // not off anything the classifier wrote.
       const row = briefingRow(seeded, CUSTOMER_TEXT);
-      expect(formatEscalatedTicketLine(row, NOW)).toContain('cracked lid');
+      expect(formatBlockedTicketLine(row, NOW)).toContain('cracked lid');
     });
   }
 

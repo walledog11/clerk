@@ -10,20 +10,28 @@
 // Priority: deadline, then who, then what they asked for.
 
 import type { RequestAsk, RequestFacts } from '@shopkeeper/agent/classifier-signals';
+import { capitalize } from './digest-briefing/text.js';
+
+interface AskCopy {
+  /** Short label for structured briefing lines, e.g. "refund". */
+  label: string;
+  /** Noun phrase for conversational copy, e.g. "a refund". */
+  nounPhrase: string;
+}
 
 // Closed vocabulary in, closed vocabulary out — no regex over model prose.
-const ASK_LABELS: Record<RequestAsk, string> = {
-  refund: 'refund',
-  cancel: 'cancellation',
-  return: 'return',
-  exchange: 'exchange',
-  address_change: 'address change',
-  order_status: 'order status',
-  product_question: 'product question',
-  policy_question: 'policy question',
-  complaint: 'complaint',
-  other: '',
-  none: '',
+const ASK_COPY: Record<RequestAsk, AskCopy | null> = {
+  refund: { label: 'refund', nounPhrase: 'a refund' },
+  cancel: { label: 'cancellation', nounPhrase: 'cancellation' },
+  return: { label: 'return', nounPhrase: 'a return' },
+  exchange: { label: 'exchange', nounPhrase: 'an exchange' },
+  address_change: { label: 'address change', nounPhrase: 'an address change' },
+  order_status: { label: 'order status', nounPhrase: 'an order update' },
+  product_question: { label: 'product question', nounPhrase: 'a product question' },
+  policy_question: { label: 'policy question', nounPhrase: 'a policy question' },
+  complaint: { label: 'complaint', nounPhrase: 'a complaint' },
+  other: null,
+  none: null,
 };
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -67,21 +75,38 @@ export function formatDeadlineLead(facts: RequestFacts, now: Date): string | nul
   return `Customer deadline: ${calendarDate}`;
 }
 
-function capitalizeFirst(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /**
  * What the customer wants, from `ask` plus the optional second option they
  * offered. Null when the classifier could not name an ask, which leaves the
  * caller on the prose path rather than printing an empty segment.
  */
 export function formatAskPhrase(facts: RequestFacts): string | null {
-  const ask = ASK_LABELS[facts.ask];
+  const ask = ASK_COPY[facts.ask]?.label;
   if (!ask) return null;
-  const alternative = facts.alternative ? ASK_LABELS[facts.alternative] : '';
+  const alternative = facts.alternative ? ASK_COPY[facts.alternative]?.label : '';
   const asks = alternative && alternative !== ask ? `${ask} or ${alternative}` : ask;
   return facts.subject ? `${asks} — ${facts.subject}` : asks;
+}
+
+/** Verb phrase following a person subject, e.g. "has a question about …". */
+export function formatRequestPhrase(facts: RequestFacts): string {
+  const subject = facts.subject;
+  switch (facts.ask) {
+    case 'product_question': return `has a question about ${subject || 'a product'}`;
+    case 'policy_question': return `has a question about ${subject || 'a store policy'}`;
+    case 'cancel': return `asked to cancel ${subject || 'an order'}`;
+    case 'return': return subject ? `asked to return ${subject}` : 'asked to make a return';
+    case 'address_change': return `asked to change the delivery address${subject ? ` for ${subject}` : ''}`;
+    case 'complaint': return `reported a problem${subject ? ` with ${subject}` : ''}`;
+    default: {
+      const noun = ASK_COPY[facts.ask]?.nounPhrase ?? 'another option';
+      return `asked for ${noun}${subject ? ` for ${subject}` : ''}`;
+    }
+  }
+}
+
+export function formatAlternativeMention(alternative: RequestAsk): string | null {
+  return ASK_COPY[alternative]?.nounPhrase ?? null;
 }
 
 interface BriefingLineParts {
@@ -137,7 +162,7 @@ function askLessLine(parts: BriefingLineParts, askLess: AskLessContext | undefin
   if (!topic) return null;
 
   const subject = [parts.person, parts.order].filter(Boolean).join(' · ');
-  return subject ? `${subject} — ${topic}` : capitalizeFirst(topic);
+  return subject ? `${subject} — ${topic}` : capitalize(topic);
 }
 
 /**
@@ -158,7 +183,7 @@ export function formatFactsBriefingLine(
   const subject = [parts.person, parts.order].filter(Boolean).join(' · ');
   const body = subject && parts.ask
     ? `${subject}: ${parts.ask}`
-    : subject || capitalizeFirst(parts.ask ?? '');
+    : subject || capitalize(parts.ask ?? '');
 
   return parts.deadline ? `${parts.deadline} — ${body}` : body;
 }
