@@ -117,6 +117,16 @@ test('auth-bypass core workflow sends a manual reply and approves an agent plan'
   ));
   await expect(page.getByTestId('chat-message').filter({ hasText: manualReply })).toBeVisible();
 
+  await page.getByRole('button', { name: 'Close conversation' }).click();
+  await expect(page.getByTestId('ticket-conversation')).toHaveCount(0);
+  await page
+    .locator(`[data-testid="ticket-row"][data-ticket-id="${manualThread.id}"]`)
+    .locator('button')
+    .first()
+    .click();
+  await expect(page.getByTestId('ticket-conversation')).toBeVisible();
+  await expect(page.getByTestId('chat-message').filter({ hasText: manualReply })).toBeVisible();
+
   const planInbound = `Seeded plan question ${runId}`;
   const planReply = `Approved agent reply ${runId}`;
   const { customer: planCustomer, thread: planThread } = await seedEmailThreadWithCachedPlan({

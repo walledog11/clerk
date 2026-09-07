@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
+import { useLayoutEffect, useRef, type ComponentProps } from "react"
 import { AGENT_DISPLAY_NAME } from "@shopkeeper/agent/settings"
 import { AlertCircle, CheckCircle2, X } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -91,6 +91,14 @@ interface InboxPageLayoutProps {
   list: InboxPageLayoutListState
 }
 
+interface InboxDialogSnapshot {
+  actions: InboxPageLayoutActions
+  activeTicketId: string
+  conversation: InboxPageLayoutConversationState
+  conversationTab: ConversationViewProps["activeTab"]
+  flags: InboxPageLayoutFlags
+}
+
 function CorrectReplyBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-amber-600/20 bg-amber-600/[0.08] px-4 py-2 text-xs text-amber-700 shrink-0">
@@ -165,6 +173,31 @@ function TicketConversation({
   )
 }
 
+function InboxDialogBody({ snapshot }: { snapshot: InboxDialogSnapshot }) {
+  const { actions, conversation, conversationTab, flags } = snapshot
+  const { activeThreadError, conversationTicket } = conversation
+
+  return (
+    <div className="flex min-h-0 flex-1 overflow-hidden">
+      {conversationTicket ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {flags.correctReplyVisible && <CorrectReplyBanner onDismiss={actions.onCorrectReplyDismiss} />}
+          <TicketConversation
+            actions={actions}
+            conversation={conversation}
+            conversationTab={conversationTab}
+            flags={flags}
+          />
+        </div>
+      ) : activeThreadError ? (
+        <ConversationLoadState error={activeThreadError} compact />
+      ) : (
+        <ConversationBodySkeleton />
+      )}
+    </div>
+  )
+}
+
 export function InboxPageLayout({
   actions,
   conversation,
@@ -173,47 +206,30 @@ export function InboxPageLayout({
 }: InboxPageLayoutProps) {
   const {
     activeThread,
-    activeThreadError,
     activeThreadPreview,
-    conversationTicket,
     orgSettings,
     toast,
   } = conversation
   const { activeTicketId, approvingTicketId, searchQuery, spamTickets, tickets, totalCount } = list
-  const [lastDialogBody, setLastDialogBody] = useState<ReactNode>(null)
+  const lastDialogSnapshot = useRef<InboxDialogSnapshot | null>(null)
 
   const conversationTab = (activeThread?.status ?? activeThreadPreview?.status) === "closed"
     ? "closed"
     : "open"
   const showConversation = Boolean(activeTicketId)
+  const currentDialogSnapshot = activeTicketId ? {
+    actions,
+    activeTicketId,
+    conversation,
+    conversationTab,
+    flags,
+  } satisfies InboxDialogSnapshot : null
 
-  const inlineConversationBody = activeTicketId ? (
-    conversationTicket ? (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {flags.correctReplyVisible && <CorrectReplyBanner onDismiss={actions.onCorrectReplyDismiss} />}
-        <TicketConversation
-          actions={actions}
-          conversation={conversation}
-          conversationTab={conversationTab}
-          flags={flags}
-        />
-      </div>
-    ) : activeThreadError ? (
-      <ConversationLoadState error={activeThreadError} compact />
-    ) : (
-      <ConversationBodySkeleton />
-    )
-  ) : null
+  useLayoutEffect(() => {
+    if (currentDialogSnapshot) lastDialogSnapshot.current = currentDialogSnapshot
+  }, [currentDialogSnapshot])
 
-  const dialogBody = showConversation ? (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      {inlineConversationBody}
-    </div>
-  ) : null
-
-  useEffect(() => {
-    if (dialogBody) setLastDialogBody(dialogBody)
-  }, [dialogBody])
+  const dialogSnapshot = currentDialogSnapshot ?? lastDialogSnapshot.current
 
   return (
     <div className="flex size-full flex-col overflow-hidden bg-background relative">
@@ -255,6 +271,14 @@ export function InboxPageLayout({
       <Dialog open={showConversation} onOpenChange={open => { if (!open) actions.onBack() }}>
         <DialogContent
           showCloseButton={false}
+          onAnimationEnd={(event) => {
+            if (
+              event.target === event.currentTarget &&
+              event.currentTarget.dataset.state === "closed"
+            ) {
+              lastDialogSnapshot.current = null
+            }
+          }}
           // The card shell ends in `relative`, which twMerge resolves against the
           // dialog's own `fixed`. It has to come first, and `fixed` has to be
           // restated after it, or the panel lands in normal flow below the page.
@@ -264,7 +288,9 @@ export function InboxPageLayout({
           )}
         >
           <DialogTitle className="sr-only">Conversation</DialogTitle>
-          {dialogBody ?? lastDialogBody}
+          {dialogSnapshot && (
+            <InboxDialogBody key={dialogSnapshot.activeTicketId} snapshot={dialogSnapshot} />
+          )}
         </DialogContent>
       </Dialog>
 
