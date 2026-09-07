@@ -7,7 +7,7 @@ of its own fix: the moment an item reads as evidence rather than as an instructi
 it back. Evidence checklists, failure drills, and standing procedure live in the linked
 docs.
 
-Last reviewed: 2026-09-02.
+Last reviewed: 2026-09-07.
 
 Work is grouped by **what kind of action it needs**, not by when it was filed.
 
@@ -172,20 +172,6 @@ closing verification passes.
 
 Application code, not started. An entry names the surface it lands on and what closing
 it costs — not a design.
-
-- [ ] **Outbound attachments.** Inbound attachments already persist to Blob and render in
-  the timeline; the merchant cannot send one back, so a return label, a size chart or a
-  replacement invoice means leaving for Gmail — which is where the inbox loses the
-  thread. `/api/attachments` is read-only, `parseSendMessageBody` accepts
-  `{threadId, text, isNote}`, and every dispatch leg is text-only:
-  `createPendingAgentMessage` takes no attachment argument, `sendInstagramTextMessage`
-  and `sendTikTokShopTextMessage` say so in their names. Closing it is an upload route
-  writing under the org-scoped Blob prefix `attachmentBelongsToOrg` already enforces, a
-  composer control, and a per-channel decision — email carries attachments, Instagram and
-  TikTok Shop take media by URL through separate calls, and storefront chat has no
-  outbound provider at all, so the widget must render the Blob ref itself. Ship the email
-  leg first and have the others refuse with a reason; a channel that silently drops the
-  file is worse than one that cannot take it.
 
 - [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
   thread's messages, Shopify orders, KB articles and merchant preferences. It counts the
