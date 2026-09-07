@@ -1,5 +1,6 @@
 import {
   normalizeTikTokShopWebhookPayload,
+  normalizeTikTokShopWebhookMessages,
   refreshTikTokShopAccessToken as refreshTikTokShopAccessTokenShared,
   verifyTikTokShopWebhookSignature,
   type NormalizedTikTokShopMessage,
@@ -9,6 +10,7 @@ import type { TikTokShopApiConfig } from '../config/runtime-config.js';
 
 export {
   normalizeTikTokShopWebhookPayload,
+  normalizeTikTokShopWebhookMessages,
   verifyTikTokShopWebhookSignature,
   type NormalizedTikTokShopMessage,
   type TikTokShopTokenResult,

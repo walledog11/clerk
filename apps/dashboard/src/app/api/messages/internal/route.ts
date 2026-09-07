@@ -39,7 +39,7 @@ export const POST = withInternalRoute(
 
     const result = await dispatchMessage(thread, thread.organization, text);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 502 });
+      return NextResponse.json({ error: result.error, ...(result.outcome ? { outcome: result.outcome } : {}) }, { status: 502 });
     }
 
     await recordMerchantReply(thread);

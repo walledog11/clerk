@@ -20,7 +20,7 @@ import {
   markPendingAgentMessageSendUnknown,
 } from "@/lib/messaging/dispatch-message-common";
 import { captureDashboardOutboundReplySent } from "@/lib/server/product-analytics";
-import { toolError, toolEscalated, toolOk, type ToolResult } from "@shopkeeper/agent/tools";
+import { toolError, toolEscalated, toolOk, toolUnknown, type ToolResult } from "@shopkeeper/agent/tools";
 import type {
   AddInternalNoteInput,
   AskOperatorInput,
@@ -48,6 +48,9 @@ function agentReplyDispatchError(
   channelType: string,
   result: Extract<DispatchMessageResult, { ok: false }>,
 ): ToolResult {
+  if (result.outcome === "unknown") {
+    return toolUnknown(`Unknown: ${result.error}. Do not send it again automatically.`);
+  }
   if (channelType === CHANNEL_TYPE.TIKTOK && result.providerStatus !== undefined) {
     return toolError(`Error: TikTok Shop dispatch failed (${result.providerStatus}).`);
   }
@@ -231,7 +234,7 @@ export async function sendEmail(
         message.id,
         'Email queue admission outcome unknown',
       );
-      return toolError('Error: email queue admission could not be confirmed.');
+      return toolUnknown('Unknown: email queue admission could not be confirmed. Do not send it again automatically.');
     }
     return toolOk(existingThread
       ? `Email queued to ${input.to} via their existing open ticket.`

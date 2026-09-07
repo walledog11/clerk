@@ -70,7 +70,7 @@ export async function dispatchEmailViaGatewayQueue(
   }
   if (enqueued === "unknown") {
     await markPendingAgentMessageSendUnknown(message.id, "Email queue admission outcome unknown")
-    return { ok: false, error: "Email queue admission could not be confirmed" }
+    return { ok: false, outcome: "unknown", error: "Email queue admission could not be confirmed" }
   }
 
   return { ok: true, message }

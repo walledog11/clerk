@@ -20,7 +20,7 @@ import { validatePlan } from "./plan-validation.js";
 import { buildPlanSignals } from "./plan-signals.js";
 import { buildPlanSteps } from "./planner-steps.js";
 import { buildSystemPromptParts } from "./prompt.js";
-import { DEFAULT_MAX_ITERATIONS } from "./run-policy.js";
+import { TOKEN_BUDGET, DEFAULT_MAX_ITERATIONS } from "./run-policy.js";
 import { resolveAgentSettings } from "./settings.js";
 import { enforceSpendCap } from "./spend.js";
 import { selectAgentTools } from "./tools/registry/index.js";
@@ -132,9 +132,13 @@ export async function planAgent(
   // turns to this array in place, so handing the same one to a re-plan would
   // replay the discarded attempt's half-finished turns into the next model and
   // the API rejects the sequence ("tool_use ids without tool_result blocks").
+  const planningSignal = AbortSignal.timeout(120_000);
   const runLoop = (model: string, tools = toolSelection.tools) => runAgentLoop({
     ctx,
     mode: "capture",
+    tokenBudget: TOKEN_BUDGET,
+    signal: planningSignal,
+    beforeModelCall: () => enforceSpendCap(ctx.orgId, resolvedSettings),
     messages: [...baseMessages],
     systemPromptBlocks,
     tools,

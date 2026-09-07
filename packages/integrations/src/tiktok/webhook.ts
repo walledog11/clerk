@@ -25,11 +25,11 @@ export function verifyTikTokShopWebhookSignature({
   return trusted.length === received.length && timingSafeEqual(trusted, received);
 }
 
-export function normalizeTikTokShopWebhookPayload(
+function normalizeTikTokShopMessageEvent(
   payload: unknown,
   messageEventNames: Set<string> = new Set(),
 ): NormalizedTikTokShopMessage | null {
-  const event = findFirstMessageEvent(payload);
+  const event = isRecord(payload) ? payload : null;
   if (!event) return null;
 
   const eventType = readString(event, 'event_type', 'eventType', 'type', 'event');
@@ -72,23 +72,39 @@ export function normalizeTikTokShopWebhookPayload(
   };
 }
 
-function findFirstMessageEvent(payload: unknown): Record<string, unknown> | null {
-  if (!isRecord(payload)) return null;
-  const candidates = [
-    payload,
-    ...readObjectArray(payload, 'events'),
-    ...readObjectArray(payload, 'messages'),
-    ...readObjectArray(payload, 'data'),
-    ...readObjectArray(readObject(payload, 'data'), 'events'),
-    ...readObjectArray(readObject(payload, 'data'), 'messages'),
-  ];
-  return candidates.find(candidate => {
-    const message = readObject(candidate, 'message') ?? readObject(candidate, 'data') ?? candidate;
-    return Boolean(
-      readString(message, 'conversation_id', 'conversationId', 'buyer_id', 'buyerId', 'sender_id', 'senderId')
-      || readString(candidate, 'conversation_id', 'conversationId', 'buyer_id', 'buyerId'),
-    );
-  }) ?? null;
+export function normalizeTikTokShopWebhookMessages(
+  payload: unknown,
+  messageEventNames: Set<string> = new Set(),
+): NormalizedTikTokShopMessage[] {
+  const visit = (value: unknown, inherited: Record<string, unknown> = {}, depth = 0): NormalizedTikTokShopMessage[] => {
+    if (!isRecord(value) || depth > 8) return [];
+    const event = { ...inherited, ...value };
+    const metadata = {
+      shop_id: readString(event, 'shop_id', 'shopId', 'seller_id', 'sellerId'),
+      event_type: readString(event, 'event_type', 'eventType', 'type', 'event'),
+    };
+    const children = [
+      ...readObjectArray(value, 'events'),
+      ...readObjectArray(value, 'messages'),
+      ...readObjectArray(value, 'data'),
+    ];
+    if (children.length) return children.flatMap(child => visit(child, metadata, depth + 1));
+    const data = readObject(value, 'data');
+    if (data && (Array.isArray(data.events) || Array.isArray(data.messages))) {
+      return visit(data, metadata, depth + 1);
+    }
+    const normalized = normalizeTikTokShopMessageEvent(event, messageEventNames);
+    return normalized ? [normalized] : [];
+  };
+  return visit(payload);
+}
+
+// Compatibility for single-message consumers. Webhook admission uses the full batch.
+export function normalizeTikTokShopWebhookPayload(
+  payload: unknown,
+  messageEventNames: Set<string> = new Set(),
+): NormalizedTikTokShopMessage | null {
+  return normalizeTikTokShopWebhookMessages(payload, messageEventNames)[0] ?? null;
 }
 
 function readMessageText(message: Record<string, unknown>): string {

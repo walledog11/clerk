@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { db } from '@shopkeeper/db';
 import { cleanupTestData, createTestOrg } from '@shopkeeper/db/test-helpers';
 
 const {
@@ -99,4 +100,16 @@ describe('executeOperatorAgentTurn', () => {
       expect.anything(),
     );
   });
+});
+
+it('passes restrictive workspace policy into free-form operator execution', async () => {
+  await db.organization.update({ where: { id: org.id }, data: { settings: {
+    blockCancellations: true, maxRefundAmount: 12, dailyLLMSpendCapUsd: 2,
+    toolsEnabled: { action: false }, brandVoice: 'Brief and factual',
+  } } });
+  await executeOperatorAgentTurn({ orgId: org.id, instruction: 'cancel order', operatorKey: 'member:1' });
+  expect(mockExecuteAgentTurn).toHaveBeenCalledWith(expect.objectContaining({ orgSettings: expect.objectContaining({
+    blockCancellations: true, maxRefundAmount: 12, dailyLLMSpendCapUsd: 2,
+    toolsEnabled: expect.objectContaining({ action: false }), brandVoice: 'Brief and factual',
+  }) }), expect.anything());
 });

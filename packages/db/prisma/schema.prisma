@@ -579,6 +579,9 @@ model Message {
   // Prisma cannot express the partial unique index:
   // messages_org_external_id_unique on (organization_id, external_message_id)
   // where external_message_id is not null.
+  inboundProcessingPending Boolean @default(false) @map("inbound_processing_pending")
+  inboundProcessingData Json? @map("inbound_processing_data") @db.JsonB
+  inboundProcessingAttemptedAt DateTime? @map("inbound_processing_attempted_at") @db.Timestamptz
   externalMessageId String?    @map("external_message_id") @db.Text
   sendStatus        String?    @map("send_status") @db.Text
   sendClaimToken    String?    @map("send_claim_token") @db.Uuid

@@ -17,7 +17,7 @@ interface DashboardApiFailure {
 
 interface DashboardApiUnknown {
   ok: false;
-  status: null;
+  status: number | null;
   responseBody: string;
   outcome: 'unknown';
 }
@@ -76,11 +76,16 @@ export async function postDashboardInternal<T>(
   }
 
   if (!response.ok) {
+    const responseBody = await response.text().catch(() => '');
+    let outcome: 'failed' | 'unknown' = 'failed';
+    try {
+      if (JSON.parse(responseBody)?.outcome === 'unknown') outcome = 'unknown';
+    } catch { /* Non-JSON HTTP errors remain definite failures. */ }
     return {
       ok: false,
       status: response.status,
-      responseBody: await response.text().catch(() => ''),
-      outcome: 'failed',
+      responseBody,
+      outcome,
     };
   }
 

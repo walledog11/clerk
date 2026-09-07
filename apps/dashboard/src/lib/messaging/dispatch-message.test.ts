@@ -531,6 +531,7 @@ describe('dispatchMessage', () => {
     expect(result).toEqual({
       ok: false,
       error: 'TikTok Shop delivery could not be confirmed',
+      outcome: 'unknown',
     });
     expect(mockRecordProviderSendFailure).toHaveBeenCalledWith(
       'tiktok_shop',
@@ -777,6 +778,7 @@ describe('dispatchMessage — async outbound (OUTBOUND_EMAIL_ASYNC)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'Email queue admission could not be confirmed',
+      outcome: 'unknown',
     });
     const saved = await db.message.findFirst({
       where: { threadId: thread.id, senderType: SenderType.agent },

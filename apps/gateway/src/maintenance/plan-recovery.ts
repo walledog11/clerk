@@ -30,63 +30,70 @@ export async function recoverMissingPlans(
   now: Date = new Date(),
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - RECOVERY_MIN_AGE_MS);
-  const candidates = await db.thread.findMany({
-    where: {
-      status: 'open',
-      filterStatus: ThreadFilterStatus.genuine,
-      escalatedAt: null,
-      archivedAt: null,
-      deletedAt: null,
-      lastMessageSenderType: SENDER_TYPE.CUSTOMER,
-      updatedAt: { lte: cutoff },
-    },
-    orderBy: { updatedAt: 'asc' },
-    take: RECOVERY_BATCH_SIZE,
-    select: {
-      id: true,
-      organizationId: true,
-      channelType: true,
-      cachedPlan: true,
-      cachedPlanMessageId: true,
-      filterDecidedAt: true,
-      customer: { select: { name: true } },
-      organization: { select: { settings: true } },
-      messages: {
-        where: { deletedAt: null, senderType: { not: SENDER_TYPE.NOTE } },
-        orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
-        take: 1,
-        select: { id: true, senderType: true },
-      },
-    },
-  });
-
   let enqueued = 0;
-  for (const thread of candidates) {
-    const latest = thread.messages[0];
-    if (!latest || latest.senderType !== SENDER_TYPE.CUSTOMER) continue;
+  let cursor: string | undefined;
+  while (true) {
+    const candidates = await db.thread.findMany({
+      where: {
+        ...(cursor ? { id: { gt: cursor } } : {}),
+        status: 'open',
+        filterStatus: ThreadFilterStatus.genuine,
+        escalatedAt: null,
+        archivedAt: null,
+        deletedAt: null,
+        lastMessageSenderType: SENDER_TYPE.CUSTOMER,
+        updatedAt: { lte: cutoff },
+      },
+      orderBy: { id: 'asc' },
+      take: RECOVERY_BATCH_SIZE,
+      select: {
+        id: true,
+        organizationId: true,
+        channelType: true,
+        cachedPlan: true,
+        cachedPlanMessageId: true,
+        filterDecidedAt: true,
+        customer: { select: { name: true } },
+        organization: { select: { settings: true } },
+        messages: {
+          where: { deletedAt: null, senderType: { not: SENDER_TYPE.NOTE } },
+          orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
+          take: 1,
+          select: { id: true, senderType: true },
+        },
+      },
+    });
 
-    const currentPlan = getCurrentPlanForThread(thread, thread.messages);
-    if (currentPlan) {
-      const verdict = decideAutonomy(
-        currentPlan,
-        resolveAgentSettings(thread.organization.settings),
-        { filterStatus: ThreadFilterStatus.genuine },
-      );
-      // Approval actions and explicit merchant questions already have an owner.
-      // Only a safe reply is stranded work the agent should finish itself.
-      if (verdict.kind !== 'quick_reply') continue;
+    for (const thread of candidates) {
+      const latest = thread.messages[0];
+      if (!latest || latest.senderType !== SENDER_TYPE.CUSTOMER) continue;
+
+      const currentPlan = getCurrentPlanForThread(thread, thread.messages);
+      if (currentPlan) {
+        const verdict = decideAutonomy(
+          currentPlan,
+          resolveAgentSettings(thread.organization.settings),
+          { filterStatus: ThreadFilterStatus.genuine },
+        );
+        // Approval actions and explicit merchant questions already have an owner.
+        // Only a safe reply is stranded work the agent should finish itself.
+        if (verdict.kind !== 'quick_reply') continue;
+      }
+
+      await enqueueAiSummaryJob(aiSummaryQueue, {
+        threadId: thread.id,
+        organizationId: thread.organizationId,
+        sourceMessageId: latest.id,
+        customerName: thread.customer.name,
+        channelType: thread.channelType,
+        traceId: `plan-recovery:${thread.id}`,
+        ...(thread.filterDecidedAt ? { skipSummary: true } : {}),
+      });
+      enqueued += 1;
     }
 
-    await enqueueAiSummaryJob(aiSummaryQueue, {
-      threadId: thread.id,
-      organizationId: thread.organizationId,
-      sourceMessageId: latest.id,
-      customerName: thread.customer.name,
-      channelType: thread.channelType,
-      traceId: `plan-recovery:${thread.id}`,
-      ...(thread.filterDecidedAt ? { skipSummary: true } : {}),
-    });
-    enqueued += 1;
+    if (candidates.length < RECOVERY_BATCH_SIZE) break;
+    cursor = candidates[candidates.length - 1]!.id;
   }
 
   if (enqueued > 0) {

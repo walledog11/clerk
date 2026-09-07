@@ -55,3 +55,10 @@ describe("message-dispatch helpers", () => {
     ] as never)).toBeNull();
   });
 });
+
+it('does not recommend a blind retry for unknown message dispatch', () => {
+  const message = formatOperatorDispatchFailure('Unknown: message dispatch may have completed. Reference: req-1.');
+  expect(message).toContain('delivery may already have completed');
+  expect(message).not.toContain('delivery failed');
+  expect(message).not.toContain('wait a moment and retry');
+});

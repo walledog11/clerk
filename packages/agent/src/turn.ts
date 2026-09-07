@@ -110,6 +110,14 @@ export async function executeAgentTurn(
       params.operatorLedger,
       params.operatorDeskMode,
     );
+    const priorGuard = ctx.assertExecutionAllowed;
+    ctx.assertExecutionAllowed = () => {
+      priorGuard?.();
+      if (requiresFailClosedLock(params) && lock.isLost?.()) {
+        throw new ConflictError("Agent lock ownership was lost. Execution stopped; review completed actions before retrying.");
+      }
+    };
+    ctx.assertExecutionAllowed();
     const result = await deps.runAgent(
       ctx,
       params.instruction,

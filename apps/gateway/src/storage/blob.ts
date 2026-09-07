@@ -1,5 +1,5 @@
 import { del, put } from '@vercel/blob';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import {
   BLOB_ATTACHMENT_PREFIX,
   attachmentPathname,
@@ -17,6 +17,7 @@ export async function uploadInboundAttachment(
   filename: string,
   contentType: string,
   base64Content: string,
+  messageIdentity?: string | null,
 ): Promise<string | null> {
   const safeName = sanitizeAttachmentName(filename);
   const normalizedContentType = normalizeAttachmentContentType(contentType);
@@ -52,12 +53,18 @@ export async function uploadInboundAttachment(
     return null;
   }
 
-  const pathname = attachmentPathname(organizationId, randomUUID(), safeName);
+  const digest = messageIdentity
+    ? createHash('sha256').update(organizationId).update('\0').update(messageIdentity).update('\0')
+      .update(normalizedContentType).update('\0').update(buffer).digest('hex')
+    : null;
+  const blobId = digest ? `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}` : randomUUID();
+  const pathname = attachmentPathname(organizationId, blobId, safeName);
   try {
     await put(pathname, buffer, {
       access: 'private',
       contentType: normalizedContentType,
       addRandomSuffix: false,
+      ...(messageIdentity ? { allowOverwrite: true } : {}),
     });
     return formatAttachmentRef(pathname);
   } catch (err) {

@@ -197,3 +197,25 @@ export async function recordAgentTurnUsage(
     },
   });
 }
+
+// Update the attempt written before a mutative tool runs. If the process dies
+// before this write, the durable row remains unknown and must be reconciled.
+export async function completeAgentActionAttempt(id: string, entry: ActionEntry): Promise<void> {
+  const status = deriveStatus(entry);
+  await db.agentAction.update({
+    where: { id },
+    data: {
+      output: entry.result,
+      status,
+      errorDetail: deriveErrorDetail(entry, status),
+      durationMs: entry.durationMs ?? 0,
+    },
+  });
+}
+
+export async function summarizeJournaledActions(orgId: string, turnId: string, summary: string): Promise<void> {
+  await db.agentAction.updateMany({
+    where: { organizationId: orgId, turnId },
+    data: { summary },
+  });
+}

@@ -72,6 +72,16 @@ describe('executeAgentTurn lock policy', () => {
     );
   });
 
+  it('fences a lost lease after context loading and releases the lock', async () => {
+    const release = vi.fn();
+    deps.lock.acquire.mockResolvedValueOnce({ isLost: () => true, release });
+    deps.buildContext.mockResolvedValueOnce({ orgId: 'org_1' });
+    await expect(executeAgentTurn({ orgId: 'org_1', threadId: 'thread_1', instruction: 'refund', persistAuditNote: false }, deps as never))
+      .rejects.toThrow('lock ownership was lost');
+    expect(deps.runAgent).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
   it('surfaces lock unavailability as a service error for mutating turns', async () => {
     deps.lock.acquire.mockRejectedValueOnce(new ServiceUnavailableError());
 

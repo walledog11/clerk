@@ -1,9 +1,6 @@
-import logger from '../logger.js';
+import { downloadProviderMedia, isAllowedProviderMediaUrl } from './provider-media.js';
 import type { InstagramInboundAttachment } from '../types.js';
 
-const INSTAGRAM_MEDIA_TIMEOUT_MS = 10_000;
-const MAX_INSTAGRAM_MEDIA_BYTES = 10 * 1024 * 1024;
-const MAX_REDIRECTS = 3;
 
 const META_MEDIA_HOST_SUFFIXES = [
   'cdninstagram.com',
@@ -55,121 +52,22 @@ export function isSupportedInstagramBinaryAttachment(type: string): boolean {
 }
 
 export function isAllowedInstagramMediaUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' || url.username || url.password) return false;
-    if (url.port && url.port !== '443') return false;
-    const hostname = url.hostname.toLowerCase();
-    return META_MEDIA_HOST_SUFFIXES.some(
-      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
-    );
-  } catch {
-    return false;
-  }
-}
-
-function normalizeContentType(value: string | null): string | null {
-  const normalized = value?.split(';', 1)[0]?.trim().toLowerCase();
-  return normalized || null;
-}
-
-function isRedirect(status: number): boolean {
-  return status === 301
-    || status === 302
-    || status === 303
-    || status === 307
-    || status === 308;
-}
-
-async function readBodyWithinLimit(response: Response): Promise<Buffer | null> {
-  if (!response.body) return null;
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    byteLength += value.byteLength;
-    if (byteLength > MAX_INSTAGRAM_MEDIA_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-
-  if (byteLength === 0) return null;
-  return Buffer.concat(chunks, byteLength);
+  return isAllowedProviderMediaUrl(value, META_MEDIA_HOST_SUFFIXES);
 }
 
 export async function downloadInstagramAttachment(
   attachment: InstagramInboundAttachment,
+  signal?: AbortSignal,
+  consumeBytes?: (bytes: number) => boolean,
 ): Promise<DownloadedInstagramAttachment | null> {
-  const attachmentType = attachment.type.toLowerCase();
-  const allowedContentTypes = ALLOWED_CONTENT_TYPES_BY_ATTACHMENT[attachmentType];
-  if (!allowedContentTypes || !attachment.url || !isAllowedInstagramMediaUrl(attachment.url)) {
-    return null;
-  }
-
-  let currentUrl = attachment.url;
-  const signal = AbortSignal.timeout(INSTAGRAM_MEDIA_TIMEOUT_MS);
-  try {
-    for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-      if (!isAllowedInstagramMediaUrl(currentUrl)) return null;
-      const response = await fetch(currentUrl, {
-        cache: 'no-store',
-        redirect: 'manual',
-        signal,
-      });
-
-      if (isRedirect(response.status)) {
-        const location = response.headers.get('location');
-        if (!location || redirectCount === MAX_REDIRECTS) return null;
-        currentUrl = new URL(location, currentUrl).toString();
-        continue;
-      }
-
-      if (!response.ok) {
-        logger.warn(
-          { attachmentType, hostname: new URL(currentUrl).hostname, status: response.status },
-          '[Instagram] Media download failed',
-        );
-        return null;
-      }
-
-      const contentType = normalizeContentType(response.headers.get('content-type'));
-      if (!contentType || !allowedContentTypes.has(contentType)) {
-        logger.warn(
-          { attachmentType, contentType, hostname: new URL(currentUrl).hostname },
-          '[Instagram] Media download returned an unsupported content type',
-        );
-        return null;
-      }
-
-      const declaredLength = Number(response.headers.get('content-length'));
-      if (Number.isFinite(declaredLength) && declaredLength > MAX_INSTAGRAM_MEDIA_BYTES) {
-        logger.warn(
-          { attachmentType, byteLength: declaredLength, hostname: new URL(currentUrl).hostname },
-          '[Instagram] Media download exceeded the size limit',
-        );
-        return null;
-      }
-
-      const body = await readBodyWithinLimit(response);
-      if (!body) return null;
-      const extension = CONTENT_TYPE_EXTENSIONS[contentType];
-      return {
-        filename: `instagram-${attachmentType}.${extension}`,
-        contentType,
-        base64Content: body.toString('base64'),
-      };
-    }
-  } catch (error) {
-    logger.warn(
-      { attachmentType, err: error },
-      '[Instagram] Media download failed',
-    );
-  }
-
-  return null;
+  const type = attachment.type.toLowerCase();
+  const allowed = ALLOWED_CONTENT_TYPES_BY_ATTACHMENT[type];
+  if (!allowed || !attachment.url) return null;
+  return downloadProviderMedia(attachment.url, {
+    allowedUrl: isAllowedInstagramMediaUrl,
+    allowedContentTypes: allowed,
+    filename: contentType => `instagram-${type}.${CONTENT_TYPE_EXTENSIONS[contentType]}`,
+    signal,
+    consumeBytes,
+  });
 }

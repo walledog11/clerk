@@ -1,15 +1,16 @@
 import type { Request, Response, Router } from 'express';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
+import { db } from '@shopkeeper/db';
 import { getTikTokShopWebhookConfig } from '../config/runtime-config.js';
 import {
-  normalizeTikTokShopWebhookPayload,
+  normalizeTikTokShopWebhookMessages,
   verifyTikTokShopWebhookSignature,
 } from '../clients/tiktok-shop.js';
 import logger from '../logger.js';
 import { CHANNEL, JOB } from '../constants.js';
 import { rateLimit, sendTooManyRequests } from '../rate-limit.js';
 import { webhookJsonParser } from './body-parsers.js';
-import { getMessageQueue, getRateLimitRedis, resolveOrganizationId } from './webhooks-shared.js';
+import { getMessageQueue, getRateLimitRedis } from './webhooks-shared.js';
 import {
   buildWebhookSignatureRequestMetadata,
   recordWebhookSignatureFailure,
@@ -56,35 +57,43 @@ export function registerTikTokShopWebhookRoutes(router: Router): void {
       return res.sendStatus(401);
     }
 
-    const message = normalizeTikTokShopWebhookPayload(req.body, config.messageEventNames);
-    if (!message || message.isEcho) {
+    const messages = normalizeTikTokShopWebhookMessages(req.body, config.messageEventNames).filter(message => !message.isEcho);
+    if (messages.length === 0) {
       logger.info('[Webhook] TikTok Shop non-buyer-message event — skipping queue.');
       return res.status(200).send('OK');
     }
 
     try {
-      const organizationId = await resolveOrganizationId(CHANNEL.TIKTOK, message.accountId);
-      if (!organizationId) {
-        logger.warn({ accountId: message.accountId }, '[Webhook] No TikTok Shop integration found — dropping.');
-        return res.status(200).send('OK');
+      for (const message of messages) {
+        const integration = await db.integration.findFirst({
+          where: { platform: CHANNEL.TIKTOK, externalAccountId: message.accountId, lifecycleStatus: 'active' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          select: { id: true, organizationId: true },
+        });
+        if (!integration) {
+          logger.warn({ accountId: message.accountId }, '[Webhook] No TikTok Shop integration found — dropping.');
+          continue;
+        }
+
+        const organizationId = integration.organizationId;
+        const tiktokRateLimit = await rateLimit(getRateLimitRedis(), `webhook:tiktok:${organizationId}`);
+        if (!tiktokRateLimit.success) {
+          logger.warn({ organizationId }, '[Webhook] TikTok Shop rate limit exceeded');
+          return sendTooManyRequests(res, tiktokRateLimit.reset);
+        }
+
+        const traceId = randomUUID();
+        await getMessageQueue().add(JOB.TIKTOK_SHOP, {
+          platform: CHANNEL.TIKTOK,
+          organizationId,
+          integrationId: integration.id,
+          tiktokMessage: message,
+          inboundMessageId: message.messageId ? `tiktok:${message.accountId}:${message.messageId}` : null,
+          traceId,
+        }, message.messageId ? { jobId: createHash("sha256").update(`${integration.id}:${message.messageId}`).digest("hex") } : undefined);
+
+        logger.info({ organizationId, traceId }, '[Webhook] TikTok Shop buyer message queued');
       }
-
-      const tiktokRateLimit = await rateLimit(getRateLimitRedis(), `webhook:tiktok:${organizationId}`);
-      if (!tiktokRateLimit.success) {
-        logger.warn({ organizationId }, '[Webhook] TikTok Shop rate limit exceeded');
-        return sendTooManyRequests(res, tiktokRateLimit.reset);
-      }
-
-      const traceId = randomUUID();
-      await getMessageQueue().add(JOB.TIKTOK_SHOP, {
-        platform: CHANNEL.TIKTOK,
-        organizationId,
-        rawPayload: req.body,
-        inboundMessageId: message.messageId ? `tiktok:${message.accountId}:${message.messageId}` : null,
-        traceId,
-      });
-
-      logger.info({ organizationId, traceId }, '[Webhook] TikTok Shop buyer message queued');
       return res.status(200).send('OK');
     } catch (error) {
       logger.error({ err: error }, '[Webhook] Failed to queue TikTok Shop message');

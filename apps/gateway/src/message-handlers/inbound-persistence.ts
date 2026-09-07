@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Queue } from 'bullmq';
 import {
   db,
@@ -7,10 +8,7 @@ import {
   type DbChannelType,
 } from '@shopkeeper/db';
 import logger from '../logger.js';
-import { JOB } from '../constants.js';
 import { captureInboundMessageProcessed } from '../product-analytics.js';
-import { publishThreadEvent } from '../realtime/publish.js';
-import { removePendingPlanForThread } from '../operator-context.js';
 import {
   classifiedEpisodeFields,
   classifiedFilterFields,
@@ -23,28 +21,10 @@ import {
   resolveInboundEpisode,
   type ResolveInboundEpisodeResult,
 } from './resolve-inbound-episode.js';
-import type { AiSummaryJobData } from '../types.js';
+import { deliverInboundProcessing } from './inbound-processing.js';
+export { enqueueAiSummaryJob } from './inbound-processing.js';
 
 const MAX_INPUT_LENGTH = 4000;
-const AI_SUMMARY_DEBOUNCE_MS = 300;
-
-export async function enqueueAiSummaryJob(
-  queue: Pick<Queue<AiSummaryJobData>, 'add'>,
-  data: AiSummaryJobData,
-): Promise<void> {
-  await queue.add(JOB.SUMMARIZE_THREAD, data, {
-    delay: AI_SUMMARY_DEBOUNCE_MS,
-    // BullMQ debounce mode replaces/extends a delayed job for this thread. If
-    // a job is already active, the next message becomes one trailing delayed
-    // job, bounding bursts to the active run plus the newest trailing run.
-    deduplication: {
-      id: `thread:${data.threadId}`,
-      ttl: AI_SUMMARY_DEBOUNCE_MS,
-      extend: true,
-      replace: true,
-    },
-  });
-}
 
 // Injection defense lives at the agent, not here: inbound text is wrapped in
 // <customer_message> boundaries and the system prompt treats it as untrusted
@@ -138,6 +118,7 @@ export async function processInboundMessage(
       where: { organizationId, externalMessageId: providerMessageId },
     });
     if (existing) {
+      await deliverInboundProcessing(existing.id, aiSummaryQueue);
       logger.info(
         { organizationId, externalMessageId: providerMessageId },
         '[Worker] Duplicate message detected — skipping',
@@ -224,8 +205,24 @@ export async function processInboundMessage(
         });
       }
 
+      const messageId = randomUUID();
       const created = await tx.message.create({
         data: {
+          id: messageId,
+          inboundProcessingPending: true,
+          inboundProcessingData: {
+            summary: synthetic ? null : {
+              threadId: episode.thread.id,
+              organizationId,
+              sourceMessageId: messageId,
+              customerName: customer.name ?? null,
+              channelType,
+              ...(traceId ? { traceId } : {}),
+              ...(precomputed ? { skipSummary: true } : {}),
+            },
+            rolledOverFromThreadId: episode.rolledOverFromThreadId,
+          },
+
           threadId: episode.thread.id,
           organizationId,
           senderType: synthetic ? SenderType.note : SenderType.customer,
@@ -332,10 +329,6 @@ export async function processInboundMessage(
       },
       '[Worker] Conversation episode rolled over',
     );
-    // Only the expired thread's parked work. A card the merchant has not
-    // answered describes a conversation that has since ended, so approving it
-    // later would run a plan built from context the customer has moved past.
-    await removePendingPlanForThread(organizationId, outcome.rolledOverFromThreadId);
   }
 
   if (isRealCustomerMessage) {
@@ -346,23 +339,7 @@ export async function processInboundMessage(
     });
   }
 
-  if (!synthetic) {
-    await enqueueAiSummaryJob(aiSummaryQueue, {
-      threadId: thread.id,
-      organizationId,
-      sourceMessageId: message.id,
-      customerName: customer.name ?? null,
-      channelType,
-      traceId: traceId ?? undefined,
-      ...(precomputed && { skipSummary: true }),
-    });
-  }
-
-  // Live inbox: tell connected dashboards a thread changed so they revalidate.
-  await publishThreadEvent(organizationId, thread.id);
-  if (outcome.rolledOverFromThreadId) {
-    await publishThreadEvent(organizationId, outcome.rolledOverFromThreadId);
-  }
+  await deliverInboundProcessing(message.id, aiSummaryQueue);
 
   return { thread, isNew, rolledOverFromThreadId: outcome.rolledOverFromThreadId };
 }

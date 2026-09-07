@@ -13,6 +13,7 @@ import type {
 } from "./agent-context.js";
 import {
   recordAgentActionsBatch,
+  summarizeJournaledActions,
   recordAgentTurnUsage,
   type AgentActionApproval,
   type PersistedAgentAction,
@@ -110,6 +111,7 @@ export async function finishAgentRun(input: {
   approval?: AgentActionApproval;
   executionId?: string;
   onActionsPersisted?: (actions: PersistedAgentAction[]) => void;
+  journaledActions?: Set<ActionEntry>;
 }): Promise<AgentResult> {
   const {
     ctx,
@@ -145,14 +147,15 @@ export async function finishAgentRun(input: {
       ? "operator_turn"
       : "agent_run";
 
-  if (result.actionsPerformed.length > 0) {
+  const unjournaledActions = result.actionsPerformed.filter(action => !input.journaledActions?.has(action));
+  if (unjournaledActions.length > 0) {
     try {
       const persistedActions = await recordAgentActionsBatch({
         orgId: ctx.orgId,
         threadId: supportThread?.id ?? null,
         customerId: supportCustomer?.id ?? null,
         mode: effectiveMode,
-        actions: result.actionsPerformed,
+        actions: unjournaledActions,
         instruction,
         summary: result.summary,
         turnId: resolvedTurnId,
@@ -167,6 +170,14 @@ export async function finishAgentRun(input: {
         threadId: supportThread?.id ?? null,
         actionCount: result.actionsPerformed.length,
       }, "[agent] failed to persist agent action audit rows");
+    }
+  }
+
+  if (input.journaledActions?.size) {
+    try {
+      await summarizeJournaledActions(ctx.orgId, resolvedTurnId, result.summary);
+    } catch (err) {
+      logger.error({ err, orgId: ctx.orgId, turnId: resolvedTurnId }, "[agent] failed to update action summaries");
     }
   }
 
@@ -232,6 +243,7 @@ export async function executeAgentToolCall(
     // them).
     moduleTools?: Record<string, AgentToolDefinition>;
     operationScopeId?: string;
+    beginAction?: (call: AgentToolCall, providerOperationKey?: string) => Promise<((action: ActionEntry) => Promise<void>) | undefined>;
   },
 ) {
   const {
@@ -246,6 +258,7 @@ export async function executeAgentToolCall(
     moduleTools,
     operationScopeId,
   } = input;
+  ctx.assertExecutionAllowed?.();
   const category = moduleTools?.[toolCall.name]?.category ?? TOOL_CATEGORIES[toolCall.name];
 
   logger.info({
@@ -264,6 +277,11 @@ export async function executeAgentToolCall(
   const providerOperationKey = operationScopeId && ctx.shopify
     ? `${operationScopeId}:${toolCall.id}`
     : undefined;
+
+  const completeAction = !readOnly && category !== "read"
+    ? await input.beginAction?.(toolCall, providerOperationKey)
+    : undefined;
+  ctx.assertExecutionAllowed?.();
 
   if (readOnly && category !== "read") {
     result = `Error: ${toolCall.name} is not available in private ask mode.`;
@@ -338,7 +356,7 @@ export async function executeAgentToolCall(
     durationMs,
   }, "[agent] tool result");
   executedToolCalls.push(toolCall.name);
-  actionsPerformed.push({
+  const action: ActionEntry = {
     tool: toolCall.name,
     result,
     input: toolCall.input,
@@ -347,7 +365,9 @@ export async function executeAgentToolCall(
     status,
     category,
     ...(errorDetail ? { errorDetail } : {}),
-  });
+  };
+  actionsPerformed.push(action);
+  await completeAction?.(action);
   return {
     type: "tool_result" as const,
     tool_use_id: toolCall.id,

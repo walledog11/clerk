@@ -1,5 +1,5 @@
 import './test-fixtures/worker-test-setup.js';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ChannelType, db } from '@shopkeeper/db';
 import { org } from './test-fixtures/worker-test-setup.js';
 import {
@@ -7,6 +7,12 @@ import {
   getMockFetch,
   makeTikTokShopJob,
 } from './test-fixtures/worker-test-helpers.js';
+
+beforeEach(async () => {
+  await db.integration.createMany({ data: ['shop_worker_001', 'shop_attachment_001', 'shop_duplicate_001'].map(externalAccountId => ({
+    organizationId: org.id, platform: ChannelType.tiktok, externalAccountId,
+  })) });
+});
 
 describe('Message worker — TikTok Shop branch', () => {
   it('creates customer + thread + message for a buyer message', async () => {
@@ -77,4 +83,24 @@ describe('Message worker — TikTok Shop branch', () => {
     });
     expect(messages).toBe(1);
   });
+});
+
+it('drops a queued message when its integration is disconnecting', async () => {
+  await db.integration.updateMany({ where: { organizationId: org.id }, data: { lifecycleStatus: 'disconnecting' } });
+  const handler = getCapturedHandlers().get('inbound-messages');
+  await handler!(makeTikTokShopJob(org.id, { accountId: 'shop_worker_001', messageId: 'disconnected' }));
+  expect(await db.message.count({ where: { organizationId: org.id } })).toBe(0);
+});
+
+it('bounds failed media download attempts and skips them entirely on duplicate delivery', async () => {
+  const handler = getCapturedHandlers().get('inbound-messages');
+  getMockFetch().mockImplementation(async () => new Response('', { status: 404 }));
+  const job = makeTikTokShopJob(org.id, {
+    accountId: 'shop_attachment_001', messageId: 'many-attachments',
+    attachments: Array.from({ length: 20 }, (_, index) => ({ url: `https://p16-oec-sg.ibyteimg.com/${index}.jpg` })),
+  });
+  await handler!(job);
+  expect(getMockFetch()).toHaveBeenCalledTimes(5);
+  await handler!(job);
+  expect(getMockFetch()).toHaveBeenCalledTimes(5);
 });

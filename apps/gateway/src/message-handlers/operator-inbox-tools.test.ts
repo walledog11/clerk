@@ -521,7 +521,7 @@ describe('send_ticket_reply and mark_ticket_spam', () => {
       outcome: 'unknown',
     });
     const unknown = await sendReply(thread.id, 'Hello');
-    expect(unknown.status).toBe('error');
+    expect(unknown.status).toBe('unknown');
     expect(unknown.message).toContain('could not confirm');
   });
 

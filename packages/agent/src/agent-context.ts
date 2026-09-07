@@ -100,6 +100,8 @@ export interface VerifiedOrderRef {
 // module's agent loop operates on. Future modules compose their own context on
 // top of this base.
 export interface BaseAgentContext {
+  // Checked at model/tool boundaries; hosts use this to fence a lost lease.
+  assertExecutionAllowed?: () => void;
   orgId: string;
   orgName: string;
   authState?: AgentAuthState;

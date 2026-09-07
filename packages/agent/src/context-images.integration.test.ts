@@ -222,3 +222,30 @@ describe("buildContext customer image attachments", () => {
     )).toBeLessThanOrEqual(CONTEXT_BUDGETS.kbTotalChars);
   });
 });
+
+it('retrieves an older relevant policy before unrelated recently updated articles', async () => {
+  const org = await createTestOrg(); orgIds.push(org.id);
+  const customer = await createTestCustomer(org.id, 'policy@example.com');
+  const thread = await createTestThread(org.id, customer.id, ChannelType.email);
+  await db.thread.update({ where: { id: thread.id }, data: { tag: 'Returns' } });
+  const kb = await db.knowledgeBase.create({ data: { organizationId: org.id, name: 'Policies' } });
+  await db.kbArticle.createMany({ data: [
+    { title: 'Return policy', body: 'Thirty days.', tags: ['RETURNS'], updatedAt: new Date('2020-01-01') },
+    ...Array.from({ length: 4 }, (_, index) => ({ title: `New ${index}`, body: 'Unrelated', tags: ['shipping'], updatedAt: new Date() })),
+  ].map(article => ({ ...article, organizationId: org.id, knowledgeBaseId: kb.id })) });
+  const context = await buildContext(thread.id, org.id, sink);
+  expect(context.kbArticles[0].title).toBe('Return policy');
+});
+
+it('does not expose a disconnecting Shopify integration to the agent', async () => {
+  const org = await createTestOrg(); orgIds.push(org.id);
+  const customer = await createTestCustomer(org.id, 'disconnect@example.com');
+  const thread = await createTestThread(org.id, customer.id, ChannelType.email);
+  await db.integration.create({ data: {
+    organizationId: org.id, platform: ChannelType.shopify, externalAccountId: 'test.myshopify.com',
+    accessToken: 'test-token', lifecycleStatus: 'disconnecting',
+  } });
+  const context = await buildContext(thread.id, org.id, sink);
+  expect(context.shopify).toBeNull();
+  expect(context.recentOrders).toEqual([]);
+});

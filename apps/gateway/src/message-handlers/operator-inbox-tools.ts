@@ -1,5 +1,5 @@
 import { db, ThreadStatus } from '@shopkeeper/db';
-import { defineTool, stringArg, toolError, toolOk, type AgentToolDefinition } from '@shopkeeper/agent/tools';
+import { defineTool, stringArg, toolError, toolOk, toolUnknown, type AgentToolDefinition } from '@shopkeeper/agent/tools';
 import { canonicalInboxThreadWhere } from '@shopkeeper/agent/inbox-filter';
 import { wrapUntrusted } from '@shopkeeper/agent/message-history';
 import { getCurrentPlanForThread } from '@shopkeeper/agent/plan-cache-shape';
@@ -255,9 +255,9 @@ export function buildOperatorInboxTools(
 
       const response = await sendInboxThreadReply(input.ticket_id, input.text);
       if (!response.ok) {
-        return toolError(response.outcome === 'unknown'
-          ? 'I could not confirm whether that reply sent. Check the ticket before trying again.'
-          : 'Reply failed to send. Please try again from the dashboard.');
+        return response.outcome === 'unknown'
+          ? toolUnknown('I could not confirm whether that reply sent. Check the ticket before trying again.')
+          : toolError('Reply failed to send. Please try again from the dashboard.');
       }
 
       return toolOk(formatDigestReplyConfirmation(

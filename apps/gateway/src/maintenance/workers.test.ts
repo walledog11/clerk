@@ -97,10 +97,11 @@ describe('createMaintenanceWorkers', () => {
 
     const resources = await createMaintenanceWorkers(workerConn, producerConn, workerOptions);
 
-    expect(maintenanceJobRegistrations).toHaveLength(14);
-    expect(resources.workers).toHaveLength(15);
-    expect(resources.queues).toHaveLength(26);
+    expect(maintenanceJobRegistrations).toHaveLength(15);
+    expect(resources.workers).toHaveLength(16);
+    expect(resources.queues).toHaveLength(28);
     expect(queueInstances.map((queue) => queue.name)).toEqual([
+      "inbound-processing-recovery", QUEUE.AI_SUMMARY,
       QUEUE.TOKEN_HEALTH,
       QUEUE.EMAIL_TOKEN_HEALTH,
       QUEUE.GMAIL_WATCH,
@@ -129,6 +130,7 @@ describe('createMaintenanceWorkers', () => {
       QUEUE.INTEGRATION_DISCONNECT,
     ]);
     expect(workerInstances.map((worker) => worker.name)).toEqual([
+      "inbound-processing-recovery",
       QUEUE.TOKEN_HEALTH,
       QUEUE.EMAIL_TOKEN_HEALTH,
       QUEUE.GMAIL_WATCH,
@@ -261,7 +263,7 @@ describe('createMaintenanceWorkers', () => {
     );
 
     const repeatableAdds = queueInstances.flatMap((queue) => queue.add.mock.calls);
-    expect(repeatableAdds).toHaveLength(15);
+    expect(repeatableAdds).toHaveLength(16);
 
     for (const addCall of repeatableAdds) {
       expect(addCall[2]).toEqual(expect.objectContaining(PROCESSING_QUEUE_DEFAULTS));
@@ -277,7 +279,7 @@ describe('createMaintenanceWorkers', () => {
 
     expect(workerInstances.every((worker) => worker.on.mock.calls[0]?.[0] === 'failed')).toBe(true);
 
-    const handler = workerInstances[0]?.on.mock.calls[0]?.[1] as FailedHandler;
+    const handler = workerInstances.find(worker => worker.name === QUEUE.TOKEN_HEALTH)?.on.mock.calls[0]?.[1] as FailedHandler;
     const err = new Error('boom');
     handler({ id: 'job-1', attemptsMade: 2 }, err);
 

@@ -7,6 +7,7 @@ export {
 } from './client.js';
 export {
   normalizeTikTokShopWebhookPayload,
+  normalizeTikTokShopWebhookMessages,
   verifyTikTokShopWebhookSignature,
 } from './webhook.js';
 export type {

@@ -179,3 +179,19 @@ describe("runAgentLoop token budget", () => {
     expect(runTools).toHaveBeenCalledTimes(1);
   });
 });
+
+it('does not start another attempt after its shared token budget has been spent', async () => {
+  const usageTotals = createModelUsageMetrics();
+  usageTotals.budgetTokens = 100;
+  const result = await runAgentLoop({ ctx, mode: 'capture', messages: [], systemPromptBlocks: [], tools: [],
+    model: 'test', maxIterations: 10, maxTokensPerCall: 100, tokenBudget: 100, usageTotals });
+  expect(result.stop).toBe('token_budget');
+  expect(mockCreate).not.toHaveBeenCalled();
+});
+
+it('refuses a new model call once the shared planning deadline expires', async () => {
+  const signal = AbortSignal.abort(new Error('planning deadline'));
+  await expect(runAgentLoop({ ctx, mode: 'capture', messages: [], systemPromptBlocks: [], tools: [],
+    model: 'test', maxIterations: 10, maxTokensPerCall: 100, signal })).rejects.toThrow('planning deadline');
+  expect(mockCreate).not.toHaveBeenCalled();
+});

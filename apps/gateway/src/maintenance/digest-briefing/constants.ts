@@ -6,7 +6,6 @@ export const NOTABLE_HANDLED_LIMIT = 5;
 
 export const HANDOFF_VERBATIM_MAX = 120;
 export const PHONE_LINE_MAX = 240;
-export const FLAGGED_STRUCTURED_LINE_MAX = 140;
 export const BRIEFING_RECITE_MAX = 8;
 
 export const REQUEST_FACTS_MIN_VERSION = 5;

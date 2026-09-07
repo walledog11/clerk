@@ -20,12 +20,12 @@ export function formatOperatorDispatchFailure(message: string): string {
   const reference = extractDispatchReference(message);
   const ref = reference ? ` Reference: ${reference}.` : "";
 
-  if (isMessageDispatchFailureMessage(message)) {
-    return `I couldn't send the customer message — delivery failed.${ref} Nothing was confirmed sent; try again from the dashboard or wait a moment and retry.`;
+  if (message.startsWith("Unknown:")) {
+    return `${message} Check the ticket and recorded actions before retrying; delivery may already have completed.`;
   }
 
-  if (message.startsWith("Unknown:")) {
-    return `${message}${ref ? "" : ""} If you're unsure whether it went through, check the ticket in the dashboard before retrying.`;
+  if (isMessageDispatchFailureMessage(message)) {
+    return `I couldn't send the customer message — delivery failed.${ref} Nothing was confirmed sent; try again from the dashboard or wait a moment and retry.`;
   }
 
   if (message.startsWith("Error:")) {

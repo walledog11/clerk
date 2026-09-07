@@ -29,6 +29,7 @@ import {
   type ClassificationResult,
 } from './classification.js';
 import { processInboundMessage } from './inbound-persistence.js';
+import { deliverInboundProcessing } from './inbound-processing.js';
 import { recordConversationAttributionSafely } from './conversation-attribution.js';
 
 async function lookupShopifyCustomerName(organizationId: string, email: string): Promise<string | null> {
@@ -122,51 +123,41 @@ function formatInstagramMessage(
   return parts.join('\n') || '[Unsupported Instagram message]';
 }
 
-const MAX_STORED_INSTAGRAM_ATTACHMENTS = 5;
-const MAX_STORED_TIKTOK_IMAGE_ATTACHMENTS = 5;
-
-async function persistInstagramBinaryAttachments(
-  organizationId: string,
-  attachments: InstagramInboundAttachment[],
-): Promise<string[]> {
-  const refs: string[] = [];
-  let attemptedDownloads = 0;
-  for (const attachment of attachments) {
-    if (!isSupportedInstagramBinaryAttachment(attachment.type)) continue;
-    if (attemptedDownloads >= MAX_STORED_INSTAGRAM_ATTACHMENTS) break;
-    attemptedDownloads += 1;
-
-    const downloaded = await downloadInstagramAttachment(attachment);
-    if (!downloaded) continue;
-    const ref = await uploadInboundAttachment(
-      organizationId,
-      downloaded.filename,
-      downloaded.contentType,
-      downloaded.base64Content,
-    );
-    if (ref) refs.push(ref);
-  }
-  return refs;
+async function alreadyIngested(organizationId: string, externalMessageId: string | null | undefined, queue: Queue): Promise<boolean> {
+  if (!externalMessageId?.trim()) return false;
+  const existing = await db.message.findFirst({
+    where: { organizationId, externalMessageId: externalMessageId.trim() },
+    select: { id: true },
+  });
+  if (!existing) return false;
+  await deliverInboundProcessing(existing.id, queue);
+  return true;
 }
 
-async function persistTikTokShopImageAttachments(
+async function persistProviderAttachments<T>(
   organizationId: string,
-  attachmentUrls: readonly string[],
+  attachments: readonly T[],
+  download: (attachment: T, signal: AbortSignal, consumeBytes: (bytes: number) => boolean) => Promise<{ filename: string; contentType: string; base64Content: string } | null>,
+  messageIdentity?: string | null,
 ): Promise<string[]> {
-  const refs: string[] = [];
-  for (const url of attachmentUrls) {
-    if (refs.length >= MAX_STORED_TIKTOK_IMAGE_ATTACHMENTS) break;
-    const downloaded = await downloadTikTokShopImage(url);
-    if (!downloaded) continue;
-    const ref = await uploadInboundAttachment(
-      organizationId,
-      downloaded.filename,
-      downloaded.contentType,
-      downloaded.base64Content,
-    );
-    if (ref) refs.push(ref);
-  }
-  return refs;
+  const limits = getInboundAttachmentLimits();
+  const signal = AbortSignal.timeout(20_000);
+  let remainingBytes = limits.maxTotalBytes;
+  const consumeBytes = (bytes: number) => {
+    if (bytes > remainingBytes) return false;
+    remainingBytes -= bytes;
+    return true;
+  };
+  const downloaded = await mapWithConcurrency(
+    attachments.slice(0, Math.min(5, limits.maxCount)), Math.min(3, limits.uploadConcurrency),
+    attachment => signal.aborted ? Promise.resolve(null) : download(attachment, signal, consumeBytes),
+  );
+  const { accepted } = applyInboundAttachmentBudget(downloaded.flatMap(item => item ? [{
+    name: item.filename, contentType: item.contentType, contentBase64: item.base64Content,
+  }] : []));
+  return (await mapWithConcurrency(accepted, limits.uploadConcurrency, item =>
+    uploadInboundAttachment(organizationId, item.name, item.contentType, item.contentBase64, messageIdentity),
+  )).filter((ref): ref is string => ref !== null);
 }
 
 function formatTikTokShopMessage(
@@ -199,6 +190,7 @@ export async function handleIgDmJob(job: Job<InboundJobData>, aiSummaryQueue: Qu
     text,
     traceId,
   } = candidate;
+  if (await alreadyIngested(organizationId, externalMessageId, aiSummaryQueue)) return;
   const sentAt = new Date(providerSentAt);
   if (!Number.isFinite(sentAt.getTime())) {
     logger.error({ integrationId, traceId }, '[Worker] Invalid Instagram provider timestamp — dropping');
@@ -239,9 +231,11 @@ export async function handleIgDmJob(job: Job<InboundJobData>, aiSummaryQueue: Qu
       );
     }
 
-    const storedAttachments = await persistInstagramBinaryAttachments(
+    const storedAttachments = await persistProviderAttachments(
       organizationId,
-      attachments,
+      attachments.filter(attachment => isSupportedInstagramBinaryAttachment(attachment.type)),
+      downloadInstagramAttachment,
+      externalMessageId,
     );
 
     await processInboundMessage(
@@ -305,6 +299,7 @@ export async function handleEmailJob(job: Job<InboundJobData>, aiSummaryQueue: Q
   const { organizationId, traceId } = job.data;
   const { senderName, subject, body } = job.data;
   const senderEmail = job.data.senderEmail?.trim().toLowerCase();
+  if (await alreadyIngested(organizationId, job.data.inboundMessageId, aiSummaryQueue)) return;
 
   try {
     if (job.data.integrationId) {
@@ -384,7 +379,7 @@ export async function handleEmailJob(job: Job<InboundJobData>, aiSummaryQueue: Q
     const attachmentUrls = (await mapWithConcurrency(
       budgetedAttachments,
       getInboundAttachmentLimits().uploadConcurrency,
-      (att) => uploadInboundAttachment(organizationId, att.name, att.contentType, att.contentBase64),
+      (att) => uploadInboundAttachment(organizationId, att.name, att.contentType, att.contentBase64, job.data.inboundMessageId),
     )).filter((url): url is string => url !== null);
 
     await processInboundMessage(organizationId, senderEmail!, CHANNEL.EMAIL, stripQuotedReply(body!), aiSummaryQueue, {
@@ -458,26 +453,37 @@ export async function handleShopifyJob(job: Job<InboundJobData>, aiSummaryQueue:
 
 export async function handleTikTokShopJob(job: Job<InboundJobData>, aiSummaryQueue: Queue): Promise<void> {
   const { organizationId, traceId } = job.data;
-  const message = normalizeTikTokShopWebhookPayload(job.data.rawPayload);
+  const message = job.data.tiktokMessage ?? normalizeTikTokShopWebhookPayload(job.data.rawPayload);
 
   if (!message || message.isEcho) return;
+  const integration = await db.integration.findFirst({
+    where: {
+      ...(job.data.integrationId ? { id: job.data.integrationId } : {}),
+      organizationId, platform: CHANNEL.TIKTOK, externalAccountId: message.accountId, lifecycleStatus: 'active',
+    },
+    select: { id: true },
+  });
+  if (!integration) return;
+  const externalMessageId = job.data.inboundMessageId ?? (message.messageId ? `tiktok:${message.accountId}:${message.messageId}` : null);
+  if (await alreadyIngested(organizationId, externalMessageId, aiSummaryQueue)) return;
 
   const buyerIdentity = message.buyerId ?? message.conversationId;
   const platformId = `tiktok:${message.accountId}:${buyerIdentity}`;
 
   try {
-    const storedAttachmentRefs = await persistTikTokShopImageAttachments(
+    const storedAttachmentRefs = await persistProviderAttachments(
       organizationId,
       message.attachments,
+      downloadTikTokShopImage,
+      externalMessageId,
     );
     const messageText = formatTikTokShopMessage(message.text, storedAttachmentRefs.length);
 
     await processInboundMessage(organizationId, platformId, CHANNEL.TIKTOK, messageText, aiSummaryQueue, {
       attachments: storedAttachmentRefs,
       customerName: message.customerName,
-      externalMessageId: job.data.inboundMessageId ?? (
-        message.messageId ? `tiktok:${message.accountId}:${message.messageId}` : null
-      ),
+      externalMessageId,
+      integrationId: integration.id,
       externalSpaceId: message.conversationId,
       traceId,
       isRealCustomerMessage: true,

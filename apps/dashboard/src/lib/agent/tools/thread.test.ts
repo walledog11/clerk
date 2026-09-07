@@ -509,7 +509,7 @@ describe('sendEmail async outbound (OUTBOUND_EMAIL_ASYNC)', () => {
       { threadId: 'unused-for-send-email', orgId: org.id, orgName: org.name },
     );
 
-    expect(result.status).toBe('error');
+    expect(result.status).toBe('unknown');
     const saved = await db.message.findFirst({
       where: { organizationId: org.id, contentText: 'Queue result is unclear.', senderType: SenderType.agent },
     });

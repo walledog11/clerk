@@ -1,4 +1,4 @@
-import { db } from "@shopkeeper/db";
+import { db, Prisma } from "@shopkeeper/db";
 import { parseClassifierSignals } from "./classifier-signals.js";
 import { shopifyRestJson, type ShopifyContext } from "./shopify/client.js";
 import { recordedShopifyScopes } from "./shopify/integration-health.js";
@@ -131,28 +131,12 @@ export async function buildContext(
 ): Promise<AgentContext> {
   const requestedMessageWindow = options?.messageWindow ?? 50;
   const fetchedMessageWindow = Math.min(requestedMessageWindow, CONTEXT_BUDGETS.recentMessageCount);
-  const effectiveKbArticlesPromise = (async () => {
-    const overrides = await db.kbArticle.findMany({
-      where: { organizationId: orgId, tags: { has: MEMORY_OVERRIDE_TAG } },
-      select: { tags: true },
-    });
-    const overriddenIds = memoryOverrideTargetIds(overrides);
-    return db.kbArticle.findMany({
-      where: {
-        organizationId: orgId,
-        ...(overriddenIds.length > 0 ? { id: { notIn: overriddenIds } } : {}),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 3,
-      select: { title: true, body: true, tags: true },
-    });
-  })();
   const activeMerchantPreferencesPromise = loadActiveMerchantPreferences(orgId).catch((error) => {
     logger.warn({ orgId, threadId, err: error }, "[agent:context] merchant preference load failed");
     return [];
   });
 
-  const [thread, org, shopifyIntegration, allKbArticles, activeMerchantPreferences] = await Promise.all([
+  const [thread, org, shopifyIntegration, activeMerchantPreferences] = await Promise.all([
     db.thread.findUnique({
       where: { id: threadId },
       include: {
@@ -167,14 +151,31 @@ export async function buildContext(
       },
     }),
     db.organization.findUnique({ where: { id: orgId } }),
-    db.integration.findFirst({ where: { organizationId: orgId, platform: "shopify" } }),
-    effectiveKbArticlesPromise,
+    db.integration.findFirst({ where: { organizationId: orgId, platform: "shopify", lifecycleStatus: "active" } }),
     activeMerchantPreferencesPromise,
   ]);
 
   if (!thread || thread.organizationId !== orgId) {
     throw new Error("Thread not found");
   }
+
+  // Rank matching tags before the limit, so newer unrelated articles cannot
+  // displace the relevant policy. Exclude overridden memories before ranking.
+  const effectiveKbArticlesPromise = (async () => {
+    const overrides = await db.kbArticle.findMany({
+      where: { organizationId: orgId, tags: { has: MEMORY_OVERRIDE_TAG } },
+      select: { tags: true },
+    });
+    const overriddenIds = memoryOverrideTargetIds(overrides);
+    return db.$queryRaw<Array<{ title: string; body: string; tags: string[] }>>(Prisma.sql`
+      SELECT title, body, tags FROM kb_articles
+      WHERE organization_id = ${orgId}::uuid
+      ${overriddenIds.length ? Prisma.sql`AND id NOT IN (${Prisma.join(overriddenIds.map(id => Prisma.sql`${id}::uuid`))})` : Prisma.empty}
+      ORDER BY EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE lower(tag) = ${thread.tag?.toLowerCase() ?? null}) DESC,
+        updated_at DESC, id DESC
+      LIMIT 3
+    `);
+  })().then(value => ({ value }), (error: unknown) => ({ error }));
 
   const openThreadCountPromise = db.thread.count({
     where: { organizationId: orgId, customerId: thread.customerId, status: "open" },
@@ -261,7 +262,7 @@ export async function buildContext(
           customer_id: shopifyCustomerId,
           status: "any",
           limit: 5,
-          fields: "id,name,created_at,financial_status,fulfillment_status,current_total_price,line_items,shipping_address",
+          fields: "id,name,created_at,financial_status,fulfillment_status,current_total_price,currency,line_items,shipping_address",
         },
       }
     ).catch((error) => {
@@ -316,6 +317,9 @@ export async function buildContext(
 
   const openThreadCount = await openThreadCountPromise;
 
+  const kbResult = await effectiveKbArticlesPromise;
+  if ("error" in kbResult) throw kbResult.error;
+  const allKbArticles = kbResult.value;
   const threadTag = thread.tag?.toLowerCase();
   const matchingKbArticles = threadTag
     ? allKbArticles.filter(a => a.tags.some(t => t.toLowerCase() === threadTag))

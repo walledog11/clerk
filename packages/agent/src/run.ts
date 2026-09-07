@@ -1,3 +1,6 @@
+import logger from "./logger.js";
+import { randomUUID } from "node:crypto";
+import { recordAgentActionsBatch, completeAgentActionAttempt } from "./agent-actions.js";
 import { buildCachedSystemPrompt, buildSplitCachedSystemPrompt } from "./ai/anthropic.js";
 import { pickModel } from "./ai/index.js";
 import type { OrgSettings, RawToolCall } from "./types.js";
@@ -79,6 +82,8 @@ export async function runAgent(
   } = resolveRunPolicy(settings, options);
   const recordToolFailure = options?.recordToolFailure;
   const actionsPerformed: ActionEntry[] = [];
+  const journaledActions = new Set<ActionEntry>();
+  const turnId = options?.turnId ?? randomUUID();
   // Thread/customer are present only on a SupportContext; capture them once so the
   // thread-less path (Track 3) logs/audits with nulls instead of dereferencing.
   const supportThread = isSupportContext(ctx) ? ctx.thread : null;
@@ -102,7 +107,8 @@ export async function runAgent(
     approvedToolCallCount: approvedToolCalls?.length ?? 0,
     executedToolCalls,
     instructionHash,
-    ...(options?.turnId ? { turnId: options.turnId } : {}),
+    turnId,
+    journaledActions,
     ...(approval ? { approval } : {}),
     ...(options?.executionId ? { executionId: options.executionId } : {}),
     ...(options?.onActionsPersisted
@@ -127,167 +133,199 @@ export async function runAgent(
       supportThread,
       actionsPerformed,
       executedToolCalls,
+      beginAction: async (call, providerOperationKey) => {
+        const [attempt] = await recordAgentActionsBatch({
+          orgId: ctx.orgId,
+          threadId: supportThread?.id,
+          customerId: supportCustomer?.id,
+          mode: effectiveMode,
+          turnId,
+          instruction,
+          approval,
+          executionId: options?.executionId,
+          actions: [{ tool: call.name, input: call.input, providerOperationKey,
+            category: options?.moduleTools?.[call.name]?.category,
+            status: "unknown", result: "Execution started; completion has not been recorded." }],
+        });
+        if (!attempt) throw new Error("Could not persist agent action attempt");
+        return async (action) => {
+          journaledActions.add(action);
+          await completeAgentActionAttempt(attempt.id, action);
+          try {
+            options?.onActionsPersisted?.([{ ...attempt, status: action.status ?? "success" }]);
+          } catch (err) {
+            logger.error({ err, turnId }, "[agent] action observer failed");
+          }
+        };
+      },
       recordAgentFailure: recordAgentFailureSafely,
       setEscalationReason: reason => {
         escalationReason = reason;
       },
       ...(options?.moduleTools ? { moduleTools: options.moduleTools } : {}),
-      ...((options?.executionId ?? options?.turnId)
-        ? { operationScopeId: options?.executionId ?? options?.turnId }
-        : {}),
+      operationScopeId: options?.executionId ?? turnId,
       ...(executionOptions?.stopOnDefiniteFailure
         ? { stopOnDefiniteFailure: true }
         : {}),
     });
 
-  if (!readOnly && approvedToolCalls && approvedToolCalls.length > 0) {
-    const executableToolCalls = selectExecutableApprovedToolCalls(supportThread, approvedToolCalls);
+  try {
+    if (!readOnly && approvedToolCalls && approvedToolCalls.length > 0) {
+      const executableToolCalls = selectExecutableApprovedToolCalls(supportThread, approvedToolCalls);
 
-    if (supportThread?.channelType === "dashboard_agent" && executableToolCalls.length === 0) {
+      if (supportThread?.channelType === "dashboard_agent" && executableToolCalls.length === 0) {
+        return finish({
+          summary: "No approved dashboard action was available to execute.",
+          actionsPerformed,
+        }, "approved_dashboard_actions_empty");
+      }
+
+      await executeToolCalls(executableToolCalls, { stopOnDefiniteFailure: true });
+
+      if (escalationReason) {
+        return finish({
+          summary: `Escalated to merchant: ${escalationReason}`,
+          actionsPerformed,
+        }, "escalated");
+      }
+
       return finish({
-        summary: "No approved dashboard action was available to execute.",
+        summary: summarizeApprovedDashboardActions(actionsPerformed),
         actionsPerformed,
-      }, "approved_dashboard_actions_empty");
+      }, approvedActionsCompleteOutcome(supportThread));
     }
 
-    await executeToolCalls(executableToolCalls, { stopOnDefiniteFailure: true });
-
-    if (escalationReason) {
-      return finish({
-        summary: `Escalated to merchant: ${escalationReason}`,
-        actionsPerformed,
-      }, "escalated");
+    // The operator channel is now one durable thread per binding, so its history is
+    // the merchant's real conversation — widen the window from the legacy 4. Composer
+    // read-only stays narrow.
+    const history = operatorMode
+      ? ctx.recentMessages.slice(-20)
+      : readOnly
+        ? ctx.recentMessages.slice(-4)
+        : ctx.recentMessages;
+    const boundedInstruction = truncateContextText(instruction, CONTEXT_BUDGETS.instructionChars);
+    const messageInstruction = readOnly
+      ? `Private question from the support operator. Do not contact the customer.\n\n${boundedInstruction}`
+      : boundedInstruction;
+    const messages = buildMessageHistory(history, messageInstruction, { segregateUntrusted: !operatorMode });
+    // runAgent is the support/composer entry: it builds a support-shaped system
+    // prompt and tool set. Thread-less modules (order-ops and later) run through the
+    // shared loop (runAgentLoop) via their own entrypoint, not here — the executor
+    // and loop are thread-optional, so nothing blocks them.
+    if (!isSupportContext(ctx)) {
+      return finish({ summary: "This agent run requires a support context.", actionsPerformed }, "unsupported_context");
     }
+    // Storefront narrowing composes with read-only rather than replacing it: a
+    // composer-ask on a storefront thread gets the intersection, which is the
+    // stricter of the two in every case.
+    const storefrontTools = storefrontToolNames(ctx);
+    const storefrontMode = storefrontTools !== null;
+    const grantedScopes = ctx.shopify?.grantedScopes ?? null;
+    const selectedCoreTools = readOnly
+      ? selectAgentTools(settings, storefrontMode
+          ? READ_TOOL_NAMES.filter((name) => isStorefrontAllowedTool(ctx, name))
+          : READ_TOOL_NAMES, grantedScopes).filter((tool) => storefrontMode || !isGuestOnlyTool(tool.name))
+      : selectAgentTools(settings, storefrontTools, grantedScopes).filter((tool) => (
+          (storefrontMode || !isGuestOnlyTool(tool.name))
+          && (!gatewayOperatorMode || !OPERATOR_HIDDEN_TOOL_NAMES.has(tool.name))
+        ));
+    const tools = readOnly
+      ? selectedCoreTools
+      : [
+          ...selectedCoreTools,
+          ...Object.values(options?.moduleTools ?? {}).map((def) => ({
+            name: def.name,
+            description: def.description,
+            input_schema: def.inputSchema,
+          })),
+        ];
+    let systemPromptBlocks;
+    if (readOnly) {
+      systemPromptBlocks = buildCachedSystemPrompt(buildComposerAskPrompt(ctx, settings));
+    } else {
+      const { stable, volatile } = buildSystemPromptParts(ctx, settings);
+      systemPromptBlocks = buildSplitCachedSystemPrompt(stable, volatile);
+    }
+    // The read-only composer-ask loop stays on Haiku; the mutative agent loop
+    // (operator + end-to-end runs) is a judgment/mutative path, so it runs on Sonnet.
+    const iterationModel = pickModel(readOnly ? "composer_ask" : "agent_run");
 
-    return finish({
-      summary: summarizeApprovedDashboardActions(actionsPerformed),
-      actionsPerformed,
-    }, approvedActionsCompleteOutcome(supportThread));
-  }
+    // Spend cap is a backstop, not a per-call meter — check once before the model
+    // loop. The approved-execution path above returns with zero model calls and
+    // stays ungated.
+    await enforceSpendCap(ctx.orgId, s);
 
-  // The operator channel is now one durable thread per binding, so its history is
-  // the merchant's real conversation — widen the window from the legacy 4. Composer
-  // read-only stays narrow.
-  const history = operatorMode
-    ? ctx.recentMessages.slice(-20)
-    : readOnly
-      ? ctx.recentMessages.slice(-4)
-      : ctx.recentMessages;
-  const boundedInstruction = truncateContextText(instruction, CONTEXT_BUDGETS.instructionChars);
-  const messageInstruction = readOnly
-    ? `Private question from the support operator. Do not contact the customer.\n\n${boundedInstruction}`
-    : boundedInstruction;
-  const messages = buildMessageHistory(history, messageInstruction, { segregateUntrusted: !operatorMode });
-  // runAgent is the support/composer entry: it builds a support-shaped system
-  // prompt and tool set. Thread-less modules (order-ops and later) run through the
-  // shared loop (runAgentLoop) via their own entrypoint, not here — the executor
-  // and loop are thread-optional, so nothing blocks them.
-  if (!isSupportContext(ctx)) {
-    return finish({ summary: "This agent run requires a support context.", actionsPerformed }, "unsupported_context");
-  }
-  // Storefront narrowing composes with read-only rather than replacing it: a
-  // composer-ask on a storefront thread gets the intersection, which is the
-  // stricter of the two in every case.
-  const storefrontTools = storefrontToolNames(ctx);
-  const storefrontMode = storefrontTools !== null;
-  const grantedScopes = ctx.shopify?.grantedScopes ?? null;
-  const selectedCoreTools = readOnly
-    ? selectAgentTools(settings, storefrontMode
-        ? READ_TOOL_NAMES.filter((name) => isStorefrontAllowedTool(ctx, name))
-        : READ_TOOL_NAMES, grantedScopes).filter((tool) => storefrontMode || !isGuestOnlyTool(tool.name))
-    : selectAgentTools(settings, storefrontTools, grantedScopes).filter((tool) => (
-        (storefrontMode || !isGuestOnlyTool(tool.name))
-        && (!gatewayOperatorMode || !OPERATOR_HIDDEN_TOOL_NAMES.has(tool.name))
-      ));
-  const tools = readOnly
-    ? selectedCoreTools
-    : [
-        ...selectedCoreTools,
-        ...Object.values(options?.moduleTools ?? {}).map((def) => ({
-          name: def.name,
-          description: def.description,
-          input_schema: def.inputSchema,
-        })),
-      ];
-  let systemPromptBlocks;
-  if (readOnly) {
-    systemPromptBlocks = buildCachedSystemPrompt(buildComposerAskPrompt(ctx, settings));
-  } else {
-    const { stable, volatile } = buildSystemPromptParts(ctx, settings);
-    systemPromptBlocks = buildSplitCachedSystemPrompt(stable, volatile);
-  }
-  // The read-only composer-ask loop stays on Haiku; the mutative agent loop
-  // (operator + end-to-end runs) is a judgment/mutative path, so it runs on Sonnet.
-  const iterationModel = pickModel(readOnly ? "composer_ask" : "agent_run");
+    const loop = await runAgentLoop({
+      ctx,
+      mode: readOnly ? "read_only" : "execute",
+      messages,
+      systemPromptBlocks,
+      tools,
+      model: iterationModel,
+      maxIterations,
+      maxTokensPerCall: readOnly ? 2048 : 4096,
+      settings,
+      usageTotals,
+      runTools: executeToolCalls,
+      getEscalationReason: () => escalationReason,
+      ...(readOnly ? {} : { tokenBudget: TOKEN_BUDGET }),
+    });
 
-  // Spend cap is a backstop, not a per-call meter — check once before the model
-  // loop. The approved-execution path above returns with zero model calls and
-  // stays ungated.
-  await enforceSpendCap(ctx.orgId, s);
-
-  const loop = await runAgentLoop({
-    ctx,
-    mode: readOnly ? "read_only" : "execute",
-    messages,
-    systemPromptBlocks,
-    tools,
-    model: iterationModel,
-    maxIterations,
-    maxTokensPerCall: readOnly ? 2048 : 4096,
-    settings,
-    usageTotals,
-    runTools: executeToolCalls,
-    getEscalationReason: () => escalationReason,
-    ...(readOnly ? {} : { tokenBudget: TOKEN_BUDGET }),
-  });
-
-  switch (loop.stop) {
-    case "escalated":
-      return finish({
-        summary: `Escalated to merchant: ${escalationReason}`,
-        actionsPerformed,
-      }, "escalated");
-    case "max_iterations":
-      return finish({
-        summary: gatewayOperatorMode
-          ? (summarizeOperatorTurnDispatchFailure(actionsPerformed)
-            ?? (readOnly
+    switch (loop.stop) {
+      case "escalated":
+        return finish({
+          summary: `Escalated to merchant: ${escalationReason}`,
+          actionsPerformed,
+        }, "escalated");
+      case "max_iterations":
+        return finish({
+          summary: gatewayOperatorMode
+            ? (summarizeOperatorTurnDispatchFailure(actionsPerformed)
+              ?? (readOnly
+                ? "I could not finish answering that. Try asking a narrower question."
+                : "Reached maximum steps without completing the task."))
+            : readOnly
               ? "I could not finish answering that. Try asking a narrower question."
-              : "Reached maximum steps without completing the task."))
-          : readOnly
-            ? "I could not finish answering that. Try asking a narrower question."
-            : "Reached maximum steps without completing the task.",
-        actionsPerformed,
-      }, "max_iterations");
-    case "max_tokens":
-      return finish({
-        summary: readOnly
-          ? "The answer was cut off because the request was too large. Try asking a more specific question."
-          : "Agent response was cut off - the request may be too complex. Try breaking it into smaller steps.",
-        actionsPerformed,
-      }, "max_tokens");
-    case "token_budget": {
-      const dispatchFailure = gatewayOperatorMode
-        ? summarizeOperatorTurnDispatchFailure(actionsPerformed)
-        : null;
-      // The budget is a token ceiling, not a step count, and it is reached mid-turn
-      // with nothing sent. Saying "too many steps" described a four-call turn as
-      // the merchant's fault for asking too much, and said nothing about whether
-      // the customer had been written to. Say what is true: it stopped, and
-      // nothing went out.
-      return finish({
-        summary: dispatchFailure
-          ?? loop.finalText?.trim()
-          ?? "I ran out of room to finish that one, so I stopped before sending anything. Tell me the ticket or customer and I'll go straight at it.",
-        actionsPerformed,
-      }, "token_budget");
+              : "Reached maximum steps without completing the task.",
+          actionsPerformed,
+        }, "max_iterations");
+      case "max_tokens":
+        return finish({
+          summary: readOnly
+            ? "The answer was cut off because the request was too large. Try asking a more specific question."
+            : "Agent response was cut off - the request may be too complex. Try breaking it into smaller steps.",
+          actionsPerformed,
+        }, "max_tokens");
+      case "token_budget": {
+        const dispatchFailure = gatewayOperatorMode
+          ? summarizeOperatorTurnDispatchFailure(actionsPerformed)
+          : null;
+        // The budget is a token ceiling, not a step count, and it is reached mid-turn
+        // with nothing sent. Saying "too many steps" described a four-call turn as
+        // the merchant's fault for asking too much, and said nothing about whether
+        // the customer had been written to. Say what is true: it stopped, and
+        // nothing went out.
+        return finish({
+          summary: dispatchFailure
+            ?? loop.finalText?.trim()
+            ?? "I ran out of room to finish that one, so I stopped before sending anything. Tell me the ticket or customer and I'll go straight at it.",
+          actionsPerformed,
+        }, "token_budget");
+      }
+      default:
+        return finish({
+          summary: readOnly
+            ? (loop.finalText?.trim() || "I do not have enough information to answer that.")
+            : (loop.finalText ?? "Done."),
+          actionsPerformed,
+        }, "end_turn");
     }
-    default:
-      return finish({
-        summary: readOnly
-          ? (loop.finalText?.trim() || "I do not have enough information to answer that.")
-          : (loop.finalText ?? "Done."),
-        actionsPerformed,
-      }, "end_turn");
+  } catch (error) {
+    await finish({
+      summary: "Execution stopped unexpectedly. Review the recorded actions before retrying.",
+      actionsPerformed,
+    }, "error");
+    throw error;
   }
+
 }

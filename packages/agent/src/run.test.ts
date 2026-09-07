@@ -12,7 +12,7 @@ const {
   mockRecordSpend,
 } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
-  mockRecordAgentActionsBatch: vi.fn().mockResolvedValue(undefined),
+  mockRecordAgentActionsBatch: vi.fn().mockResolvedValue([{ id: "action_1" }]),
   mockEnforceSpendCap: vi.fn().mockResolvedValue(undefined),
   mockRecordSpend: vi.fn().mockResolvedValue(undefined),
 }));
@@ -31,6 +31,9 @@ vi.mock("./spend.js", () => ({
 
 vi.mock("./agent-actions.js", () => ({
   recordAgentActionsBatch: mockRecordAgentActionsBatch,
+  summarizeJournaledActions: vi.fn().mockResolvedValue(undefined),
+  completeAgentActionAttempt: vi.fn().mockResolvedValue(undefined),
+  recordAgentTurnUsage: vi.fn().mockResolvedValue(undefined),
   recordAgentAction: vi.fn().mockResolvedValue(undefined),
   hashInstruction: vi.fn().mockReturnValue("hash"),
   hashPlan: vi.fn().mockReturnValue("hash"),
@@ -99,7 +102,7 @@ function makeCtx(overrides: Partial<AgentContext> = {}): AgentContext {
 
 beforeEach(() => {
   mockCreate.mockReset();
-  mockRecordAgentActionsBatch.mockResolvedValue(undefined);
+  mockRecordAgentActionsBatch.mockResolvedValue([{ id: "action_1" }]);
   mockEnforceSpendCap.mockResolvedValue(undefined);
   mockRecordSpend.mockResolvedValue(undefined);
 });
@@ -389,4 +392,35 @@ describe("runAgent moduleTools seam", () => {
     const toolsArg = mockCreate.mock.calls[0]?.[0]?.tools as { name: string }[];
     expect(toolsArg.map((tool) => tool.name)).not.toContain("test_control_tool");
   });
+});
+
+it('keeps a completed action journaled when the following model call fails', async () => {
+  const { completeAgentActionAttempt, recordAgentTurnUsage } = await import('./agent-actions.js');
+  mockCreate.mockResolvedValueOnce(toolUse('send_reply', { text: 'Sent once' })).mockRejectedValueOnce(new Error('model unavailable'));
+  const ctx = makeCtx();
+  await expect(runAgent(ctx, 'Reply')).rejects.toThrow('model unavailable');
+  expect(ctx.io?.sendReply).toHaveBeenCalledOnce();
+  expect(mockRecordAgentActionsBatch).toHaveBeenCalledOnce();
+  expect(mockRecordAgentActionsBatch.mock.calls[0][0].actions[0].status).toBe('unknown');
+  expect(completeAgentActionAttempt).toHaveBeenCalledWith('action_1', expect.objectContaining({ status: 'success' }));
+  expect(recordAgentTurnUsage).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'error' }));
+});
+
+it('does not execute a mutation when the attempt cannot be persisted', async () => {
+  mockRecordAgentActionsBatch.mockRejectedValueOnce(new Error('database unavailable'));
+  const ctx = makeCtx();
+  await expect(runAgent(ctx, 'Reply', [{ id: 'send', name: 'send_reply', input: { text: 'hello' } }])).rejects.toThrow('database unavailable');
+  expect(ctx.io?.sendReply).not.toHaveBeenCalled();
+});
+
+it('checks ownership again between mutations in the same approved batch', async () => {
+  const ctx = makeCtx();
+  let lost = false;
+  ctx.assertExecutionAllowed = () => { if (lost) throw new Error('lost lease'); };
+  vi.mocked(ctx.io!.sendReply).mockImplementationOnce(async () => { lost = true; return { status: 'ok', message: 'sent' }; });
+  await expect(runAgent(ctx, 'Reply and close', [
+    { id: 'send', name: 'send_reply', input: { text: 'hello' } },
+    { id: 'close', name: 'update_thread_status', input: { status: 'closed' } },
+  ])).rejects.toThrow('lost lease');
+  expect(ctx.io?.updateThreadStatus).not.toHaveBeenCalled();
 });

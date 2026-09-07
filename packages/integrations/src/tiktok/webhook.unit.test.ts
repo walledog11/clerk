@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   normalizeTikTokShopWebhookPayload,
+  normalizeTikTokShopWebhookMessages,
   verifyTikTokShopWebhookSignature,
 } from './webhook.js';
 import type { TikTokShopWebhookConfig } from './types.js';
@@ -160,4 +161,15 @@ describe('normalizeTikTokShopWebhookPayload', () => {
     })).toBeNull();
     expect(normalizeTikTokShopWebhookPayload(null)).toBeNull();
   });
+});
+
+it('retains every valid batch message and inherits envelope account identity', () => {
+  const messages = normalizeTikTokShopWebhookMessages({ shop_id: 'shop-batch', events: [
+    { conversation_id: 'first', text: 'one', message_id: '1' },
+    { invalid: true },
+    { conversation_id: 'second', text: 'two', message_id: '2' },
+  ] });
+  expect(messages.map(message => [message.accountId, message.messageId])).toEqual([
+    ['shop-batch', '1'], ['shop-batch', '2'],
+  ]);
 });

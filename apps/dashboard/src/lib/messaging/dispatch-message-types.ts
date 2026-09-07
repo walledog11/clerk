@@ -38,6 +38,7 @@ export type Message = Awaited<ReturnType<typeof createMessage>>
 export type DispatchFailureCode = "episode_superseded"
 
 export type DispatchFailure = {
+  outcome?: "unknown";
   ok: false
   error: string
   detail?: string

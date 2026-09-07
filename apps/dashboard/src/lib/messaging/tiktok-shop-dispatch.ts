@@ -85,6 +85,8 @@ export async function dispatchTikTokShopMessage(
     return {
       ok: false,
       error: mapped.error,
+      ...(err instanceof TikTokShopProviderError && err.category === "outcome_unknown"
+        ? { outcome: "unknown" as const } : {}),
       ...(mapped.providerStatus && { providerStatus: mapped.providerStatus }),
     }
   }

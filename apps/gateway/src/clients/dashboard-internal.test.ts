@@ -85,3 +85,10 @@ describe('postDashboardInternal', () => {
     });
   });
 });
+
+it('preserves an explicit unknown delivery outcome across a non-success HTTP response', async () => {
+  vi.stubEnv('DASHBOARD_URL', 'https://dashboard.test');
+  vi.stubEnv('INTERNAL_API_SECRET', 'test-internal-secret');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ outcome: 'unknown', error: 'delivery uncertain' }), { status: 502 })));
+  await expect(postDashboardInternal('/api/messages/internal', {})).resolves.toMatchObject({ ok: false, status: 502, outcome: 'unknown' });
+});

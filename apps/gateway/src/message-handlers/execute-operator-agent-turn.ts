@@ -77,11 +77,16 @@ export async function executeOperatorAgentTurn(
 ): Promise<ExecuteOperatorAgentTurnResult> {
   await assertBillingWriteAllowedForOrgId(params.orgId);
 
+  const org = await db.organization.findUniqueOrThrow({
+    where: { id: params.orgId },
+    select: { settings: true },
+  });
   const resolvedThread = await resolveOperatorThread(params.orgId, params.operatorKey);
 
   const result = await executeAgentTurn({
     orgId: params.orgId,
     threadId: resolvedThread.id,
+    orgSettings: resolveAgentSettings(org.settings),
     instruction: params.instruction,
     ...(params.turnId ? { turnId: params.turnId } : {}),
     failureRoute: FAILURE_ROUTE,

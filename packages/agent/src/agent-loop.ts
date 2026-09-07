@@ -74,9 +74,10 @@ export interface RunAgentLoopParams {
   model: string;
   maxIterations: number;
   maxTokensPerCall: number;
-  // execute mode passes TOKEN_BUDGET; capture / read_only leave it undefined and
-  // rely on the iteration cap.
+  // Shared across attempts when callers reuse usageTotals.
   tokenBudget?: number;
+  signal?: AbortSignal;
+  beforeModelCall?: () => Promise<void>;
   settings?: OrgSettings;
   // Shared usage accumulator so the caller's run-complete log sees the totals.
   usageTotals?: ModelUsageMetrics;
@@ -171,6 +172,10 @@ export async function runAgentLoop(params: RunAgentLoopParams): Promise<AgentLoo
 
   const iterate = async (i: number): Promise<AgentLoopResult> => {
     if (i >= maxIterations) return done("max_iterations", null, i);
+    ctx.assertExecutionAllowed?.();
+    if (tokenBudget !== undefined && usageTotals.budgetTokens >= tokenBudget) return done("token_budget", null, i);
+    params.signal?.throwIfAborted();
+    await params.beforeModelCall?.();
 
     logger.info(
       { iteration: i, messageCount: messages.length, readOnly: mode === "read_only" },
@@ -199,7 +204,7 @@ export async function runAgentLoop(params: RunAgentLoopParams): Promise<AgentLoo
       // Nothing the model sees changes.
       cache_control: { type: "ephemeral" },
       ...tuning,
-    });
+    }, params.signal ? { signal: params.signal } : undefined);
 
     const toolUseBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",

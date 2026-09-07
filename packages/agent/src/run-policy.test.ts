@@ -24,7 +24,7 @@ const {
   mockReleaseDailyRefundSpendReservation: vi.fn().mockResolvedValue(undefined),
   mockMarkDailyRefundSpendReservationUnknown: vi.fn().mockResolvedValue(undefined),
   mockEscalateToHuman: vi.fn().mockResolvedValue(undefined),
-  mockRecordAgentActionsBatch: vi.fn().mockResolvedValue(undefined),
+  mockRecordAgentActionsBatch: vi.fn().mockResolvedValue([{ id: "action_1" }]),
 }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -53,6 +53,9 @@ vi.mock("./spend.js", () => ({
 
 vi.mock("./agent-actions.js", () => ({
   recordAgentActionsBatch: mockRecordAgentActionsBatch,
+  summarizeJournaledActions: vi.fn().mockResolvedValue(undefined),
+  completeAgentActionAttempt: vi.fn().mockResolvedValue(undefined),
+  recordAgentTurnUsage: vi.fn().mockResolvedValue(undefined),
   recordAgentAction: vi.fn().mockResolvedValue(undefined),
   hashPlan: vi.fn().mockReturnValue("hash"),
   hashInstruction: vi.fn().mockReturnValue("hash"),
@@ -144,7 +147,7 @@ beforeEach(() => {
   mockReleaseDailyRefundSpendReservation.mockResolvedValue(undefined);
   mockMarkDailyRefundSpendReservationUnknown.mockResolvedValue(undefined);
   mockEscalateToHuman.mockResolvedValue(undefined);
-  mockRecordAgentActionsBatch.mockResolvedValue(undefined);
+  mockRecordAgentActionsBatch.mockResolvedValue([{ id: "action_1" }]);
 });
 
 afterEach(() => {

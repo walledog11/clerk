@@ -48,6 +48,7 @@ export interface InboundJobData {
   receivedAt?: string;
   traceId?: string;
   rawPayload?: unknown;
+  tiktokMessage?: import("@shopkeeper/integrations/tiktok").NormalizedTikTokShopMessage;
   topic?: string;
   senderId?: string;
   text?: string;

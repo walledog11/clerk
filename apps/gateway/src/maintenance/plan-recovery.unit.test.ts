@@ -152,3 +152,14 @@ describe('recoverMissingPlans', () => {
     expect(add).not.toHaveBeenCalled();
   });
 });
+
+it('continues beyond a full page of approval-owned plans', async () => {
+  const cache = reviewPlanCache();
+  findMany.mockResolvedValueOnce(Array.from({ length: 100 }, (_, index) => candidate({
+    id: `thread-${index}`, cachedPlan: cache, cachedPlanMessageId: CUSTOMER_MESSAGE_ID,
+  }))).mockResolvedValueOnce([candidate()]);
+  const add = vi.fn().mockResolvedValue({});
+  await expect(recoverMissingPlans({ add }, NOW)).resolves.toBe(1);
+  expect(findMany).toHaveBeenCalledTimes(2);
+  expect(findMany.mock.calls[1][0].where.id).toEqual({ gt: 'thread-99' });
+});

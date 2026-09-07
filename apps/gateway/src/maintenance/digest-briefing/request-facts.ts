@@ -23,7 +23,7 @@ export function rowHasNoRequest(thread: { classifierSignals?: unknown }): boolea
  * What a row can still say when no ask was named. `aiTitle` is a bounded topic
  * field from the classifier, not a sentence to re-tense or otherwise repair.
  */
-export function askLessTopic(aiTitle: string | null | undefined): string | null {
+function askLessTopic(aiTitle: string | null | undefined): string | null {
   const title = aiTitle?.trim();
   return title ? redactBriefingContacts(title) : null;
 }

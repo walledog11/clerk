@@ -92,3 +92,17 @@ describe('POST /webhooks/tiktok-shop', () => {
     expect(queueAddSpy).not.toHaveBeenCalled();
   });
 });
+
+it('enqueues each buyer message in a signed batch independently', async () => {
+  const integration = await createTestIntegration(org.id, { platform: ChannelType.tiktok, externalAccountId: 'batch-shop' });
+  const body = JSON.stringify({ shop_id: 'batch-shop', events: [
+    { conversation_id: 'one', text: 'first', message_id: 'one' },
+    { conversation_id: 'two', text: 'second', message_id: 'two' },
+  ] });
+  const response = await request(app).post('/webhooks/tiktok-shop').set('Content-Type', 'application/json')
+    .set('x-tts-signature', hmacSha256('tts-webhook-secret', body)).send(body);
+  expect(response.status).toBe(200);
+  expect(queueAddSpy).toHaveBeenCalledTimes(2);
+  expect(queueAddSpy.mock.calls.map(call => call[1].tiktokMessage.text)).toEqual(['first', 'second']);
+  expect(queueAddSpy.mock.calls[0][1].integrationId).toBe(integration.id);
+});
