@@ -29,7 +29,10 @@ export function AgentPanelProvider({ children }: { children: React.ReactNode }) 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const prevPathnameRef = useRef(pathname)
   const clearPanelRef = useRef(chatState.handleClearPanel)
-  clearPanelRef.current = chatState.handleClearPanel
+
+  useEffect(() => {
+    clearPanelRef.current = chatState.handleClearPanel
+  }, [chatState.handleClearPanel])
 
   const expand = useCallback(() => {
     setIsExpanded(true)

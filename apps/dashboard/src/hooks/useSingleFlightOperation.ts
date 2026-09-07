@@ -21,12 +21,15 @@ export function useSingleFlightOperation<TArgs extends unknown[], TResult>(
   failureMessage: string | ((error: unknown) => string),
 ) {
   const executeRef = useRef(execute);
-  executeRef.current = execute;
   const failureMessageRef = useRef(failureMessage);
-  failureMessageRef.current = failureMessage;
   const mountedRef = useRef(true);
   const runningRef = useRef<Promise<TResult> | null>(null);
   const [state, setState] = useState<OperationState<TResult>>({ status: "idle" });
+
+  useEffect(() => {
+    executeRef.current = execute;
+    failureMessageRef.current = failureMessage;
+  }, [execute, failureMessage]);
 
   useEffect(() => {
     mountedRef.current = true;

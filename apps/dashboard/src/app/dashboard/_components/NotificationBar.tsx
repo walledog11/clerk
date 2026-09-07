@@ -76,9 +76,9 @@ export default function NotificationBar({ notifications, initialDismissedIds }: 
           ref={barRef}
           data-dashboard-notification-bar
           key="bar"
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25, ease: "easeInOut" }}
           className={`relative z-20 flex items-center justify-center pl-3 pr-10 md:px-10 text-xs md:text-sm shrink-0 border-b overflow-hidden ${styles.bar}`}
         >

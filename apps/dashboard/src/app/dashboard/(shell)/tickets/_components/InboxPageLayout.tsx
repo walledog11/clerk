@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, type ComponentProps, type ReactNode } from "react"
+import { useEffect, useState, type ComponentProps, type ReactNode } from "react"
 import { AGENT_DISPLAY_NAME } from "@shopkeeper/agent/settings"
 import { AlertCircle, CheckCircle2, X } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -180,7 +180,7 @@ export function InboxPageLayout({
     toast,
   } = conversation
   const { activeTicketId, approvingTicketId, searchQuery, spamTickets, tickets, totalCount } = list
-  const lastDialogBodyRef = useRef<ReactNode>(null)
+  const [lastDialogBody, setLastDialogBody] = useState<ReactNode>(null)
 
   const conversationTab = (activeThread?.status ?? activeThreadPreview?.status) === "closed"
     ? "closed"
@@ -211,7 +211,9 @@ export function InboxPageLayout({
     </div>
   ) : null
 
-  if (dialogBody) lastDialogBodyRef.current = dialogBody
+  useEffect(() => {
+    if (dialogBody) setLastDialogBody(dialogBody)
+  }, [dialogBody])
 
   return (
     <div className="flex size-full flex-col overflow-hidden bg-background relative">
@@ -262,7 +264,7 @@ export function InboxPageLayout({
           )}
         >
           <DialogTitle className="sr-only">Conversation</DialogTitle>
-          {dialogBody ?? lastDialogBodyRef.current}
+          {dialogBody ?? lastDialogBody}
         </DialogContent>
       </Dialog>
 

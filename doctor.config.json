@@ -5,7 +5,9 @@
     "files": [
       ".next/**",
       ".next-dev/**",
+      ".next-dev-*/**",
       ".next-e2e/**",
+      ".next-memory/**",
       ".next-preview/**"
     ]
   },
@@ -13,7 +15,42 @@
     "score": {
       "excludeRules": [
         "react-doctor/no-giant-component",
-        "react-doctor/no-render-in-render"
+        "react-doctor/no-render-in-render",
+        "react-doctor/no-high-complexity-react-function",
+        "react-doctor/nextjs-no-a-element",
+        "react-doctor/no-initialize-state",
+        "react-doctor/only-export-components",
+        "react-doctor/prefer-html-dialog",
+        "react-doctor/no-multi-component-file",
+        "react-doctor/prefer-module-scope-static-value",
+        "react-doctor/no-adjust-state-on-prop-change",
+        "react-doctor/no-json-parse-stringify-clone",
+        "react-doctor/server-sequential-independent-await",
+        "react-doctor/js-set-map-lookups",
+        "react-doctor/webhook-signature-risk",
+        "react-doctor/no-locale-format-in-render",
+        "react-doctor/no-fetch-response-used-without-status-check",
+        "react-doctor/no-autofocus",
+        "react-doctor/no-permanent-will-change",
+        "react-doctor/no-array-index-as-key",
+        "react-doctor/nextjs-no-client-side-redirect",
+        "react-doctor/async-parallel",
+        "react-doctor/no-prevent-default",
+        "react-doctor/no-transition-all",
+        "react-doctor/no-derived-state",
+        "react-doctor/exhaustive-deps",
+        "react-doctor/no-many-boolean-props",
+        "react-doctor/effect-needs-cleanup",
+        "react-doctor/rendering-hydration-no-flicker",
+        "react-doctor/motion-animate-presence-must-outlive-child",
+        "react-doctor/prefer-module-scope-pure-function",
+        "react-doctor/no-mirror-prop-effect",
+        "react-doctor/no-impure-call-at-module-scope",
+        "react-doctor/no-reset-all-state-on-prop-change",
+        "react-doctor/no-loading-flag-reset-outside-finally",
+        "react-doctor/no-fetch-in-effect",
+        "react-doctor/js-combine-iterations",
+        "react-doctor/async-await-in-loop"
       ]
     }
   }

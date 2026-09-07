@@ -65,10 +65,12 @@ export function useChannelBindingAttempt({
   const refreshStatusRef = useRef(refreshStatus);
   const nowRef = useRef(now);
 
-  connectionCountRef.current = connectionCount;
-  requestBindingRef.current = requestBinding;
-  refreshStatusRef.current = refreshStatus;
-  nowRef.current = now;
+  useEffect(() => {
+    connectionCountRef.current = connectionCount;
+    requestBindingRef.current = requestBinding;
+    refreshStatusRef.current = refreshStatus;
+    nowRef.current = now;
+  }, [connectionCount, now, refreshStatus, requestBinding]);
 
   useEffect(() => {
     mountedRef.current = true;

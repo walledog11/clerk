@@ -64,14 +64,12 @@ export default function DashboardRightRail() {
         )}
       </AnimatePresence>
 
-      <m.div
+      <div
         className={cn(
           "relative z-20 hidden h-full shrink-0 overflow-hidden bg-muted/30 md:block",
           isOpen && isLargeScreen && "border-l border-border/60",
         )}
-        initial={false}
-        animate={{ width: isOpen && isLargeScreen ? RIGHT_RAIL_WIDTH : 0 }}
-        transition={RIGHT_RAIL_SPRING}
+        style={{ width: isOpen && isLargeScreen ? RIGHT_RAIL_WIDTH : 0 }}
       >
         <div
           className="flex h-full flex-col overflow-hidden"
@@ -81,7 +79,7 @@ export default function DashboardRightRail() {
         >
           {panelBody}
         </div>
-      </m.div>
+      </div>
     </LazyMotion>
   );
 }

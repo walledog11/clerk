@@ -10,7 +10,6 @@ export function useShopifyKnowledgeSync(integrationId: string | undefined): KbSy
   const [state, setState] = useState<KbSyncState>({ status: "idle" });
   const stateRef = useRef<KbSyncState>(state);
   const activeIntegrationIdRef = useRef(integrationId);
-  activeIntegrationIdRef.current = integrationId;
   const mountedRef = useRef(true);
   const startedIdsRef = useRef(new Set<string>());
   const retriedIdsRef = useRef(new Set<string>());
@@ -69,6 +68,10 @@ export function useShopifyKnowledgeSync(integrationId: string | undefined): KbSy
     inFlightRef.current.set(id, request);
     return request;
   }, [publish]);
+
+  useEffect(() => {
+    activeIntegrationIdRef.current = integrationId;
+  }, [integrationId]);
 
   useEffect(() => {
     mountedRef.current = true;

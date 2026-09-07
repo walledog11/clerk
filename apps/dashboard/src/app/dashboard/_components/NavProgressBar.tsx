@@ -44,6 +44,7 @@ export default function NavProgressBar() {
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showAnimationFrameRef = useRef<number | null>(null);
 
   const applyBarStyle = useCallback((width: number, opacity: number, transition: string) => {
     const bar = barRef.current;
@@ -59,6 +60,10 @@ export default function NavProgressBar() {
         clearTimeout(timer.current);
         timer.current = null;
       }
+    }
+    if (showAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(showAnimationFrameRef.current);
+      showAnimationFrameRef.current = null;
     }
   }, []);
 
@@ -81,8 +86,9 @@ export default function NavProgressBar() {
       showTimerRef.current = setTimeout(() => {
         isVisible.current = true;
         applyBarStyle(0, 1, "none");
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
+        showAnimationFrameRef.current = requestAnimationFrame(() => {
+          showAnimationFrameRef.current = requestAnimationFrame(() => {
+            showAnimationFrameRef.current = null;
             applyBarStyle(85, 1, "width 3s cubic-bezier(0.05, 0.8, 0.1, 1)");
           });
         });

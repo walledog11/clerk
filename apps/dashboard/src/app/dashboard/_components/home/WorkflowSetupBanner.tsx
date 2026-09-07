@@ -110,9 +110,9 @@ export default function WorkflowSetupBanner({
       {isVisible && (
         <m.div
           key="workflow-setup-banner"
-          initial={{ opacity: 0, height: 0, y: -6 }}
-          animate={{ opacity: 1, height: "auto", y: 0 }}
-          exit={{ opacity: 0, height: 0, y: -6 }}
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
           transition={bannerTransition}
           className={bannerShellClassName}
         >
