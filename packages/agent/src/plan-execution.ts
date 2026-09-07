@@ -32,6 +32,7 @@ import {
 } from "./execution-ledger.js";
 import { isInvalidPlan } from "./plan-validation.js";
 import { recordRequestEpisodeDismissed, recordRequestEpisodeExecution } from "./request-outcome.js";
+import { historicalCompletionFacts } from "./completion-facts.js";
 
 export type PlanExecutionDeps = ExecuteAgentTurnDeps & {
   planAgent?: PlanAgentFn;
@@ -420,6 +421,10 @@ export async function executeCurrentCachedHomePlan(params: {
       persistAuditNote: true,
       auditMode,
       ...(executionId ? { executionId } : {}),
+      completionEvidence: historicalCompletionFacts(
+        current.plan.rawToolCalls,
+        current.plan.readResults,
+      ),
       ...(approval ? { approval } : {}),
     }, deps);
     terminalExecutionStatus = terminalStatusForResult(result);

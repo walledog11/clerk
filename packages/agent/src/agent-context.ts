@@ -183,6 +183,8 @@ export interface ActionEntry {
   tool: string;
   result: string;
   input?: unknown;
+  /** Stable model/plan call id; joins runtime evidence to the approved step. */
+  toolCallId?: string;
   providerOperationKey?: string;
   durationMs?: number;
   status?: AgentActionStatus;

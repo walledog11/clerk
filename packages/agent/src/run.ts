@@ -37,6 +37,7 @@ import {
   CONTEXT_BUDGETS,
   truncateContextText,
 } from "./context-budget.js";
+import type { CompletionFact } from "./completion-facts.js";
 
 export interface RunAgentOptions extends RunAgentPolicyOptions {
   // Injected tool-failure recorder. The dashboard wires this to its ops-alert
@@ -54,6 +55,9 @@ export interface RunAgentOptions extends RunAgentPolicyOptions {
   moduleTools?: Record<string, AgentToolDefinition>;
   // Shadow/enforced durable plan execution row that owns this run's actions.
   executionId?: string;
+  // Successful facts established by live reads during planning. Approved plans
+  // do not re-run those reads, so their evidence travels with the execution.
+  completionEvidence?: readonly CompletionFact[];
 }
 
 const OPERATOR_HIDDEN_TOOL_NAMES = new Set([
@@ -133,6 +137,7 @@ export async function runAgent(
       supportThread,
       actionsPerformed,
       executedToolCalls,
+      completionEvidence: options?.completionEvidence,
       beginAction: async (call, providerOperationKey) => {
         const [attempt] = await recordAgentActionsBatch({
           orgId: ctx.orgId,

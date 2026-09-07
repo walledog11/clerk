@@ -19,6 +19,11 @@ import {
   type PersistedAgentAction,
 } from "./agent-actions.js";
 import type { ModelUsageMetrics } from "./usage.js";
+import {
+  executedCompletionFacts,
+  type CompletionFact,
+} from "./completion-facts.js";
+import { unsupportedReplyCompletionClaims } from "./plan-grounding.js";
 
 export type AgentToolCall = {
   id: string;
@@ -243,6 +248,7 @@ export async function executeAgentToolCall(
     // them).
     moduleTools?: Record<string, AgentToolDefinition>;
     operationScopeId?: string;
+    completionEvidence?: readonly CompletionFact[];
     beginAction?: (call: AgentToolCall, providerOperationKey?: string) => Promise<((action: ActionEntry) => Promise<void>) | undefined>;
   },
 ) {
@@ -293,6 +299,16 @@ export async function executeAgentToolCall(
     errorDetail = result;
   } else if (shouldSkipAfterFailedReply(toolCall.name, actionsPerformed)) {
     result = "Error: skipped status update because send_reply failed.";
+    status = "error";
+    errorDetail = result;
+  } else if (
+    (toolCall.name === "send_reply" || toolCall.name === "send_email")
+    && unsupportedReplyCompletionClaims(toolCall, [
+      ...(input.completionEvidence ?? []),
+      ...executedCompletionFacts(actionsPerformed, ctx),
+    ], ctx).length > 0
+  ) {
+    result = `Error: skipped ${toolCall.name} because its completion claim is not supported by a successful action result.`;
     status = "error";
     errorDetail = result;
   } else {
@@ -360,6 +376,7 @@ export async function executeAgentToolCall(
     tool: toolCall.name,
     result,
     input: toolCall.input,
+    toolCallId: toolCall.id,
     ...(providerOperationKey ? { providerOperationKey } : {}),
     durationMs,
     status,

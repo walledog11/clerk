@@ -55,13 +55,13 @@ describe("plan grounding", () => {
 
   it("accepts matching return, refund, and cancellation actions", () => {
     const examples = [
-      ["create_return", "A return has been initiated."],
-      ["create_refund", "I've refunded the order."],
-      ["cancel_order", "I've canceled the order."],
+      ["create_return", { order_id: "123" }, "A return has been initiated."],
+      ["create_refund", { order_id: "123", amount: "20.00" }, "I've refunded the order."],
+      ["cancel_order", { order_id: "123" }, "I've canceled the order."],
     ] as const;
-    for (const [action, reason] of examples) {
+    for (const [action, input, reason] of examples) {
       expect(detectUngroundedEscalationReasons([
-        { id: "action", name: action, input: {} },
+        { id: "action", name: action, input },
         { id: "esc", name: "escalate_to_human", input: { reason } },
       ])).toEqual([]);
     }
@@ -69,7 +69,7 @@ describe("plan grounding", () => {
 
   it("recognizes cancellation's refund side effect without requiring a duplicate refund", () => {
     expect(detectUngroundedReplyText([
-      { id: "cancel", name: "cancel_order", input: {} },
+      { id: "cancel", name: "cancel_order", input: { order_id: "123" } },
       {
         id: "reply",
         name: "send_reply",
@@ -80,7 +80,7 @@ describe("plan grounding", () => {
 
   it("does not mistake money returning to a card for a product-return operation", () => {
     expect(detectUngroundedReplyText([
-      { id: "refund", name: "create_refund", input: {} },
+      { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00" } },
       {
         id: "reply",
         name: "send_reply",
@@ -103,7 +103,7 @@ describe("plan grounding", () => {
       "I've issued a $15 store credit gift card in place of a refund.",
     ]) {
       expect(detectUngroundedReplyText([
-        { id: "credit", name: "create_gift_card", input: {} },
+        { id: "credit", name: "create_gift_card", input: { customer_id: "456", amount: "15.00" } },
         { id: "reply", name: "send_reply", input: { text } },
       ])).toEqual([]);
     }
@@ -113,7 +113,7 @@ describe("plan grounding", () => {
     // "instead of a refund" is inert, but "and opened a return" is a coordinated
     // verb phrase making a second claim — the distinction the span bound exists for.
     expect(detectUngroundedReplyText([
-      { id: "credit", name: "create_gift_card", input: {} },
+      { id: "credit", name: "create_gift_card", input: { customer_id: "456", amount: "15.00" } },
       {
         id: "reply",
         name: "send_reply",
@@ -139,7 +139,7 @@ describe("plan grounding", () => {
     // reply promises a cancellation the plan never performs.
     for (const text of PUNCTUATION_JOINED_CLAIMS) {
       expect(detectUngroundedReplyText([
-        { id: "refund", name: "create_refund", input: {} },
+        { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00" } },
         { id: "reply", name: "send_reply", input: { text } },
       ])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
     }
@@ -148,8 +148,8 @@ describe("plan grounding", () => {
   it("clears the same sentence once every claim has its tool", () => {
     for (const text of PUNCTUATION_JOINED_CLAIMS) {
       expect(detectUngroundedReplyText([
-        { id: "refund", name: "create_refund", input: {} },
-        { id: "cancel", name: "cancel_order", input: {} },
+        { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00" } },
+        { id: "cancel", name: "cancel_order", input: { order_id: "123" } },
         { id: "reply", name: "send_reply", input: { text } },
       ])).toEqual([]);
     }
@@ -157,7 +157,7 @@ describe("plan grounding", () => {
 
   it("requires every independently claimed operation in a compound sentence", () => {
     expect(detectUngroundedReplyText([
-      { id: "refund", name: "create_refund", input: {} },
+      { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00" } },
       {
         id: "reply",
         name: "send_reply",
@@ -166,8 +166,8 @@ describe("plan grounding", () => {
     ])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
 
     expect(detectUngroundedReplyText([
-      { id: "refund", name: "create_refund", input: {} },
-      { id: "return", name: "create_return", input: {} },
+      { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00" } },
+      { id: "return", name: "create_return", input: { order_id: "123" } },
       {
         id: "reply",
         name: "send_reply",
@@ -182,5 +182,84 @@ describe("plan grounding", () => {
       name: "escalate_to_human",
       input: { reason: "The customer says the refund was already issued." },
     }])).toEqual([]);
+  });
+
+  it("rejects unsupported plural and passive completion claims", () => {
+    for (const text of [
+      "We have issued your refund.",
+      "Your refund has been issued.",
+    ]) {
+      expect(detectUngroundedReplyText([{
+        id: "reply",
+        name: "send_reply",
+        input: { text },
+      }])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
+    }
+  });
+
+  it("requires the action to precede its completion reply", () => {
+    expect(detectUngroundedReplyText([
+      { id: "reply", name: "send_reply", input: { text: "We have issued your refund." } },
+      { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00", currency: "USD" } },
+    ])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
+  });
+
+  it("rejects wrong order, amount, and currency in completion copy", () => {
+    const action = {
+      id: "refund",
+      name: "create_refund",
+      input: { order_id: "123", amount: "20.00", currency: "USD" },
+    };
+    const results = [
+      "We refunded order 999.",
+      "We refunded $21.00 for the order.",
+      "We refunded EUR 20.00 for the order.",
+    ].map((text) => detectUngroundedReplyText([
+        action,
+        { id: "reply", name: "send_reply", input: { text } },
+      ]));
+    expect(detectUngroundedReplyText([
+      { id: "reply", name: "send_reply", input: { text: "We refunded $21.00 for the order." } },
+    ])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
+    expect(results).toEqual([
+      [expect.objectContaining({ toolCallId: "reply" })],
+      [expect.objectContaining({ toolCallId: "reply" })],
+      [expect.objectContaining({ toolCallId: "reply" })],
+    ]);
+  });
+
+  it("rejects a completion email sent to a different recipient", () => {
+    expect(detectUngroundedReplyText([
+      { id: "refund", name: "create_refund", input: { order_id: "123", amount: "20.00", currency: "USD" } },
+      {
+        id: "email",
+        name: "send_email",
+        input: { to: "wrong@example.com", subject: "Refund", body: "We issued your refund." },
+      },
+    ], {
+      ctx: {
+        shopify: null,
+        customer: { id: "customer_1", name: "Ada", platformId: "ada@example.com" },
+      },
+    })).toEqual([expect.objectContaining({ toolCallId: "email" })]);
+  });
+
+  it("allows passive historical facts only when a live read proves them", () => {
+    const calls = [
+      { id: "read", name: "get_order_by_name", input: { order_name: "#1001" } },
+      { id: "reply", name: "send_reply", input: { text: "Your refund has been issued." } },
+    ];
+    expect(detectUngroundedReplyText(calls, {
+      readResults: {
+        read: JSON.stringify({
+          id: "123",
+          name: "#1001",
+          financial_status: "refunded",
+          fulfillment_status: null,
+          total_price: "20.00",
+          currency: "USD",
+        }),
+      },
+    })).toEqual([]);
   });
 });

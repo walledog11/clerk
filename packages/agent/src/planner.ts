@@ -210,7 +210,12 @@ export async function planAgent(
   // error by rewriting it into a different, executable plan. The one exception
   // is structural escalation evidence, which is derived from the merchant's data
   // and discards the proposal wholesale rather than repairing it.
-  const authoredValidation = validatePlan({ ctx, instruction, rawToolCalls: loop.rawToolCalls });
+  const authoredValidation = validatePlan({
+    ctx,
+    instruction,
+    rawToolCalls: loop.rawToolCalls,
+    readResults: Object.fromEntries(loop.readResults),
+  });
   let validation = authoredValidation;
   let rawToolCalls = [...loop.rawToolCalls];
 
@@ -267,7 +272,12 @@ export async function planAgent(
       // invalid one — so validity has to describe the materialized calls, not
       // the discarded proposal. A kept storefront reply is re-checked here
       // rather than inherited.
-      validation = validatePlan({ ctx, instruction, rawToolCalls });
+      validation = validatePlan({
+        ctx,
+        instruction,
+        rawToolCalls,
+        readResults: Object.fromEntries(loop.readResults),
+      });
     }
   }
 

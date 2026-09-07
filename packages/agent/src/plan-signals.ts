@@ -35,7 +35,7 @@ export const PLAN_SIGNAL_MESSAGES: Record<ProducedPlanSignalCode, string> = {
   ungrounded_escalation_reason:
     "The escalation reason claims work that this draft does not perform.",
   ungrounded_customer_reply:
-    "The customer reply claims work that this draft does not perform.",
+    "The customer reply contains a completion claim that is not supported by a preceding action or live store result.",
 }
 
 // Reads that make an unlinked Shopify customer consequential: the plan leaned on

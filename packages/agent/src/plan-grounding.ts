@@ -1,3 +1,13 @@
+import type { BaseAgentContext, SupportContext } from "./agent-context.js";
+import {
+  expectedCustomerRecipient,
+  factTargetsCurrentCustomer,
+  historicalCompletionFacts,
+  proposedCompletionFacts,
+  type CompletionAction,
+  type CompletionFact,
+  type CompletionFactOutcome,
+} from "./completion-facts.js";
 import type { RawToolCall } from "./types.js";
 
 const MUTATION_SUBJECT =
@@ -9,6 +19,8 @@ const MUTATION_VERB_PROGRESSIVE =
 const MUTATION_VERB_BASE =
   "initiate|issue|process|create|start|place|send|apply|approve|arrange|complete|refund|return|cancel|exchange|fulfill?|ship|update|change|edit|open|set up";
 const ANY_MUTATION_VERB = `${MUTATION_VERB}|${MUTATION_VERB_PROGRESSIVE}|${MUTATION_VERB_BASE}`;
+const CLAIM_TARGET_SUFFIX = "(?:\\s+(?:(?:id|number)\\s*)?#?\\d{2,})?";
+const CLAIM_GAP = "(?:[^.!?]|(?<=\\d)\\.(?=\\d)){0,60}?";
 // A second claim in the same sentence is a coordinated verb phrase sharing the
 // subject — "…and opened a return". A prepositional or contrastive phrase is not
 // — "…instead of a refund" names an operation precisely to say it did not
@@ -19,11 +31,11 @@ const CLAIM_CONTINUATION = new RegExp(
 );
 const MUTATION_CLAIM_PATTERNS = [
   new RegExp(
-    `\\b(?:${MUTATION_SUBJECT})\\b[^.!?]{0,40}?\\b(?:has|have|had|was|were)\\s+(?:already\\s+)?been\\s+(?:${MUTATION_VERB})\\b`,
+    `\\b(?:${MUTATION_SUBJECT})\\b${CLAIM_TARGET_SUFFIX}${CLAIM_GAP}\\b(?:has|have|had|was|were)\\s+(?:already\\s+)?been\\s+(?:${MUTATION_VERB})\\b`,
     "i",
   ),
   new RegExp(
-    `\\b(?:i|we)(?:'ve|'d)?\\s+(?:have\\s+|had\\s+)?(?:already\\s+)?(?:${MUTATION_VERB})\\b[^.!?]{0,40}?\\b(?:${MUTATION_SUBJECT})\\b`,
+    `\\b(?:i|we)(?:'ve|'d)?\\s+(?:have\\s+|had\\s+)?(?:already\\s+)?(?:${MUTATION_VERB})\\b${CLAIM_GAP}\\b(?:${MUTATION_SUBJECT})\\b${CLAIM_TARGET_SUFFIX}`,
     "i",
   ),
 ];
@@ -36,26 +48,26 @@ export interface UngroundedPlanClaim {
   text: string;
 }
 
-const SPECIFIC_CLAIM_ACTIONS: readonly [RegExp, ReadonlySet<string>][] = [
+const SPECIFIC_CLAIM_ACTIONS: readonly [RegExp, ReadonlySet<CompletionAction>][] = [
   // Cancelling a paid Shopify order also handles its payment reversal, so a
   // cancellation may ground the refund side effect without a second refund
   // call (which the planner is explicitly forbidden to make).
-  [/\b(?:refunds?|refunded|refunding)\b/i, new Set(["create_refund", "cancel_order"])],
-  [/\b(?:gift cards?|store credit)\b/i, new Set(["create_gift_card", "issue_store_credit"])],
+  [/\b(?:refunds?|refunded|refunding)\b/i, new Set(["refund"])],
+  [/\b(?:gift cards?|store credit)\b/i, new Set(["store_credit"])],
   // Bare "returned" / "returning" frequently describes money going back to
   // a card. Require an RMA noun or a merchandise object before treating it as
   // a product-return operation.
   [
     /\breturns?\b|\b(?:returned|returning)\b[^.!?]{0,24}\b(?:item|product|order|package|purchase|merchandise)\b|\b(?:item|product|order|package|purchase|merchandise)\b[^.!?]{0,24}\breturned\b|\blabels?\b/i,
-    new Set(["create_return", "attach_return_label", "create_exchange"]),
+    new Set(["return"]),
   ],
-  [/\b(?:exchanges?|exchanged|exchanging|replacements?)\b/i, new Set(["create_exchange", "create_shopify_order"])],
-  [/\bcancell?(?:ations?|ed|ing)?\b/i, new Set(["cancel_order"])],
-  [/\baddress(?:es)?\b/i, new Set(["update_shopify_order_address", "update_shopify_customer_info"])],
-  [/\b(?:shipments?|shipped|shipping|fulfilled|fulfilling)\b/i, new Set(["fulfill_order"])],
-  [/\bdiscounts?\b/i, new Set(["issue_discount"])],
+  [/\b(?:exchanges?|exchanged|exchanging|replacements?)\b/i, new Set(["exchange", "order_creation"])],
+  [/\bcancell?(?:ations?|ed|ing)?\b/i, new Set(["cancellation"])],
+  [/\baddress(?:es)?\b/i, new Set(["address_update"])],
+  [/\b(?:shipments?|shipped|shipping|fulfilled|fulfilling)\b/i, new Set(["fulfillment"])],
+  [/\bdiscounts?\b/i, new Set(["discount"])],
 ];
-const GENERIC_ORDER_ACTIONS = new Set(["fulfill_order", "create_shopify_order", "edit_shopify_order"]);
+const GENERIC_ORDER_ACTIONS = new Set<CompletionAction>(["fulfillment", "order_creation", "order_update"]);
 
 // The claim patterns are declared without `g` because claimingSentences tests
 // them, and a global regex there would carry lastIndex between sentences. Clone
@@ -89,30 +101,108 @@ function claimSpans(text: string, patterns: readonly RegExp[]): string[] {
   return [...spans, ...[...text.matchAll(CLAIM_CONTINUATION)].map((match) => match[0])];
 }
 
-function spanIsGrounded(span: string, rawToolCalls: readonly RawToolCall[]): boolean {
+function canonicalAmount(value: string): string | null {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  return `${BigInt(whole)}.${fraction.padEnd(2, "0")}`;
+}
+
+function moneyClaims(span: string): { amount: string; currency?: string }[] {
+  const claims: { amount: string; currency?: string }[] = [];
+  const pattern = /\b([A-Z]{3})\s+(\d+(?:\.\d{1,2})?)\b|([$€£])\s*(\d+(?:\.\d{1,2})?)(?:\s*([A-Z]{3})\b)?|\b(\d+(?:\.\d{1,2})?)\s+([A-Z]{3})\b/g;
+  for (const match of span.matchAll(pattern)) {
+    const amount = canonicalAmount(match[2] ?? match[4] ?? match[6]);
+    if (!amount) continue;
+    const symbolCurrency = match[3] === "€" ? "EUR" : match[3] === "£" ? "GBP" : undefined;
+    claims.push({
+      amount,
+      ...((match[1] ?? match[5] ?? match[7] ?? symbolCurrency)
+        ? { currency: (match[1] ?? match[5] ?? match[7] ?? symbolCurrency)!.toUpperCase() }
+        : {}),
+    });
+  }
+  return claims;
+}
+
+function claimedOrderTargets(span: string): string[] {
+  return [...span.matchAll(/\border(?:\s+(?:id|number))?\s*#?\s*(\d{2,})\b/gi)]
+    .map((match) => match[1]);
+}
+
+function normalizedTarget(value: string): string {
+  return value.trim().replace(/^#/, "").toLowerCase();
+}
+
+function factMatchesDetails(span: string, fact: CompletionFact): boolean {
+  const amounts = moneyClaims(span);
+  const isFinancialFact = fact.action === "refund"
+    || fact.action === "store_credit"
+    || fact.action === "discount";
+  if (isFinancialFact && amounts.length > 0) {
+    const factAmount = fact.amount ? canonicalAmount(fact.amount) : null;
+    if (!factAmount || amounts.some((claim) => claim.amount !== factAmount)) return false;
+    if (amounts.some((claim) => claim.currency && claim.currency !== fact.currency?.toUpperCase())) return false;
+  }
+
+  const orderTargets = claimedOrderTargets(span);
+  if (orderTargets.length > 0 && fact.target?.kind === "order") {
+    const aliases = [fact.target.id, ...(fact.target.aliases ?? [])].map(normalizedTarget);
+    if (orderTargets.some((target) => !aliases.includes(normalizedTarget(target)))) return false;
+  }
+  return true;
+}
+
+function spanIsGrounded(
+  span: string,
+  detailText: string,
+  facts: readonly CompletionFact[],
+  allowedOutcomes: ReadonlySet<CompletionFactOutcome>,
+  ctx?: FactContext,
+): boolean {
+  const usableFacts = facts.filter((fact) => (
+    allowedOutcomes.has(fact.outcome)
+    && factTargetsCurrentCustomer(fact, ctx)
+    && factMatchesDetails(detailText, fact)
+  ));
   // Specific operation cues win over the generic noun “order”. Thus an order
   // edit cannot ground “I refunded the order”, while cancel_order grounds “I
   // canceled the order” even though both spans also contain “order”.
   const specific = SPECIFIC_CLAIM_ACTIONS.filter(([cue]) => cue.test(span));
   if (specific.length > 0) {
-    return specific.every(([, allowed]) => rawToolCalls.some((call) => allowed.has(call.name)));
+    return specific.every(([, allowed]) => usableFacts.some((entry) => allowed.has(entry.action)));
   }
   return /\borders?\b/i.test(span)
-    && rawToolCalls.some((call) => GENERIC_ORDER_ACTIONS.has(call.name));
+    && usableFacts.some((entry) => GENERIC_ORDER_ACTIONS.has(entry.action));
 }
 
 function claimsAreGrounded(
   text: string,
   patterns: readonly RegExp[],
-  rawToolCalls: readonly RawToolCall[],
+  facts: readonly CompletionFact[],
+  allowedOutcomes: ReadonlySet<CompletionFactOutcome>,
+  ctx?: FactContext,
 ): boolean {
-  return claimSpans(text, patterns).every((span) => spanIsGrounded(span, rawToolCalls));
+  return claimSpans(text, patterns).every((span) => spanIsGrounded(
+    span,
+    text,
+    facts,
+    allowedOutcomes,
+    ctx,
+  ));
+}
+
+type FactContext = Pick<BaseAgentContext, "shopify"> & Partial<Pick<SupportContext, "customer" | "recentOrders" | "thread">>;
+
+interface GroundingEvidence {
+  ctx?: FactContext;
+  readResults?: Readonly<Record<string, string>>;
 }
 
 export function detectUngroundedEscalationReasons(
   rawToolCalls: readonly RawToolCall[],
+  evidence: GroundingEvidence = {},
 ): UngroundedPlanClaim[] {
-  return rawToolCalls.flatMap((toolCall) => {
+  return rawToolCalls.flatMap((toolCall, index) => {
     if (toolCall.name !== "escalate_to_human") return [];
     const input = toolCall.input;
     if (!input || typeof input !== "object" || Array.isArray(input)) return [];
@@ -120,32 +210,39 @@ export function detectUngroundedEscalationReasons(
     if (typeof reason !== "string" || !reason.trim()) return [];
     const normalized = reason.replace(/[‘’]/g, "'");
     if (CUSTOMER_ATTRIBUTION.test(normalized)) return [];
-    if (claimsAreGrounded(normalized, MUTATION_CLAIM_PATTERNS, rawToolCalls)) return [];
+    const preceding = rawToolCalls.slice(0, index);
+    const facts = [
+      ...proposedCompletionFacts(preceding, evidence.ctx),
+      ...historicalCompletionFacts(preceding, evidence.readResults),
+    ];
+    if (claimsAreGrounded(normalized, MUTATION_CLAIM_PATTERNS, facts, new Set(["proposed", "success"]), evidence.ctx)) return [];
     return [{ toolCallId: toolCall.id, tool: toolCall.name, text: reason.trim() }];
   });
 }
 
 const REPLY_MUTATION_CLAIM_PATTERNS = [
   new RegExp(
-    `\\bi\\b\\s*(?:'ve|'d)?\\s*(?:have|had)?\\s*(?:just|already)?\\s*(?:${MUTATION_VERB})\\b(?!\\s+you\\b)[^.!?]{0,40}?\\b(?:${MUTATION_SUBJECT})\\b`,
+    `\\b(?:i|we)\\b\\s*(?:'ve|'d)?\\s*(?:have|had)?\\s*(?:just|already)?\\s*(?:${MUTATION_VERB})\\b(?!\\s+you\\b)${CLAIM_GAP}\\b(?:${MUTATION_SUBJECT})\\b${CLAIM_TARGET_SUFFIX}`,
     "i",
   ),
   new RegExp(
-    `\\bi\\b\\s*(?:'m|am)\\s+(?:currently|now|already)?\\s*(?:${MUTATION_VERB_PROGRESSIVE})\\b(?!\\s+you\\b)[^.!?]{0,40}?\\b(?:${MUTATION_SUBJECT})\\b`,
+    `\\b(?:i(?:'m| am)|we(?:'re| are))\\s+(?:currently|now|already)?\\s*(?:${MUTATION_VERB_PROGRESSIVE})\\b(?!\\s+you\\b)${CLAIM_GAP}\\b(?:${MUTATION_SUBJECT})\\b${CLAIM_TARGET_SUFFIX}`,
     "i",
   ),
   new RegExp(
-    `\\bi\\b\\s*(?:'ll|will)\\s+(?:go ahead and|now)?\\s*(?:${MUTATION_VERB_BASE})\\b(?!\\s+you\\b)[^.!?]{0,40}?\\b(?:${MUTATION_SUBJECT})\\b`,
+    `\\b(?:i|we)\\b\\s*(?:'ll|will)\\s+(?:go ahead and|now)?\\s*(?:${MUTATION_VERB_BASE})\\b(?!\\s+you\\b)${CLAIM_GAP}\\b(?:${MUTATION_SUBJECT})\\b${CLAIM_TARGET_SUFFIX}`,
     "i",
   ),
+  MUTATION_CLAIM_PATTERNS[0],
 ];
 const REPLY_TEXT_FIELDS: Record<string, string> = { send_reply: "text", send_email: "body" };
 
 function claimingSentences(text: string): string[] {
   const found: string[] = [];
   for (const line of text.split("\n")) {
-    for (const sentence of line.match(/[^.!?]+[.!?]*\s*/g) ?? []) {
-      const normalized = sentence.replace(/[‘’]/g, "'");
+    const protectedLine = line.replace(/(?<=\d)\.(?=\d)/g, "\u0000");
+    for (const sentence of protectedLine.match(/[^.!?]+[.!?]*\s*/g) ?? []) {
+      const normalized = sentence.replace(/\u0000/g, ".").replace(/[‘’]/g, "'");
       if (CUSTOMER_ATTRIBUTION.test(normalized)) continue;
       if (REPLY_MUTATION_CLAIM_PATTERNS.some((pattern) => pattern.test(normalized))) {
         found.push(normalized.trim());
@@ -157,18 +254,69 @@ function claimingSentences(text: string): string[] {
 
 export function detectUngroundedReplyText(
   rawToolCalls: readonly RawToolCall[],
+  evidence: GroundingEvidence = {},
 ): UngroundedPlanClaim[] {
-  return rawToolCalls.flatMap((toolCall) => {
+  return rawToolCalls.flatMap((toolCall, index) => {
     const field = REPLY_TEXT_FIELDS[toolCall.name];
     if (!field) return [];
     const input = toolCall.input;
     if (!input || typeof input !== "object" || Array.isArray(input)) return [];
     const value = (input as Record<string, unknown>)[field];
     if (typeof value !== "string" || !value.trim()) return [];
-    const found = claimingSentences(value)
-      .filter((sentence) => !claimsAreGrounded(sentence, REPLY_MUTATION_CLAIM_PATTERNS, rawToolCalls));
+    const preceding = rawToolCalls.slice(0, index);
+    const facts = [
+      ...proposedCompletionFacts(preceding, evidence.ctx),
+      ...historicalCompletionFacts(preceding, evidence.readResults),
+    ];
+    const found = unsupportedReplyCompletionClaims(
+      toolCall,
+      facts,
+      evidence.ctx,
+      new Set(["proposed", "success"]),
+    );
     return found.length === 0
       ? []
       : [{ toolCallId: toolCall.id, tool: toolCall.name, text: found.join(" ") }];
   });
+}
+
+export function unsupportedReplyCompletionClaims(
+  toolCall: Pick<RawToolCall, "name" | "input">,
+  facts: readonly CompletionFact[],
+  ctx?: FactContext,
+  allowedOutcomes: ReadonlySet<CompletionFactOutcome> = new Set(["success"]),
+): string[] {
+  const field = REPLY_TEXT_FIELDS[toolCall.name];
+  if (!field) return [];
+  const input = recordInput(toolCall.input);
+  const value = input?.[field];
+  if (typeof value !== "string" || !value.trim()) return [];
+  const claims = claimingSentences(value);
+  if (claims.length === 0) return [];
+
+  if (toolCall.name === "send_email") {
+    const to = typeof input?.to === "string" ? input.to.trim().toLowerCase() : "";
+    const factRecipients = facts
+      .filter((fact) => allowedOutcomes.has(fact.outcome) && fact.target?.kind === "email")
+      .map((fact) => fact.target!.id.trim().toLowerCase());
+    const expected = expectedCustomerRecipient(ctx);
+    const allowedRecipients = factRecipients.length > 0
+      ? factRecipients
+      : expected ? [expected] : [];
+    if (allowedRecipients.length > 0 && !allowedRecipients.includes(to)) return claims;
+  }
+
+  return claims.filter((sentence) => !claimsAreGrounded(
+    sentence,
+    REPLY_MUTATION_CLAIM_PATTERNS,
+    facts,
+    allowedOutcomes,
+    ctx,
+  ));
+}
+
+function recordInput(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

@@ -48,6 +48,7 @@
   },
   "instruction": "Reply to the customer and process their refund request.",
   "expectedPlan": {
+    "mustBeValid": true,
     "mustCallTools": [
       "create_refund",
       "send_reply"
@@ -72,6 +73,9 @@
           "amount": "30.00"
         }
       }
+    ],
+    "replyMustInclude": [
+      "refund"
     ]
   },
   "suite": "extended"

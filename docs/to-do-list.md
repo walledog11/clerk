@@ -81,11 +81,11 @@ provider. **None of these is a code task.**
   composer* and confirm the widget notice disappears. Approving an agent plan cannot
   discharge it — `recordMerchantReply` is merchant-only by design, which was confirmed
   live when `escalatedAt` survived an approved `send_reply`.
-- [ ] **See a grounded `send_reply` in production once.** `groundReplyText` strips
-  first-person-singular mutation claims the plan never contained; watch for a shopper
-  message that makes the model want to attach one. Known residual gap, left in
-  deliberately: a `we`-voiced or passive-voiced fabrication still passes, because
-  matching those would mutilate truthful replies read out of `get_order`.
+- [ ] **See a grounded `send_reply` in production once.** Plan validation rejects
+  unsupported mutation claims before approval, and the send path now requires a matching
+  successful completion fact. Watch one real action/reply pair and confirm its action-journal
+  result and provider operation reference support the copy. Include one truthful historical
+  refund or fulfillment statement grounded by a live order read.
 
 ### Channels and providers
 

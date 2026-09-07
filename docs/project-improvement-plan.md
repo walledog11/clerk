@@ -86,12 +86,12 @@ Done when every channel offered to the pilot cohort has dated acceptance evidenc
 
 Entry points: `packages/agent/src/plan-grounding.ts`, `plan-validation.ts`, `run-execution.ts`, `agent-actions.ts`, `tools/result.ts`, and the dashboard/gateway send paths.
 
-- [ ] Add regressions for unsupported first-person, plural, passive, and coordinated claims, including “We have issued your refund” and “Your refund has been issued.” Include wrong order, amount, currency, recipient, and partial execution cases.
-- [ ] Define a small structured completion-fact contract for supported mutations: action, target, relevant amount/currency, outcome, and execution reference. Reuse the action journal and provider results as the evidence source.
-- [ ] Keep proposed actions distinct from committed outcomes. A plan containing a refund tool is insufficient proof that a refund happened. Replies that depend on a mutation must wait for its result.
+- [x] Add regressions for unsupported first-person, plural, passive, and coordinated claims, including “We have issued your refund” and “Your refund has been issued.” Include wrong order, amount, currency, recipient, and partial execution cases.
+- [x] Define a small structured completion-fact contract for supported mutations: action, target, relevant amount/currency, outcome, and execution reference. Reuse the action journal and provider results as the evidence source.
+- [x] Keep proposed actions distinct from committed outcomes. A plan containing a refund tool is insufficient proof that a refund happened. Replies that depend on a mutation must wait for its result.
 - [ ] Render sensitive completion statements from validated facts where practical, while allowing brand voice in surrounding text. If a generated statement cannot be supported, regenerate within the existing budget or require merchant review. Do not keep expanding regexes as the primary correctness mechanism.
-- [ ] Preserve truthful statements about historical actions returned by live store reads. Treat customer text, old summaries, and unexecuted plans as untrusted claims rather than proof of completion.
-- [ ] Specify the approval contract for post-execution wording: facts may resolve an approved conditional reply, but a changed recipient, new promise, or materially different action requires renewed approval. Known failure and unknown outcome need distinct customer/operator copy.
+- [x] Preserve truthful statements about historical actions returned by live store reads. Treat customer text, old summaries, and unexecuted plans as untrusted claims rather than proof of completion.
+- [x] Specify the approval contract for post-execution wording: facts may resolve an approved conditional reply, but a changed recipient, new promise, or materially different action requires renewed approval. Known failure and unknown outcome need distinct customer/operator copy.
 - [ ] Run targeted model evaluation and the release gate under the [existing evaluation contract](agent-eval-gates.md).
 
 Done when the regression matrix cannot emit a completion claim unsupported by its recorded facts, an uncertain action cannot become a success message, and truthful historical information still works. Finite tests do not prove hallucinations impossible; keep monitoring sampled real outcomes.

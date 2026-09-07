@@ -29,8 +29,9 @@ export function validatePlan(params: {
   ctx: AgentContext;
   instruction: string;
   rawToolCalls: readonly RawToolCall[];
+  readResults?: Readonly<Record<string, string>>;
 }): PlanValidation {
-  const { ctx, instruction, rawToolCalls } = params;
+  const { ctx, instruction, rawToolCalls, readResults } = params;
   const issues: PlanValidationIssue[] = [];
   const seenIds = new Set<string>();
 
@@ -62,13 +63,13 @@ export function validatePlan(params: {
     if (orphanNote) issues.push(issue("orphan_internal_note", orphanNote));
   }
 
-  for (const claim of detectUngroundedEscalationReasons(rawToolCalls)) {
+  for (const claim of detectUngroundedEscalationReasons(rawToolCalls, { ctx, readResults })) {
     issues.push(issue("ungrounded_escalation_reason", {
       id: claim.toolCallId,
       name: claim.tool,
     }));
   }
-  for (const claim of detectUngroundedReplyText(rawToolCalls)) {
+  for (const claim of detectUngroundedReplyText(rawToolCalls, { ctx, readResults })) {
     issues.push(issue("ungrounded_customer_reply", {
       id: claim.toolCallId,
       name: claim.tool,

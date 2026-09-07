@@ -53,3 +53,22 @@ The production database is compatible with both the deployed base revision and t
 The verification is attached to the combined code tree ending at `7dcf7029`. Documentation-only
 evidence changes made afterward do not invalidate the application checks. Rerun the affected gate
 if application code changes before deployment.
+
+## Pre-deployment gate and environment review — 2026-09-07T22:09:11Z
+
+- The standalone integration gate passed before the A4 work: 1,642 tests passed across agent,
+  gateway, and dashboard; three live/optional cases were skipped by design.
+- The Railway production gateway environment passes its launch contract. It still reports the
+  existing warning that `REDIS_URL` is not configured with `rediss://` TLS.
+- A metadata-only Vercel production environment inventory found the legacy `PRICE_ID`, but not
+  the required `PRICE_ID_STARTER` and `PRICE_ID_PRO` names. No secret values were downloaded.
+  The dashboard launch contract requires both names, so push/deployment remains paused until the
+  Stripe price mapping is deliberately provisioned; inventing those business identifiers would
+  be unsafe.
+- The application tree changed after the earlier `7dcf7029` verification to implement A4
+  completion facts and pre-send outcome grounding. `npm run verify:pr` was rerun on that tree and
+  passed static checks, all workspace unit suites, node tests, 12 smoke E2E tests, the full
+  coverage/integration matrix and critical thresholds, and all seven production builds.
+- The paid model-evaluation step has not run. The repository requires an explicit dollar and
+  model-call ceiling for it; deterministic completion-grounding regressions and the no-cost
+  release gate are complete.
