@@ -52,8 +52,8 @@ async function openBillingPortal() {
 }
 
 const PLANS = [
-  { tier: "starter", name: "Starter", price: "$19", blurb: "Unified inbox and AI drafts on every reply." },
-  { tier: "pro", name: "Pro", price: "$49", blurb: "Adds Shopify actions and approvals from your phone." },
+  { tier: "starter", name: "Starter", price: "$19", blurb: "500 customer conversations a month and one seat." },
+  { tier: "pro", name: "Pro", price: "$49", blurb: "For higher conversation volume and a second seat." },
 ] as const
 
 const settingsPrimaryButtonClass =

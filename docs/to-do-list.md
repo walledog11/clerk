@@ -173,6 +173,12 @@ closing verification passes.
 Application code, not started. An entry names the surface it lands on and what closing
 it costs — not a design.
 
+- [ ] **Capped SocialAPI launch bridge.** Use the provider only for an allowlisted early
+  cohort while Advanced Access is pending; do not replace or pause the direct Meta path.
+  Implement, certify, cap, monitor and retire it through the
+  [launch bridge plan](socialapi-launch-bridge-plan.md). Freeze new bridge connections at
+  the documented ceiling instead of upgrading it into the default high-traffic path.
+
 - [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
   thread's messages, Shopify orders, KB articles and merchant preferences. It counts the
   customer's other open threads and never reads one. The dashboard already shows what the

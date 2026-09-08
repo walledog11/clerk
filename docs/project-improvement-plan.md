@@ -64,7 +64,7 @@ Entry points: [existing audit fixes](code-audit-fixes.md), [deployment runbook](
 - [x] Review the already implemented policy forwarding, lease checks, unknown outcomes, action journal, inbound outbox, recovery pagination, media handling, and shared planning budgets. Preserve them and close only remaining defects.
 - [x] Verify that the required outbox schema exists before deploying dependent code. Do not reapply or roll back the migration based solely on the document's age.
 - [ ] Run the canonical checks on the selected candidate. Deploy compatible dashboard and gateway versions through the existing release procedure, then perform isolated acceptance checks.
-- [ ] Rehearse crash-after-persistence, queue admission failure, duplicate delivery, lost execution lease, and ambiguous provider response. Confirm accepted work remains recoverable and ambiguous actions are not blindly retried.
+- [x] Rehearse crash-after-persistence, queue admission failure, duplicate delivery, lost execution lease, and ambiguous provider response. Confirm accepted work remains recoverable and ambiguous actions are not blindly retried.
 
 Done when both applications run the recorded candidate, the database is compatible, and recovery evidence is attached to that release. Keep an application rollback path compatible with the additive schema; do not promise exactly-once external delivery.
 
@@ -73,6 +73,7 @@ Done when both applications run the recorded candidate, the database is compatib
 Use [external services work](phase-6-external-services.md), the [Gmail verification packet](production/google-gmail-verification-packet.md), and [data-deletion procedures](production/data-deletion.md).
 
 - [ ] Confirm whether Instagram Advanced Access is still pending. Complete the review package if necessary and prove a non-role merchant's connect → inbound DM → approve → received reply → disconnect/reconnect cycle. Mark restricted availability accurately until this passes.
+- [ ] While Advanced Access is pending, execute the capped [SocialAPI launch bridge plan](socialapi-launch-bridge-plan.md) for selected external merchants. Keep direct Meta as the strategic transport, enforce the bridge ceiling, and require the documented live/exit gates rather than treating middleware connectivity as Instagram readiness.
 - [ ] Resolve the documented Shopify app-secret exposure. Rotate through the provider and both applications in a coordinated window, validate OAuth and webhook verification afterward, and keep secret values out of evidence artifacts. If already rotated, record that evidence instead.
 - [ ] Read installed Shopify scopes from Shopify, test a real merchant install, and explain reauthorization requirements in the UI. Verify missing scopes produce an actionable recovery path without silently disabling advertised work.
 - [ ] Complete the applicable Gmail grant/reconnect and verification work. Keep forwarding available where suitable, with its own plain-text, attachment, threading, and bounce acceptance checks. Gmail completion must not be used to claim Instagram readiness.
@@ -122,7 +123,7 @@ Entry points: `packages/agent/src/spend.ts`, `packages/db/llm-spend.ts`, `packag
 - [ ] Replace “spend read failed → zero” with an explicit unavailable-budget outcome. Pause new paid model work on accounting failure, retain recoverable inbound work, and explain manual fallback. Do not silently report a successful zero-spend read.
 - [ ] Reserve a conservative bounded allowance before provider calls, reconcile actual usage afterward, and prevent concurrent runs from spending the same remaining allowance. Use a durable idempotent record or extend an appropriate existing record; avoid a second independent ledger.
 - [ ] Handle timeout/process-loss reservations conservatively. Release only amounts known to be unused; reconcile uncertain usage. A failed usage write must remain recoverable and must not permit repeated unaccounted calls.
-- [ ] Use a shared model-price source for production and evaluations, or enforce parity if packaging requires separate tables. Unknown models must not be silently underpriced.
+- [x] Use a shared model-price source for production and evaluations, or enforce parity if packaging requires separate tables. Unknown models must not be silently underpriced.
 - [ ] Show usage, remaining allowance, reset time, and reason for any pause. Warn before exhaustion and offer a clear next action. Restore queued work at a bounded rate after recovery or reset.
 - [ ] Verify concurrent dashboard/gateway calls, database outages, duplicate usage reports, unknown models, exhausted allowances, and period rollover.
 

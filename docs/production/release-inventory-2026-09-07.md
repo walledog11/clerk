@@ -72,3 +72,41 @@ if application code changes before deployment.
 - The paid model-evaluation step has not run. The repository requires an explicit dollar and
   model-call ceiling for it; deterministic completion-grounding regressions and the no-cost
   release gate are complete.
+
+## Continuation audit — 2026-09-07
+
+- `master` is four revisions ahead of `origin/master` and ends at `18f48611`. The application
+  candidate is still absent from GitHub and production. Pushing `master` may trigger connected
+  Vercel and Railway deploys, so the environment gate must be cleared first.
+- A fresh metadata-only `vercel env ls production --json` again found `PRICE_ID` but no
+  `PRICE_ID_STARTER` or `PRICE_ID_PRO`. No encrypted value was read.
+- The locally authenticated Stripe CLI is in test mode. It lists two products named `Starter`
+  with no prices and one active $39/month price attached to a product named `Clerk Pro`. That
+  price is not a valid substitute for either Shopkeeper tier. Creating or mapping prices remains
+  blocked on the intended pilot offer and confirmation that the correct Stripe account/mode is
+  selected.
+- Release-mode eval preflight estimates $0.6598 and 87 model calls. A ceiling of $0.75 and 100
+  calls passes preflight and allocates $0.70/94 calls to the dashboard suite and $0.05/6 calls to
+  the gateway suite. The paid run still requires explicit approval of both ceilings.
+- GitHub CLI authentication for `walledog11` is invalid. Reauthentication is required before the
+  exact-SHA `evals.yml` workflow can be dispatched and its evidence retrieved.
+- Anthropic's current Sonnet 5 page says the introductory $2/MTok input and $10/MTok output price
+  was made permanent. Production spend accounting still carried the earlier September 1
+  reversion assumption and charged $3/$15, while the paid-eval path already used $2/$10. The
+  production table now uses the current price, both tables are dated 2026-09-07, and a root test
+  enforces production/eval parity for all priced models. Both accounting paths reject unknown
+  models instead of silently applying a fallback. Targeted agent tests, the gateway spend
+  integration test, both package typechecks, and the node budget/parity tests pass.
+- The fresh canonical candidate verification now passes every no-cost stage: static checks; all
+  workspace unit suites and 68 node tests; 12 smoke E2E tests; the coverage/integration matrix and
+  every critical coverage threshold; and all seven production builds. E2E and the dashboard build
+  were rerun with local process/socket access after their sandboxed attempts were denied PostgreSQL
+  and Turbopack worker sockets respectively. These were infrastructure restrictions; both canonical
+  reruns passed without code changes.
+- A focused local A2 recovery rehearsal passed 86 tests across the gateway and agent. The selected
+  cases persist recovery state before a failed queue admission, recover both by provider redelivery
+  and by the database sweep, deduplicate inbound/provider retries, stop later mutations after lease
+  loss, refuse a mutation whose action attempt cannot be journaled, and reconcile ambiguous Shopify
+  order creation by its persisted operation key without blindly issuing another create. Outcomes
+  that cannot be confirmed remain `unknown`. This closes the local failure-boundary rehearsal; it
+  does not replace post-deployment isolated acceptance checks.

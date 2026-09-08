@@ -34,8 +34,10 @@ export {
 export {
   DEFAULT_DAILY_LLM_SPEND_CAP_USD,
   LLM_PRICING,
+  LLM_PRICING_AS_OF,
   NANO_DOLLARS_PER_USD,
   SpendCapError,
+  UnknownLlmModelPriceError,
   isSpendCapError,
   nanoDollarsToUsd,
   usageToNanoDollars,

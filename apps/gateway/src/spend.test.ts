@@ -66,8 +66,15 @@ describe('llm spend', () => {
 describe('usageToNanoDollars cache-write TTL pricing', () => {
   const SONNET = 'claude-sonnet-5';
 
+  it('fails closed when the model has no committed price', () => {
+    expect(() => usageToNanoDollars(
+      { inputTokens: 1, outputTokens: 1 },
+      'claude-unpriced-future-model',
+    )).toThrow('No committed API price');
+  });
+
   it('prices 1h writes at 2x input and 5m writes at 1.25x', () => {
-    // Sonnet 5 input is $3.00/MTok => 3000 nano/token; 1h = 6000, 5m = 3750.
+    // Sonnet 5 input is $2.00/MTok => 2000 nano/token; 1h = 4000, 5m = 2500.
     expect(
       usageToNanoDollars(
         {
@@ -78,7 +85,7 @@ describe('usageToNanoDollars cache-write TTL pricing', () => {
         },
         SONNET,
       ),
-    ).toBe(600 * 6000 + 400 * 3750);
+    ).toBe(600 * 4000 + 400 * 2500);
   });
 
   it('charges the whole total at the 1h rate when no breakdown is present', () => {
@@ -88,7 +95,7 @@ describe('usageToNanoDollars cache-write TTL pricing', () => {
         { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 1000 },
         SONNET,
       ),
-    ).toBe(1000 * 6000);
+    ).toBe(1000 * 4000);
   });
 
   it('never lets a bad breakdown exceed the reported total', () => {
@@ -102,7 +109,7 @@ describe('usageToNanoDollars cache-write TTL pricing', () => {
         },
         SONNET,
       ),
-    ).toBe(100 * 6000);
+    ).toBe(100 * 4000);
   });
 
   it('prices a real split-prompt cold write correctly', () => {
@@ -118,12 +125,12 @@ describe('usageToNanoDollars cache-write TTL pricing', () => {
       },
       SONNET,
     );
-    const wrongFlat1_25 = 83 * 3000 + 8 * 15000 + 11890 * 3750;
+    const wrongFlat1_25 = 83 * 2000 + 8 * 10000 + 11890 * 2500;
 
-    expect(cold).toBe(83 * 3000 + 8 * 15000 + 11848 * 6000 + 42 * 3750);
+    expect(cold).toBe(83 * 2000 + 8 * 10000 + 11848 * 4000 + 42 * 2500);
     // The old flat 1.25x rate undercounted this call by 0.75x input on every
-    // 1h token — about 2.7 cents.
-    expect(cold - wrongFlat1_25).toBe(11848 * 2250);
+    // 1h token — about 1.8 cents.
+    expect(cold - wrongFlat1_25).toBe(11848 * 1500);
   });
 
   it('adds nothing on a warm call, which writes no 1h tokens', () => {
@@ -134,7 +141,7 @@ describe('usageToNanoDollars cache-write TTL pricing', () => {
       cacheCreation1hInputTokens: 0,
       cacheReadInputTokens: 11848,
     };
-    const flat1_25 = 83 * 3000 + 8 * 15000 + 43 * 3750 + 11848 * 300;
+    const flat1_25 = 83 * 2000 + 8 * 10000 + 43 * 2500 + 11848 * 200;
 
     expect(usageToNanoDollars(warm, SONNET)).toBe(flat1_25);
   });

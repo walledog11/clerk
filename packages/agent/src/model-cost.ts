@@ -1,4 +1,4 @@
-export const MODEL_PRICING_AS_OF = "2026-08-22"
+export const MODEL_PRICING_AS_OF = "2026-09-07"
 
 interface ModelPricePerMillionTokens {
   input: number
@@ -16,8 +16,9 @@ export interface BillableModelUsage {
   cacheReadInputTokens: number
 }
 
-// Standard global Claude API list prices. Keep aliases/pins explicit so a model
-// change cannot silently bypass or under-price a paid eval budget.
+// Standard global Claude API list prices. Anthropic made Sonnet 5's introductory
+// $2/$10 price permanent. Keep aliases/pins explicit so a model change cannot
+// silently bypass or under-price a paid eval budget.
 const MODEL_PRICES: Record<string, ModelPricePerMillionTokens> = {
   "claude-sonnet-5": { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.2 },
   "claude-sonnet-4-6": { input: 3, output: 15, cacheWrite5m: 3.75, cacheWrite1h: 6, cacheRead: 0.3 },

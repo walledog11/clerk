@@ -4,6 +4,7 @@
 // All amounts are tracked in nano-dollars (1 USD = 1_000_000_000) so token
 // pricing stays integer-clean and the running total stays a whole number.
 export const NANO_DOLLARS_PER_USD = 1_000_000_000;
+export const LLM_PRICING_AS_OF = '2026-09-07';
 
 export interface LlmTokenPriceNanoUsd {
   inputPerToken: number;
@@ -18,8 +19,8 @@ export interface LlmTokenPriceNanoUsd {
 }
 
 // Anthropic public pricing. Keep model IDs in sync with apps/*/constants.
-// If a new model is used and not listed here, usageToNanoDollars falls back
-// to FALLBACK_PRICE so we err on the side of overcounting, not undercounting.
+// Unknown models fail closed so a model change cannot silently bypass or
+// under-price the production spend backstop.
 export const LLM_PRICING: Record<string, LlmTokenPriceNanoUsd> = {
   "claude-haiku-4-5-20251001": {
     inputPerToken: 1000,        // $1.00 / MTok
@@ -30,8 +31,7 @@ export const LLM_PRICING: Record<string, LlmTokenPriceNanoUsd> = {
   },
   // The agent eval judge (apps/dashboard/src/lib/agent/__evals__/judge.ts).
   // Sonnet-tier standard rate, same $3/$15 as Sonnet 5. Never reached by
-  // production traffic — priced so eval runs report real cost instead of
-  // falling through to FALLBACK_PRICE.
+  // production traffic — priced so eval runs report real cost.
   "claude-sonnet-4-6": {
     inputPerToken: 3000,        // $3.00 / MTok
     outputPerToken: 15000,      // $15.00 / MTok
@@ -39,26 +39,28 @@ export const LLM_PRICING: Record<string, LlmTokenPriceNanoUsd> = {
     cacheWrite1hPerToken: 6000, // $6.00 / MTok
     cacheReadPerToken: 300,     // $0.30 / MTok
   },
-  // Sonnet 5 launch promo is $2/$10 through 2026-08-31, reverting to standard
-  // $3/$15 after. We pin the standard rate: this backstop must never undercount,
-  // and $3/$15 overcounts slightly during the promo (safe) then becomes exact —
-  // no Sept-1 code change needed.
+  // Anthropic made Sonnet 5's introductory $2/$10 price permanent. Keep this
+  // synchronized with @shopkeeper/agent/model-cost; the root parity test fails
+  // if production and paid-eval accounting diverge.
   "claude-sonnet-5": {
-    inputPerToken: 3000,        // $3.00 / MTok
-    outputPerToken: 15000,      // $15.00 / MTok
-    cacheWrite5mPerToken: 3750, // $3.75 / MTok
-    cacheWrite1hPerToken: 6000, // $6.00 / MTok
-    cacheReadPerToken: 300,     // $0.30 / MTok
+    inputPerToken: 2000,        // $2.00 / MTok
+    outputPerToken: 10000,      // $10.00 / MTok
+    cacheWrite5mPerToken: 2500, // $2.50 / MTok
+    cacheWrite1hPerToken: 4000, // $4.00 / MTok
+    cacheReadPerToken: 200,     // $0.20 / MTok
   },
 };
 
-const FALLBACK_PRICE: LlmTokenPriceNanoUsd = {
-  inputPerToken: 5000,
-  outputPerToken: 25000,
-  cacheWrite5mPerToken: 6250,
-  cacheWrite1hPerToken: 10000,
-  cacheReadPerToken: 500,
-};
+export class UnknownLlmModelPriceError extends Error {
+  readonly code = 'unknown_llm_model_price' as const;
+  readonly model: string;
+
+  constructor(model: string) {
+    super(`No committed API price for model ${JSON.stringify(model)} (pricing as of ${LLM_PRICING_AS_OF})`);
+    this.name = 'UnknownLlmModelPriceError';
+    this.model = model;
+  }
+}
 
 export interface LlmUsageTokens {
   inputTokens: number;
@@ -71,7 +73,8 @@ export interface LlmUsageTokens {
 }
 
 export function usageToNanoDollars(usage: LlmUsageTokens, model: string): number {
-  const price = LLM_PRICING[model] ?? FALLBACK_PRICE;
+  const price = LLM_PRICING[model];
+  if (!price) throw new UnknownLlmModelPriceError(model);
   const cacheWrites = usage.cacheCreationInputTokens ?? 0;
   // Without a breakdown, charge every cache write at the dearer 1-hour rate.
   // Splitting the difference would undercount whenever the 1-hour block missed,

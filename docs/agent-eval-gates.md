@@ -52,8 +52,10 @@ one in-flight response can cross the dollar boundary; the independent call cap
 is the strict provider-call backstop.
 
 The pricing table is dated and must be updated alongside any model pin or API
-pricing change. As of 2026-08-22 it uses standard global Claude API pricing for
-Sonnet 5, Sonnet 4.6, and Haiku 4.5.
+pricing change. As of 2026-09-07 it uses standard global Claude API pricing for
+Sonnet 5, Sonnet 4.6, and Haiku 4.5. A root node test compares the eval prices
+with production spend accounting for representative usage so the two paths
+cannot silently diverge. Both paths reject models without a committed price.
 
 ## Reuse and evidence
 
