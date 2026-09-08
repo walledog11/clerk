@@ -75,9 +75,9 @@ if application code changes before deployment.
 
 ## Continuation audit — 2026-09-07
 
-- `master` is four revisions ahead of `origin/master` and ends at `18f48611`. The application
-  candidate is still absent from GitHub and production. Pushing `master` may trigger connected
-  Vercel and Railway deploys, so the environment gate must be cleared first.
+- The exact verified application candidate is `7a3cd0b4`, the fifth local revision after
+  `origin/master`. It is still absent from GitHub and production. Pushing `master` may trigger
+  connected Vercel and Railway deploys, so the environment gate must be cleared first.
 - A fresh metadata-only `vercel env ls production --json` again found `PRICE_ID` but no
   `PRICE_ID_STARTER` or `PRICE_ID_PRO`. No encrypted value was read.
 - The locally authenticated Stripe CLI is in test mode. It lists two products named `Starter`
@@ -97,12 +97,10 @@ if application code changes before deployment.
   enforces production/eval parity for all priced models. Both accounting paths reject unknown
   models instead of silently applying a fallback. Targeted agent tests, the gateway spend
   integration test, both package typechecks, and the node budget/parity tests pass.
-- The fresh canonical candidate verification now passes every no-cost stage: static checks; all
-  workspace unit suites and 68 node tests; 12 smoke E2E tests; the coverage/integration matrix and
-  every critical coverage threshold; and all seven production builds. E2E and the dashboard build
-  were rerun with local process/socket access after their sandboxed attempts were denied PostgreSQL
-  and Turbopack worker sockets respectively. These were infrastructure restrictions; both canonical
-  reruns passed without code changes.
+- The exact `7a3cd0b4` candidate passes the complete no-cost canonical gate in one run: static
+  checks; all workspace unit suites and 69 node tests; 12 smoke E2E tests; the coverage/integration
+  matrix and every critical coverage threshold; and all seven production builds. The run used local
+  process/socket access required by PostgreSQL and Turbopack workers.
 - A focused local A2 recovery rehearsal passed 86 tests across the gateway and agent. The selected
   cases persist recovery state before a failed queue admission, recover both by provider redelivery
   and by the database sweep, deduplicate inbound/provider retries, stop later mutations after lease
