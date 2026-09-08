@@ -81,15 +81,35 @@ if application code changes before deployment.
 - A fresh metadata-only `vercel env ls production --json` again found `PRICE_ID` but no
   `PRICE_ID_STARTER` or `PRICE_ID_PRO`. No encrypted value was read.
 - The locally authenticated Stripe CLI is in test mode. It lists two products named `Starter`
-  with no prices and one active $39/month price attached to a product named `Clerk Pro`. That
-  price is not a valid substitute for either Shopkeeper tier. Creating or mapping prices remains
-  blocked on the intended pilot offer and confirmation that the correct Stripe account/mode is
-  selected.
-- Release-mode eval preflight estimates $0.6598 and 87 model calls. A ceiling of $0.75 and 100
-  calls passes preflight and allocates $0.70/94 calls to the dashboard suite and $0.05/6 calls to
-  the gateway suite. The paid run still requires explicit approval of both ceilings.
-- GitHub CLI authentication for `walledog11` is invalid. Reauthentication is required before the
-  exact-SHA `evals.yml` workflow can be dispatched and its evidence retrieved.
+  with no prices and one active $39/month price attached to a product named `Clerk Pro`. The launch
+  owner explicitly deferred Stripe price creation, mapping, and paid-checkout rollout for the near
+  future. Do not use that unrelated $39 price or treat Stripe pricing as a current release task.
+- The launch owner approved one release-mode eval invocation with a $0.75/100-call ceiling. On exact
+  commit `c8a5b3c2`, all 45 dashboard fixtures reached before the dashboard allocation ended passed;
+  the runner then stopped safely at $0.6247/94 calls, leaving three fixtures unexecuted. The separate
+  gateway hard case passed within its $0.05/6-call allocation.
+- A separately approved $0.05/6-call targeted completion ran only those three fixtures. The first two
+  passed. The final fixture's in-flight response took measured spend to $0.0520 at 5/6 calls, after
+  which the budget guard rejected the run and made no further call. This is the documented residual
+  overshoot of one response, not an automatic rerun. The exact-commit cache now contains 47 passing
+  dashboard results; `tier-watch-refund-draft-only` remains without an accepted result.
+- The two budget stops exposed underestimation in preflight rather than a model-quality failure.
+  A third, separately approved $0.03/3-call invocation then ran only
+  `tier-watch-refund-draft-only`; it used all three calls and the guard stopped it before a fourth,
+  leaving no accepted result. No retry was automatic. Release estimates now reserve 2.25 calls per
+  dashboard fixture. Targeted estimates reserve the planner's 20-call mechanical bound (two possible
+  10-iteration attempts), plus separate execution and judge bounds when a fixture uses them, and use
+  the greater of two-times baseline cost or an observed cold-start floor plus 20% contingency.
+  Regression tests prove that all three exhausted ceilings are rejected before provider calls.
+- The launch owner approved one final targeted invocation for `tier-watch-refund-draft-only` with a
+  $0.10/20-call ceiling. On exact commit `c8a5b3c2`, it passed 1/1 in five planner calls, spending
+  $0.0460; no judge or execution call was needed, and no retry ran. This supplies passing behavior
+  evidence for all 48 dashboard core fixtures on the exact candidate, while the gateway hard case
+  also passed. The original release-mode invocation remains a budget failure under the strict
+  single-invocation release semantics, so the A4 release-gate item stays open and no further paid run
+  is planned. The isolated result also raised targeted preflight's dollar estimate to $0.0552/20 calls.
+- GitHub CLI authentication for `walledog11` is valid in the host keychain with `repo` and `workflow`
+  scopes. Sandboxed checks without keychain access can still report the old invalid credential.
 - Anthropic's current Sonnet 5 page says the introductory $2/MTok input and $10/MTok output price
   was made permanent. Production spend accounting still carried the earlier September 1
   reversion assumption and charged $3/$15, while the paid-eval path already used $2/$10. The

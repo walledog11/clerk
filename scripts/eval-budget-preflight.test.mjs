@@ -20,6 +20,110 @@ test('release budget reserves the bounded gateway cost without starving dashboar
     result.stdout,
     /allocations dashboard=\$0\.7000\/114calls gateway=\$0\.0500\/6calls/,
   );
+  assert.match(result.stdout, /calls=111\/120/);
+});
+
+test('release preflight rejects the call ceiling exhausted by the observed suite', () => {
+  const result = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'release',
+    '--repeats', '1',
+    '--judges', 'off',
+    '--max-usd', '0.75',
+    '--max-calls', '100',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Estimated 111 calls exceeds the approved 100-call ceiling/);
+});
+
+test('targeted preflight accounts for isolated cold-cache cost and planner call bounds', () => {
+  const threeFixtures = [
+    'tier-trusted-refund-over-cap',
+    'tier-trusted-refund-under-cap',
+    'tier-watch-refund-draft-only',
+  ].join(',');
+  const undersized = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'targeted',
+    '--fixtures', threeFixtures,
+    '--repeats', '1',
+    '--judges', 'off',
+    '--max-usd', '0.05',
+    '--max-calls', '6',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  assert.notEqual(undersized.status, 0);
+  assert.match(undersized.stderr, /exceeds the approved \$0\.05 ceiling/);
+
+  const exhausted = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'targeted',
+    '--fixtures', 'tier-watch-refund-draft-only',
+    '--repeats', '1',
+    '--judges', 'off',
+    '--max-usd', '0.03',
+    '--max-calls', '3',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  assert.notEqual(exhausted.status, 0);
+  assert.match(exhausted.stderr, /Estimated \$0\.06 exceeds the approved \$0\.03 ceiling/);
+
+  const callExhausted = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'targeted',
+    '--fixtures', 'tier-watch-refund-draft-only',
+    '--repeats', '1',
+    '--judges', 'off',
+    '--max-usd', '0.10',
+    '--max-calls', '3',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  assert.notEqual(callExhausted.status, 0);
+  assert.match(callExhausted.stderr, /Estimated 20 calls exceeds the approved 3-call ceiling/);
+
+  const bounded = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'targeted',
+    '--fixtures', 'tier-watch-refund-draft-only',
+    '--repeats', '1',
+    '--judges', 'off',
+    '--max-usd', '0.10',
+    '--max-calls', '20',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  assert.equal(bounded.status, 0, bounded.stderr);
+  assert.match(bounded.stdout, /estimate=\$0\.0552\/0\.10 calls=20\/20/);
+  assert.match(bounded.stdout, /allocations dashboard=\$0\.1000\/20calls gateway=\$0\.0000\/0calls/);
+});
+
+test('targeted call bound includes execution and a gated judge', () => {
+  const result = spawnSync(process.execPath, [
+    'scripts/eval-budget-preflight.mjs',
+    '--mode', 'targeted',
+    '--fixtures', 'escalate-ambiguous-customer',
+    '--repeats', '1',
+    '--judges', 'on',
+    '--max-usd', '1.00',
+    '--max-calls', '30',
+  ], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Estimated 31 calls exceeds the approved 30-call ceiling/);
 });
 
 // Run 33120836618 authorised 700 calls, the gateway was handed a hardcoded 24,

@@ -20,7 +20,7 @@ Local model eval commands enforce the same contract. For example, a named
 fixture run must include both ceilings:
 
 ```sh
-EVAL_MAX_USD=0.10 EVAL_MAX_MODEL_CALLS=8 EVAL_FIXTURE=fixture-id npm run test:evals:fixture -w apps/dashboard
+EVAL_MAX_USD=0.10 EVAL_MAX_MODEL_CALLS=20 EVAL_FIXTURE=fixture-id npm run test:evals:fixture -w apps/dashboard
 ```
 
 ## Release semantics
@@ -41,7 +41,14 @@ automatic retry trigger.
 three-repeat usage baseline, adds contingency, and refuses a dispatch whose
 estimate exceeds either caller-approved ceiling. It divides the total ceiling
 between dashboard and gateway so the two concurrent jobs cannot each spend the
-full authorization.
+full authorization. Release call estimates reserve 2.25 calls per dashboard
+fixture, based on the 2026-09-07 observed run. A targeted fixture instead
+reserves the planner's mechanical bound: 10 calls for the narrowed attempt and
+10 for its possible full-registry retry. Fixtures that exercise execution add
+another 10 calls, and judged fixtures add one. Targeted dollar estimates use
+the greater of two-times baseline cost or the observed isolated cold-start cost
+plus 20% contingency because a small selection receives less benefit from
+prompt-cache reuse than the aggregate baseline.
 
 Every model call is checked against both `EVAL_MAX_USD` and
 `EVAL_MAX_MODEL_CALLS`. Usage is priced from the committed table in

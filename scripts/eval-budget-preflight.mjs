@@ -92,12 +92,22 @@ const judgeCostPerRun = judgedBaselineRuns > 0 && models['claude-sonnet-4-6']
   : 0;
 
 // The estimate is evidence-based and intentionally padded; maxUsd/maxCalls are
-// the actual cutoffs. Confirmation retries are exceptional and consume only the
-// remaining caller-approved headroom.
-const dashboardEstimate = (
+// the actual cutoffs. Targeted runs pay cold-cache cost on a much smaller sample,
+// so the aggregate warm baseline needs more headroom there. The 2026-09-07
+// three-fixture completion estimated $0.0380 with 1.2x padding but crossed its
+// $0.05 ceiling at $0.0520. Two-times padding would have refused that ceiling.
+// The subsequent isolated fixture cost $0.0460, above even its 2x-baseline
+// estimate, so targeted work also carries that observed cold-start cost plus
+// 20% contingency for every requested repeat.
+const dashboardUsdContingency = mode === 'targeted' ? 2 : 1.2;
+const baselineDashboardEstimate = (
   fixtures.length * repeats * agentCostPerRun
   + judgedFixtures.length * repeats * judgeCostPerRun
-) * 1.2;
+) * dashboardUsdContingency;
+const TARGETED_COLD_START_USD_PER_REPEAT = 0.046 * 1.2;
+const dashboardEstimate = mode === 'targeted'
+  ? Math.max(baselineDashboardEstimate, TARGETED_COLD_START_USD_PER_REPEAT * repeats)
+  : baselineDashboardEstimate;
 // The gateway suite is the five `order-ops.eval.test.ts` fixtures at ~2 model
 // calls each, and `drift`/`baseline` force `repeats=3`. Both gateway terms were
 // once constants sized for a single repeat, so a baseline allocated 24 calls
@@ -114,7 +124,24 @@ const gatewayCallEstimate = mode === 'targeted'
     : GATEWAY_FIXTURES * GATEWAY_CALLS_PER_RUN * repeats;
 const gatewayEstimate = mode === 'targeted' ? 0 : mode === 'release' ? 0.03 : 0.05 * repeats;
 const estimatedUsd = dashboardEstimate + gatewayEstimate;
-const estimatedCalls = Math.ceil(fixtures.length * repeats * 1.75) + gatewayCallEstimate;
+// Aggregate release/baseline runs can use observed average usage because dozens
+// of fixtures share one ceiling. A small targeted run cannot: one planner may
+// consume all 10 configured iterations, then retry once with the full registry.
+// Reserve that mechanical 20-call planning bound per fixture. Fixtures that
+// verify execution may then run a separate 10-iteration agent loop, and a
+// rubric judge makes one additional call.
+const AGENT_MAX_ITERATIONS = 10;
+const RELEASE_DASHBOARD_CALLS_PER_RUN = 2.25;
+const targetedCallEstimate = fixtures.reduce((total, fixture) => (
+  total
+  + AGENT_MAX_ITERATIONS * 2
+  + (fixture.expectedPlan?.expectedAgentActions ? AGENT_MAX_ITERATIONS : 0)
+  + (judgedFixtures.includes(fixture) ? 1 : 0)
+), 0) * repeats;
+const dashboardCallEstimate = mode === 'targeted'
+  ? targetedCallEstimate
+  : Math.ceil(fixtures.length * repeats * RELEASE_DASHBOARD_CALLS_PER_RUN);
+const estimatedCalls = dashboardCallEstimate + gatewayCallEstimate;
 
 if (estimatedUsd > maxUsd) {
   throw new Error(`Estimated $${estimatedUsd.toFixed(2)} exceeds the approved $${maxUsd.toFixed(2)} ceiling`);

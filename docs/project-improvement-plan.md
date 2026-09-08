@@ -93,7 +93,7 @@ Entry points: `packages/agent/src/plan-grounding.ts`, `plan-validation.ts`, `run
 - [ ] Render sensitive completion statements from validated facts where practical, while allowing brand voice in surrounding text. If a generated statement cannot be supported, regenerate within the existing budget or require merchant review. Do not keep expanding regexes as the primary correctness mechanism.
 - [x] Preserve truthful statements about historical actions returned by live store reads. Treat customer text, old summaries, and unexecuted plans as untrusted claims rather than proof of completion.
 - [x] Specify the approval contract for post-execution wording: facts may resolve an approved conditional reply, but a changed recipient, new promise, or materially different action requires renewed approval. Known failure and unknown outcome need distinct customer/operator copy.
-- [ ] Run targeted model evaluation and the release gate under the [existing evaluation contract](agent-eval-gates.md).
+- [ ] Run targeted model evaluation and the release gate under the [existing evaluation contract](agent-eval-gates.md). Exact candidate `c8a5b3c2` has passing behavior evidence for all 48 dashboard core fixtures and the gateway hard case; the original release invocation exhausted its budget, so strict single-invocation certification remains open. The owner requested no further paid run after the final targeted pass.
 
 Done when the regression matrix cannot emit a completion claim unsupported by its recorded facts, an uncertain action cannot become a success message, and truthful historical information still works. Finite tests do not prove hallucinations impossible; keep monitoring sampled real outcomes.
 
@@ -102,6 +102,10 @@ Done when the regression matrix cannot emit a completion claim unsupported by it
 ### B1. Replace the unlimited promise with a defensible offer
 
 Entry points: `apps/dashboard/src/app/(marketing)/_components/Pricing.tsx`, `packages/db/plan-limits.ts`, billing checkout/webhooks, and onboarding plan selection.
+
+Owner decision on 2026-09-07: defer Stripe price creation, price mapping, and paid-checkout rollout
+for the near future. Keep this section open as later business work, but do not make Stripe pricing
+a blocker for the current engineering and controlled-pilot work or invent temporary price IDs.
 
 The reviewed offer is $19 for 500 conversations and $49 for unlimited conversations. Full Starter usage yields $0.038 revenue per conversation. At a proposed 80% gross-margin target, only $0.0076 per conversation remains for all direct delivery costs. These are arithmetic scenarios, not measured customer costs or proof that a particular price will work.
 
