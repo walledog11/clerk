@@ -106,10 +106,13 @@ provider. **None of these is a code task.**
   Gmail threading, one continuing thread, and no duplicate jobs. If alias behavior fails,
   restore Palette's original address immediately; the reliability release can stay
   deployed. Read logs for identifiers only, never content or tokens.
-- [ ] **Instagram Advanced Access.** Implementation and Standard Access acceptance are
-  done. Launch is gated on Meta App Review plus a non-role merchant account completing
-  the full DM loop: connect → inbound → approve reply → disconnect/reconnect. Ops in
-  [runbook.md](production/runbook.md).
+- [ ] **Instagram Advanced Access — parked, not a launch gate.** Implementation and
+  Standard Access acceptance are done, and the direct Meta path stays safe and disabled
+  for new connections. Meta App Review no longer gates launch, the canaries, the paid
+  pilot, or the first 100 users: SocialAPI is the selected `ig_dm` transport for that
+  whole phase (2026-09-09, [improvement plan](project-improvement-plan.md) A3). Revisit
+  direct Meta transport and any migration on a future dated decision, not on this list's
+  schedule. Ops in [runbook.md](production/runbook.md).
 ---
 
 ## Console / config
@@ -152,6 +155,20 @@ closing verification passes.
 Open application-code work. An entry names the surface it lands on and what closing
 it costs — not a design.
 
+- [ ] **Certify deterministic completion copy in production.** The execution boundary
+  replaces supported refund, cancellation, fulfillment, return, exchange, credit, address,
+  discount, and order claim sentences with copy derived from successful completion facts,
+  while preserving surrounding brand voice and blocking unsupported claims. Run the required
+  paid release eval for the exact candidate, deploy it, and observe one grounded action/reply
+  pair plus one truthful historical refund or fulfillment reply in production. Two known
+  gaps to close with it: the approval card shows the model's sentence while the customer
+  receives the rendered one, and the renderer still *selects* what to rewrite by matching
+  English verbs in `plan-grounding.ts`. The structural fix — an optional structured
+  `completion` field on `send_reply` that the executor renders, so the model never authors
+  the graded sentence — is recorded under A4 in the
+  [improvement plan](project-improvement-plan.md). It is a planner-surface change and owes
+  the eval gate.
+
 - [ ] **Make LLM allowances concurrency-safe.** The daily read now fails closed and the
   configure page shows spend against the merchant safety cap, but parallel calls can still
   spend the same remainder and a failed usage write is not recoverable. Reserve a conservative
@@ -167,11 +184,18 @@ it costs — not a design.
   changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
   renewal evidence.
 
-- [ ] **Capped SocialAPI launch bridge.** Use the provider only for an allowlisted early
-  cohort while Advanced Access is pending; do not replace or pause the direct Meta path.
-  Implement, certify, cap, monitor and retire it through the
-  [launch bridge plan](socialapi-launch-bridge-plan.md). Freeze new bridge connections at
-  the documented ceiling instead of upgrading it into the default high-traffic path.
+- [ ] **Build the SocialAPI Instagram transport.** This is the critical path: `ig_dm`
+  is the product channel, SocialAPI is its selected transport through the first 100
+  users, and today the provider exists only in documentation — no source file in `apps/`
+  or `packages/` mentions it. Two things gate every estimate below them, and neither is
+  code: send the drafted vendor questions in
+  [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md), and spike whether a
+  SocialAPI sender ID equals the direct-Meta `Customer.platformId` (invariant 6 of the
+  [transport plan](socialapi-transport-plan.md)). If it does not, "normalize into the
+  existing durable Instagram workflow" stops being true and the shape of the work
+  changes. Then implement OAuth, signed V2 webhook ingress, org/account routing, private
+  media, recovery/dedupe, provider-pinned outbound, reconnect, disconnect, deletion, and
+  capacity controls; certify per [improvement plan](project-improvement-plan.md) A3.
 
 - [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
   thread's messages, Shopify orders, KB articles and merchant preferences. It counts the

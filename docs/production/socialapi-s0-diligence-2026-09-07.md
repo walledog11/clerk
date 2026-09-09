@@ -3,15 +3,15 @@
 Status: `in_progress`; public-document review complete, external and authenticated checks open.
 Owner: founder for vendor/commercial evidence; engineering for authenticated technical evidence.
 
-This record supports S0 in the [SocialAPI launch bridge plan](../socialapi-launch-bridge-plan.md).
+This record supports S0 in the [SocialAPI transport plan](../socialapi-transport-plan.md).
 It contains no credentials or merchant data. Public documentation is evidence of the vendor's
 stated contract, not proof that production behavior matches it.
 
 ## Public evidence reviewed
 
-| Topic | Current public statement | Consequence for the bridge | State |
+| Topic | Current public statement | Consequence for the transport | State |
 | --- | --- | --- | --- |
-| OAuth ownership | SocialAPI supplies the Instagram OAuth app, requests Instagram business messaging scopes, shows its own brand on consent, and does not currently support bring-your-own Meta apps. | The merchant disclosure must name SocialAPI; all bridge merchants share the vendor's Meta-app failure domain. | Documented; capture the live consent screen. |
+| OAuth ownership | SocialAPI supplies the Instagram OAuth app, requests Instagram business messaging scopes, shows its own brand on consent, and does not currently support bring-your-own Meta apps. | The merchant disclosure must name SocialAPI; every SocialAPI merchant shares the vendor's Meta-app failure domain. | Documented; capture the live consent screen. |
 | Runtime key isolation | Keys can be restricted by scopes and brands. A merchant runtime key can hold `accounts:read`, `dms:read`, and `dms:send` for one brand. Empty scope or brand arrays mean unrestricted access. | Provision one least-privilege runtime key per assigned brand and reject any empty restriction set. | Documented; verify against a real account. |
 | Administrative credentials | Key/brand administration requires a full-access key or dashboard. Webhook management and analytics/event logs are account-wide and unavailable to brand-restricted keys. | Keep provisioning and webhook credentials out of normal messaging processes. Account-wide delivery records remain a wider operational trust boundary. | Documented; obtain written isolation/incident controls. |
 | DM storage | The inbox guide says DM conversations and messages are stored to support threading and pagination. The privacy policy says posts, comments, DMs, and engagement metrics are stored. | Treat SocialAPI as a processor that persistently holds customer-message content. | Documented. |
@@ -23,7 +23,7 @@ stated contract, not proof that production behavior matches it.
 | Inbox recovery | Account sync refreshes only the conversation list; a conversation ID is required to refresh messages for one thread. Reads expose sync state and last-sync time. | A five-minute account sync alone cannot prove that every thread is recovered. The spike must enumerate changed conversations and exercise per-thread message recovery with bounded pagination. | Documented; algorithm remains unproven. |
 | Message identity | Webhook examples expose a SocialAPI interaction ID, provider account ID, author ID, received time, and conversation/message fields. Account events expose `platform_user_id`; stored message rows expose `platform_id`. | Live fixtures must prove which fields equal the IDs emitted by direct Meta and which are provider-only routing IDs. | **Blocking for external onboarding.** |
 | Attachments | The inbox guide documents `attachment_url` and image/video/audio/file types. It states that most platforms return platform URLs subject to platform expiry; special SocialAPI mirroring behavior is documented for WhatsApp. | Instagram URL lifetime, all required event shapes, and deletion/unsent behavior remain unproven. Shopkeeper must copy supported media into private storage immediately. | **Blocking for external onboarding.** |
-| SLA and termination | Paid terms promise 99.9% monthly API uptime excluding platform outages and allow termination with 30 days' notice for any reason. | Keep the eight-merchant ceiling, direct-Meta exit path, and service-continuity procedure. | Documented; support and export commitments remain open. |
+| SLA and termination | Paid terms promise 99.9% monthly API uptime excluding platform outages and allow termination with 30 days' notice for any reason. | A 30-day termination-for-any-reason clause is materially heavier now that this is the launch transport rather than a bridge with a rehearsed exit. Keep the staged admission limit and service-continuity procedure, and treat notice period and export commitments as negotiating points. | Documented; support and export commitments remain open. |
 
 Sources reviewed on 2026-09-07:
 
@@ -40,9 +40,19 @@ Sources reviewed on 2026-09-07:
 Do not send this message until the founder chooses the sender/account. Send the questions as one
 thread and attach the received DPA to the private vendor record, not this repository.
 
-> We are evaluating SocialAPI as a capped Instagram DM transport for up to eight Shopify
-> merchants. Before any external merchant data is connected, please provide or confirm the
-> following:
+**Revised 2026-09-09 for the reframed envelope.** The original draft opened by describing a capped
+evaluation for up to eight merchants. That understated the ask: SocialAPI is now the selected
+Instagram transport through the first 100 users, not a 30-day loan against Meta approval. Asking
+for terms sized to eight merchants gets terms sized to eight merchants, and the capacity answer is
+one of the things Gate 2 depends on — so the opening and question 9 now state the staged path
+explicitly. Nothing else about the questions changed; they were already the right questions.
+
+> We are evaluating SocialAPI as the Instagram DM transport for a Shopify support product. Our
+> intended path is staged: two supervised canary merchants first, then a paid pilot of five to ten,
+> then growth toward roughly 100 connected merchant brands as the product proves out. We are
+> sizing terms for that path rather than for the first cohort, and we would rather understand the
+> ceiling now than renegotiate under load. Before any external merchant data is connected, please
+> provide or confirm the following:
 >
 > 1. Please provide your current DPA and security/subprocessor schedule, including hosting
 >    region, backup retention/deletion, breach history, latest penetration-test summary, and
@@ -73,7 +83,11 @@ thread and attach the received DPA to the private vendor record, not this reposi
 >    SLA coverage, support response targets, RTO/RPO, incident notification timing, and the
 >    escalation contact for a missing DM or cross-tenant incident.
 > 9. Confirm that one merchant brand with one Instagram Professional account consumes one brand
->    slot, and that separate non-production and production workspaces/keys are supported.
+>    slot, and that separate non-production and production workspaces/keys are supported. Then
+>    describe the tiers and pricing along the path above — roughly 10, 25, and 100 connected
+>    brands — including whether rate limits, webhook throughput, support response, and any shared
+>    Meta-app limits change per tier, what notice an upgrade needs, and whether any of them
+>    require dedicated infrastructure rather than a plan change.
 > 10. Provide the exact merchant OAuth consent screen and confirm whether the requested Instagram
 >     scopes can be reduced to the DM-only capabilities we use.
 
@@ -110,8 +124,12 @@ Proceed from SP to production implementation only when:
   handoff;
 - supported message/media coverage and recovery meet Shopkeeper's existing Instagram contract;
 - scoped runtime credentials contain a merchant compromise to one assigned brand; and
-- the revised implementation estimate still reaches external merchant learning materially sooner
-  than waiting for direct Meta Advanced Access.
+- the contracted tier, rate limits, and support commitments credibly extend along the staged path
+  toward roughly 100 connected brands, since there is no direct-Meta timeline behind this one to
+  fall back to. *(Replaced 2026-09-09. The original criterion asked whether SocialAPI reached
+  merchants sooner than waiting for Advanced Access; with Meta approval no longer gating launch,
+  that comparison no longer decides anything.)*
 
-Any failure above is a no-go for external merchant data. Reusable controlled-spike code may remain
-behind a disabled flag while direct Meta approval continues.
+Any failure above is a no-go for external merchant data. A no-go is now a reason to fix the plan or
+change provider, not a reason to fall back to waiting for direct Meta — nothing is waiting on that.
+Reusable controlled-spike code may remain behind a disabled flag.
