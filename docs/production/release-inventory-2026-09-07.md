@@ -128,3 +128,46 @@ if application code changes before deployment.
   order creation by its persisted operation key without blindly issuing another create. Outcomes
   that cannot be confirmed remain `unknown`. This closes the local failure-boundary rehearsal; it
   does not replace post-deployment isolated acceptance checks.
+
+## A2 release and isolated acceptance — 2026-09-08
+
+- Released immutable candidate `e4cfab72bf86f427f3ffeead03a74c73c04341a2` from `master` to
+  `origin/master`. GitHub CI run `34188474960` passed secret scan, static verification and audit,
+  unit tests, integration and coverage, all builds, and browser E2E. Deterministic eval preflight run
+  `34188475112` also passed. A fresh local `npm run verify:pr` passed on the same revision, including
+  1,644 integration tests with three optional/live cases skipped and 12 browser smoke tests.
+- Production now runs the candidate on Vercel dashboard deployment
+  `dpl_J9Ryu7DCwhPE1H6R5mtnr4UoAS1p`, Railway gateway deployment
+  `d190c355-c2cb-4864-841b-a89fd049231d`, and Railway worker deployment
+  `1dbaff8f-8cb8-4843-b938-cfa0e14f3cf5`. The dashboard is `READY`; both Railway deployments are
+  `SUCCESS`. The production database still reports all 82 migrations applied with none pending.
+- Both Railway roles passed the boot environment contract. The intentionally deferred Stripe
+  Starter/Pro price mapping remains outside this engineering release, so this evidence does not
+  claim that paid checkout or broad launch is ready. Those business/provider gates remain open in
+  A3 and B1.
+- Isolated acceptance exposed a heartbeat-default mismatch: the production worker emitted every
+  five minutes while the gateway, which lacked `NODE_ENV`, initially judged the heartbeat stale
+  after one minute. Both services now have explicit 300,000 ms interval, 900 second TTL, and
+  600,000 ms stale settings. A temporary gateway `NODE_ENV=production` change was removed after it
+  caused Railway's install step to omit build-time type packages; failed deployment
+  `cfde2776-33bf-4dd1-9a41-3d73f25b370e` was never promoted. The corrected gateway build above
+  installed the build dependencies, started cleanly, and reports a healthy worker.
+- Authenticated queue diagnostics found 32 retained historical failures. Before housekeeping, the
+  evidence was reconciled against durable state: 27 summary failures belonged to three deleted
+  threads or a surviving thread with newer cached-plan and episode-outcome records; three
+  order-review failures were synthetic `999999xxx` probes; one disconnect was superseded by the
+  integration's later active state; and one Gmail failure remains durably marked
+  `reauthorization_required` with later sync attempts recorded. With explicit owner approval, only
+  those exact failed BullMQ records were removed through the authenticated endpoint, which
+  rechecked each job was still failed. The Redis records are not recoverable; PostgreSQL evidence
+  was not deleted.
+- Post-housekeeping diagnostics returned `200`, a healthy worker, and zero waiting, active, or
+  failed jobs across every monitored queue. The sole delayed job is the expected repeating Gmail
+  watch-maintenance schedule. `npm run verify:production` then passed dashboard deep health,
+  dashboard-to-gateway authentication boundaries, gateway database/Redis/worker/queue readiness,
+  iMessage configuration, and Photon webhook reachability. The optional inbound-email smoke was
+  skipped because no fixture address was supplied; real provider-channel acceptance remains A3.
+- The read-only 24-hour strict unknown-outcome and operator-event audits both passed with no unknown
+  outcomes, stale claims, failed events, stuck events, or undelivered committed replies. Combined
+  with the 86-test failure-boundary rehearsal above, this closes A2. It does not close the remaining
+  provider, pricing, paid-evaluation, alert-routing, monitor, PITR, or real-merchant launch gates.

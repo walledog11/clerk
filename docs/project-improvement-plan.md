@@ -1,6 +1,6 @@
 # Shopkeeper improvement and validation plan
 
-Created: 2026-09-07. Status: in progress; A1 verified locally on 2026-09-07.
+Created: 2026-09-07. Status: in progress; A1 verified locally on 2026-09-07 and A2 released and accepted on 2026-09-08.
 
 ## Objective
 
@@ -63,7 +63,7 @@ Entry points: [existing audit fixes](code-audit-fixes.md), [deployment runbook](
 - [x] Inventory the current source revision, dirty changes, generated client, migration state, Vercel revision, Railway revision, and released Shopify app configuration. Record identifiers from their actual deployment records in [the September 7 release inventory](production/release-inventory-2026-09-07.md).
 - [x] Review the already implemented policy forwarding, lease checks, unknown outcomes, action journal, inbound outbox, recovery pagination, media handling, and shared planning budgets. Preserve them and close only remaining defects.
 - [x] Verify that the required outbox schema exists before deploying dependent code. Do not reapply or roll back the migration based solely on the document's age.
-- [ ] Run the canonical checks on the selected candidate. Deploy compatible dashboard and gateway versions through the existing release procedure, then perform isolated acceptance checks.
+- [x] Run the canonical checks on the selected candidate. Deploy compatible dashboard and gateway versions through the existing release procedure, then perform isolated acceptance checks.
 - [x] Rehearse crash-after-persistence, queue admission failure, duplicate delivery, lost execution lease, and ambiguous provider response. Confirm accepted work remains recoverable and ambiguous actions are not blindly retried.
 
 Done when both applications run the recorded candidate, the database is compatible, and recovery evidence is attached to that release. Keep an application rollback path compatible with the additive schema; do not promise exactly-once external delivery.
