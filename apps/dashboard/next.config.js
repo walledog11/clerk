@@ -23,6 +23,10 @@ const sentryUploadEnabled = Boolean(process.env.SENTRY_AUTH_TOKEN)
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  // Vercel auto-enables immutable static uploads for Next 16.3+, but the deploy
+  // step still fails to patch preview comments unless the platform catches up.
+  // Opt out until that path is stable; security fixes stay on 16.3.4 either way.
+  supportsImmutableAssets: false,
   experimental: {
     // Next 16.2's Turbopack persistence can race compaction and delete its live cache.
     turbopackFileSystemCacheForDev: false,
