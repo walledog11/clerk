@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SpendCapError, usageToNanoDollars, usdToNanoDollars, utcDayString, db } from '@shopkeeper/db';
+import { LlmBudgetUnavailableError, SpendCapError, usageToNanoDollars, usdToNanoDollars, utcDayString, db } from '@shopkeeper/db';
 import { createTestOrg, cleanupTestData } from '@shopkeeper/db/test-helpers';
 import { enforceSpendCap, getDailySpendNano, recordSpend } from '@shopkeeper/agent/spend';
 
@@ -54,11 +54,11 @@ describe('llm spend', () => {
     await expect(getDailySpendNano(org.id)).resolves.toBe(expectedDelta * 2);
   });
 
-  it('falls back safely when the DB read or write fails', async () => {
-    // An invalid org id makes Prisma throw; the cap is a backstop, so it must
-    // fail open (read as zero, swallow the write) rather than block ingestion.
-    await expect(getDailySpendNano('not-a-uuid')).resolves.toBe(0);
-    await expect(enforceSpendCap('not-a-uuid', { dailyLLMSpendCapUsd: 1 })).resolves.toBeUndefined();
+  it('fails closed on DB reads while containing usage-write failures', async () => {
+    // Inbound persistence happens before these checks. If accounting cannot be
+    // read, paid model work pauses instead of silently spending against zero.
+    await expect(getDailySpendNano('not-a-uuid')).rejects.toBeInstanceOf(LlmBudgetUnavailableError);
+    await expect(enforceSpendCap('not-a-uuid', { dailyLLMSpendCapUsd: 1 })).rejects.toBeInstanceOf(LlmBudgetUnavailableError);
     await expect(recordSpend('not-a-uuid', USAGE, MODEL)).resolves.toBeUndefined();
   });
 });

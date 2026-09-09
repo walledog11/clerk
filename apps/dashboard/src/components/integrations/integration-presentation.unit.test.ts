@@ -199,6 +199,21 @@ describe("integration presentation", () => {
     expect(integrationAttentionSummary(memberModels).copy).not.toContain("Fix button")
   })
 
+  it("tells merchants that reconnecting Shopify updates missing access", () => {
+    const shopify = integration({
+      id: "shopify",
+      platform: "shopify",
+      connectionState: "active",
+      missingScopes: ["write_returns"],
+    })
+
+    const model = modelFor("shopify", [shopify])
+
+    expect(model.note).toContain("reconnect to enable them")
+    expect(model.note).toContain("actions fail")
+    expect(model.recoveryAction).not.toBeNull()
+  })
+
   it("keeps personal binding available to members while workspace mutations are disabled", () => {
     const models = deriveIntegrationCardModels({ integrations: [], flags: FLAGS, isAdmin: false })
     expect(models.find((model) => model.definition.id === "imessage")?.canManageWorkspace).toBe(true)

@@ -5,6 +5,7 @@ import type { OrgSettings, OrgSettingsPatch, VoiceProposal } from "@/types"
 import type { MerchantPreferenceRecord } from "@shopkeeper/db/merchant-preferences"
 import { dashboardPageShellClassName } from "@/app/dashboard/_components/sidebar/sidebar-helpers"
 import { cn } from "@/lib/ui/cn"
+import type { LlmSpendSnapshot } from "./llm-spend-presentation"
 
 interface Props {
   settings: OrgSettings
@@ -17,6 +18,7 @@ interface Props {
     active: MerchantPreferenceRecord[]
     proposed: MerchantPreferenceRecord[]
   }
+  llmSpend: LlmSpendSnapshot
 }
 
 export default function ConfigurePageClient(props: Props) {
@@ -32,6 +34,7 @@ export default function ConfigurePageClient(props: Props) {
             voiceProposal={props.voiceProposal}
             shopifyConnected={props.shopifyConnected}
             merchantPreferences={props.merchantPreferences}
+            llmSpend={props.llmSpend}
           />
         </div>
       </div>

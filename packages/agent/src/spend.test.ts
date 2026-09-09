@@ -4,6 +4,7 @@ const {
   mockGetDailyLlmSpendNano,
   mockRecordDailyLlmSpend,
   MockSpendCapError,
+  MockLlmBudgetUnavailableError,
 } = vi.hoisted(() => {
   class MockSpendCapError extends Error {
     constructor(
@@ -13,11 +14,15 @@ const {
       super("Daily LLM spend cap exceeded");
     }
   }
+  class MockLlmBudgetUnavailableError extends Error {
+    readonly code = "llm_budget_unavailable";
+  }
 
   return {
     mockGetDailyLlmSpendNano: vi.fn(),
     mockRecordDailyLlmSpend: vi.fn(),
     MockSpendCapError,
+    MockLlmBudgetUnavailableError,
   };
 });
 
@@ -27,13 +32,14 @@ function usdToNanoDollars(usd: number): number {
 
 vi.mock("@shopkeeper/db", () => ({
   DEFAULT_DAILY_LLM_SPEND_CAP_USD: 5,
+  LlmBudgetUnavailableError: MockLlmBudgetUnavailableError,
   SpendCapError: MockSpendCapError,
   getDailyLlmSpendNano: mockGetDailyLlmSpendNano,
   recordDailyLlmSpend: mockRecordDailyLlmSpend,
   usdToNanoDollars,
 }));
 
-import { SpendCapError } from "@shopkeeper/db";
+import { LlmBudgetUnavailableError, SpendCapError } from "@shopkeeper/db";
 import { installAgentLogger, resetAgentLoggerForTests, type AgentLogger } from "./logger.js";
 import { enforceSpendCap, getDailySpendNano, recordSpend } from "./spend.js";
 
@@ -88,13 +94,13 @@ describe("agent spend", () => {
     expect(mockRecordDailyLlmSpend).toHaveBeenCalledWith("org_1", USAGE, MODEL);
   });
 
-  it("falls back safely when the DB read or write fails", async () => {
+  it("fails closed when the DB read fails and still contains write failures", async () => {
     mockGetDailyLlmSpendNano.mockRejectedValueOnce(new Error("read failed"));
     mockGetDailyLlmSpendNano.mockRejectedValueOnce(new Error("read failed"));
     mockRecordDailyLlmSpend.mockRejectedValueOnce(new Error("write failed"));
 
-    await expect(getDailySpendNano("org_1")).resolves.toBe(0);
-    await expect(enforceSpendCap("org_1", { dailyLLMSpendCapUsd: 1 })).resolves.toBeUndefined();
+    await expect(getDailySpendNano("org_1")).rejects.toBeInstanceOf(LlmBudgetUnavailableError);
+    await expect(enforceSpendCap("org_1", { dailyLLMSpendCapUsd: 1 })).rejects.toBeInstanceOf(LlmBudgetUnavailableError);
     await expect(recordSpend("org_1", USAGE, MODEL)).resolves.toBeUndefined();
   });
 
@@ -106,12 +112,12 @@ describe("agent spend", () => {
     mockGetDailyLlmSpendNano.mockRejectedValueOnce(readError);
     mockRecordDailyLlmSpend.mockRejectedValueOnce(writeError);
 
-    await getDailySpendNano("org_1");
+    await expect(getDailySpendNano("org_1")).rejects.toBeInstanceOf(LlmBudgetUnavailableError);
     await recordSpend("org_1", USAGE, MODEL);
 
-    expect(injectedLogger.warn).toHaveBeenCalledWith(
+    expect(injectedLogger.error).toHaveBeenCalledWith(
       { err: readError, orgId: "org_1" },
-      "[spend] read failed, treating as zero",
+      "[spend] read failed, pausing paid model work",
     );
     expect(injectedLogger.warn).toHaveBeenCalledWith(
       { err: writeError, orgId: "org_1", model: MODEL },

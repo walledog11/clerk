@@ -280,6 +280,15 @@ function ShopifyDetails({
   return (
     <div className="space-y-5">
       <ConnectedAccountRow connectType="shopify" integration={integration} />
+      {integration.missingScopes?.length ? (
+        <div role="status" className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">Shopify access needs updating</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            Reconnect this store to approve permissions added since it was first connected. Existing access remains in place,
+            but actions that need the missing permissions stay unavailable until you reconnect.
+          </p>
+        </div>
+      ) : null}
       <IntegrationPermissionsSection definition={definition} integration={integration} />
       <ShopifyStorefrontChatSection
         integration={integration}
@@ -289,7 +298,12 @@ function ShopifyDetails({
         onUpdateEnabled={callbacks.updateShopifyStorefrontChat}
       />
       <ConfigureSection title="Actions">
-        <ActionRow icon={RefreshCw} label="Reconnect account" onClick={reauthorize} disabled={!model.canManageWorkspace} />
+        <ActionRow
+          icon={RefreshCw}
+          label={integration.missingScopes?.length ? "Reconnect to update access" : "Reconnect account"}
+          onClick={reauthorize}
+          disabled={!model.canManageWorkspace}
+        />
         <ActionRow
           icon={BookOpen}
           label={kbSyncing ? "Syncing to KB…" : "Sync to KB"}

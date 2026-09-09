@@ -12,6 +12,7 @@ import { MoneyInput } from "./settings-form-fields"
 import { Switch } from "@/components/ui/switch"
 import { SolidSettingsTile as SettingsTile } from "@/app/dashboard/(shell)/settings/_components/SettingsTile"
 import type { AgentTabController } from "./useAgentTabState"
+import { presentLlmSpend, type LlmSpendSnapshot } from "./llm-spend-presentation"
 
 function tierLabel(tier: AutonomyTier): string {
   return AUTONOMY_TIERS.find((option) => option.id === tier)?.label ?? tier
@@ -63,7 +64,13 @@ function OverrideHint({
   )
 }
 
-export function AgentAutonomyAdvancedSection({ controller }: { controller: AgentTabController }) {
+export function AgentAutonomyAdvancedSection({
+  controller,
+  llmSpend,
+}: {
+  controller: AgentTabController
+  llmSpend: LlmSpendSnapshot
+}) {
   const {
     settingsState,
     payload,
@@ -76,7 +83,12 @@ export function AgentAutonomyAdvancedSection({ controller }: { controller: Agent
     setMaxRefundInput,
     dailyRefundCapInput,
     setDailyRefundCapInput,
+    dailyLLMSpendCapInput,
+    setDailyLLMSpendCapInput,
   } = controller
+  const parsedCap = Number(dailyLLMSpendCapInput)
+  const capUsd = dailyLLMSpendCapInput.trim() && Number.isFinite(parsedCap) ? parsedCap : llmSpend.defaultCapUsd
+  const spend = presentLlmSpend(llmSpend, capUsd)
 
   return (
     <>
@@ -113,6 +125,31 @@ export function AgentAutonomyAdvancedSection({ controller }: { controller: Agent
             placeholder="e.g. 200"
             description="Total the agent can issue per day across exact full refunds and gift cards."
           />
+        </div>
+      </SettingsTile>
+
+      <SettingsTile label="AI usage limit">
+        <div className="space-y-3">
+          <MoneyInput
+            label="Daily AI limit"
+            hint="resets at midnight UTC"
+            aria-label="Daily AI limit"
+            value={dailyLLMSpendCapInput}
+            onValueChange={setDailyLLMSpendCapInput}
+            placeholder="20"
+            description="A safety limit for model usage across the workspace. Leave blank to use the $20 default."
+          />
+          <div
+            role="status"
+            className={spend.state === "paused" || spend.state === "unavailable"
+              ? "rounded-md bg-red-500/10 px-3 py-2 text-xs text-red-700"
+              : spend.state === "warning"
+                ? "rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700"
+                : "rounded-md bg-foreground/[0.04] px-3 py-2 text-xs text-muted-foreground"}
+          >
+            <p className="font-semibold">{spend.summary}</p>
+            <p className="mt-0.5">{spend.detail}</p>
+          </div>
         </div>
       </SettingsTile>
 

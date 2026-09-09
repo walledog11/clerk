@@ -106,9 +106,11 @@ divergence table, the four findings, the M0a file listing, and the 2026-08-07
 rehearsal evidence were deleted on 2026-09-01. Read them at
 `git show c06be3b4:docs/production/shopify-app-config-reference.md`.
 
-The two follow-ups that were skipped rather than completed are open in
-[to-do-list.md](../to-do-list.md): reading the release grant back from Shopify's
-side, and writing the merchant-facing explanation of the re-authorization prompt.
+The two follow-ups originally skipped here closed on 2026-09-09. A read-only
+`currentAppInstallation` query against `palette-dev-3peukw16.myshopify.com` returned
+all scopes required by `SHOPIFY_OAUTH_SCOPES`, and the dashboard now explains missing
+access and offers a reconnect action. A real independent merchant install remains an
+A3 acceptance gate rather than a configuration-reference task.
 
 The 2026-08-19 app-specific webhook migration record was deleted the same day;
 its guarded-utility commands and delivery receipt survive under "Webhooks" above,

@@ -1,22 +1,47 @@
 import { Suspense } from "react"
-import { ChannelType, db } from "@shopkeeper/db"
+import {
+  ChannelType,
+  DEFAULT_DAILY_LLM_SPEND_CAP_USD,
+  db,
+  getDailyLlmSpendNano,
+  nanoDollarsToUsd,
+  utcDayString,
+} from "@shopkeeper/db"
 import { parseVoiceProposal } from "@shopkeeper/db"
 import { normalizeStoredOrgSettings, resolveAgentSettings } from "@shopkeeper/agent/settings"
 import { AgentConfigurePageSkeleton } from "@/app/dashboard/_components/skeletons"
 import { getOrCreateOrg } from "@/lib/server/org"
 import { getMerchantPreferencesPageData } from "@/lib/server/merchant-preferences-data"
+import logger from "@/lib/server/logger"
 import ConfigurePageClient from "./_components/ConfigurePageClient"
+import type { LlmSpendSnapshot } from "./_components/llm-spend-presentation"
+
+function nextUtcDay(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString()
+}
 
 export default async function AgentConfigurePage() {
   const org = await getOrCreateOrg()
   const rawSettings = normalizeStoredOrgSettings(org.settings)
   const settings = resolveAgentSettings(rawSettings)
-  const integrations = await db.integration.findMany({
-    where: { organizationId: org.id },
-    select: { platform: true },
-  })
+  const [integrations, merchantPreferences, spentNanoUsd] = await Promise.all([
+    db.integration.findMany({
+      where: { organizationId: org.id },
+      select: { platform: true },
+    }),
+    getMerchantPreferencesPageData(org.id),
+    getDailyLlmSpendNano(org.id).catch((error) => {
+      logger.error({ err: error, organizationId: org.id }, "[agent-configure] LLM spend read failed")
+      return null
+    }),
+  ])
   const shopifyConnected = integrations.some(integration => integration.platform === ChannelType.shopify)
-  const merchantPreferences = await getMerchantPreferencesPageData(org.id)
+  const llmSpend: LlmSpendSnapshot = {
+    day: utcDayString(),
+    defaultCapUsd: DEFAULT_DAILY_LLM_SPEND_CAP_USD,
+    spentUsd: spentNanoUsd === null ? null : nanoDollarsToUsd(spentNanoUsd),
+    resetAt: nextUtcDay(),
+  }
 
   return (
     <Suspense fallback={<AgentConfigurePageSkeleton />}>
@@ -28,6 +53,7 @@ export default async function AgentConfigurePage() {
         voiceProposal={parseVoiceProposal(org.voiceProposal)}
         shopifyConnected={shopifyConnected}
         merchantPreferences={merchantPreferences}
+        llmSpend={llmSpend}
       />
     </Suspense>
   )

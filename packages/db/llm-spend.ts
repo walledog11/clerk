@@ -132,8 +132,23 @@ export class SpendCapError extends Error {
   }
 }
 
+export class LlmBudgetUnavailableError extends Error {
+  readonly code = "llm_budget_unavailable" as const;
+
+  constructor() {
+    super("LLM budget accounting is temporarily unavailable");
+    this.name = "LlmBudgetUnavailableError";
+  }
+}
+
 export function isSpendCapError(err: unknown): err is SpendCapError {
   return err instanceof SpendCapError || (
     typeof err === "object" && err !== null && (err as { code?: string }).code === "spend_cap_reached"
+  );
+}
+
+export function isLlmBudgetUnavailableError(err: unknown): err is LlmBudgetUnavailableError {
+  return err instanceof LlmBudgetUnavailableError || (
+    typeof err === "object" && err !== null && (err as { code?: string }).code === "llm_budget_unavailable"
   );
 }

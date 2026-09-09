@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { ChannelType, SenderType, SpendCapError, db, usdToNanoDollars } from '@shopkeeper/db';
+import { ChannelType, LlmBudgetUnavailableError, SenderType, SpendCapError, db, usdToNanoDollars } from '@shopkeeper/db';
 import {
   createTestOrg,
   createTestCustomer,
@@ -387,6 +387,18 @@ describe('POST /internal/operator/turn', () => {
 
     expect(res.status).toBe(429);
     expect(res.body).toMatchObject({ code: 'spend_cap_reached', currentUsd: 25, capUsd: 25 });
+  });
+
+  it('pauses paid work when budget accounting is unavailable', async () => {
+    executeAgentTurnSpy.mockRejectedValueOnce(new LlmBudgetUnavailableError());
+
+    const res = await request(app)
+      .post('/internal/operator/turn')
+      .set('x-internal-secret', SECRET)
+      .send(turnBody());
+
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ code: 'llm_budget_unavailable' });
   });
 });
 

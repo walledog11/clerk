@@ -1,5 +1,6 @@
 import {
   DEFAULT_DAILY_LLM_SPEND_CAP_USD,
+  LlmBudgetUnavailableError,
   SpendCapError,
   getDailyLlmSpendNano,
   recordDailyLlmSpend,
@@ -27,8 +28,8 @@ export async function getDailySpendNano(orgId: string): Promise<number> {
   try {
     return await getDailyLlmSpendNano(orgId);
   } catch (err) {
-    logger.warn({ err, orgId }, "[spend] read failed, treating as zero");
-    return 0;
+    logger.error({ err, orgId }, "[spend] read failed, pausing paid model work");
+    throw new LlmBudgetUnavailableError();
   }
 }
 

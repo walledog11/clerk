@@ -171,3 +171,30 @@ if application code changes before deployment.
   outcomes, stale claims, failed events, stuck events, or undelivered committed replies. Combined
   with the 86-test failure-boundary rehearsal above, this closes A2. It does not close the remaining
   provider, pricing, paid-evaluation, alert-routing, monitor, PITR, or real-merchant launch gates.
+
+## Current production head reconciliation — 2026-09-09
+
+- Before the 2026-09-09 budget/UI implementation work began, repository `master` and
+  `origin/master` were clean and aligned at `eff1fb9f484e4da44c15a4ffb54853c126c2c0a0`.
+- GitHub CI run `34319781108` passed for that revision. Clerk Browser Contract run
+  `34354693048` also passed.
+- Vercel production deployment `dpl_FzpQNoX5gCNWbhfzkgjSGbH2pf5A` is `READY`; its deployment API
+  record reports `meta.githubCommitSha` as the exact `eff1fb9f` revision.
+- Railway production gateway deployment `01707b34-1ca6-4727-8631-b4a9df55b24a` and worker
+  deployment `5df8a534-7bf2-4ddf-9360-0ced82303529` are both `SUCCESS`, running, and report
+  `meta.commitHash` as the exact `eff1fb9f` revision.
+- The three commits after the accepted A2 candidate patch production dependencies, prevent immutable
+  static assets from blocking Vercel deployment, and stabilize the Gmail OAuth callback integration
+  test. They do not close provider acceptance, pricing, budget reservations, or paid-pilot gates.
+- A read-only Shopify app inventory reports `shopkeeper-production-29`
+  (`gid://shopify/Version/1107846889473`) active and `shopkeeper-production-28`
+  (`gid://shopify/Version/1107587497985`) as the immediate prior version. A read-only Admin GraphQL
+  query against `palette-dev-3peukw16.myshopify.com` identified the app as `shopkeeper-production`
+  and returned all 17 scopes required by `SHOPIFY_OAUTH_SCOPES`. The grant also includes implied/read
+  companions and `read_app_proxy`; no missing required scope was observed. This closes dev-store
+  readback only, not independent-merchant installation acceptance.
+- The subsequent local working tree adds fail-closed LLM budget reads, operator-visible accounting
+  outage responses, a daily usage/cap panel, and Shopify reauthorization guidance. Its full no-cost
+  `npm run verify:pr` gate passed on 2026-09-09: static checks, unit and node tests, 12 browser smoke
+  tests, the complete coverage/integration matrix and critical thresholds, and all seven builds.
+  This working tree is verified locally but is not part of the production `eff1fb9f` revision.

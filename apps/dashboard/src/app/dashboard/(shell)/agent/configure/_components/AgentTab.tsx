@@ -14,6 +14,7 @@ import { MerchantPreferencesSection } from "./MerchantPreferencesSection"
 import { useMerchantPreferencesState } from "./useMerchantPreferencesState"
 import { useAgentTabState } from "./useAgentTabState"
 import type { MerchantPreferenceRecord } from "@shopkeeper/db/merchant-preferences"
+import type { LlmSpendSnapshot } from "./llm-spend-presentation"
 
 interface Props {
   settings: OrgSettings
@@ -26,6 +27,7 @@ interface Props {
     active: MerchantPreferenceRecord[]
     proposed: MerchantPreferenceRecord[]
   }
+  llmSpend: LlmSpendSnapshot
 }
 
 export default function AgentTab(props: Props) {
@@ -45,7 +47,7 @@ export default function AgentTab(props: Props) {
       <AgentAutonomySection controller={controller} />
       <WhenOnDutySection controller={controller} />
       {shopifyConnected ? <MorningBriefingSection controller={controller} /> : null}
-      <AgentAdvancedSection controller={controller} />
+      <AgentAdvancedSection controller={controller} llmSpend={props.llmSpend} />
 
       <StickySaveBar controller={controller} canSave={isAdmin} />
     </div>

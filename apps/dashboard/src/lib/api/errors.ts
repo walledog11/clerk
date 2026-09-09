@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isSpendCapError, nanoDollarsToUsd } from '@shopkeeper/db';
+import { isLlmBudgetUnavailableError, isSpendCapError, nanoDollarsToUsd } from '@shopkeeper/db';
 import { ApiError } from '@shopkeeper/agent/errors';
 import logger from '@/lib/server/logger';
 
@@ -77,6 +77,16 @@ function providerErrorResponse(error: unknown): { error: string; status: number;
 }
 
 export function handleApiError(error: unknown, context: string, message: string): NextResponse {
+  if (isLlmBudgetUnavailableError(error)) {
+    logger.error({ err: error, context }, '[api] llm budget accounting unavailable');
+    return NextResponse.json(
+      {
+        error: 'AI usage accounting is temporarily unavailable, so new AI work is paused. You can continue handling requests manually and try again shortly.',
+        code: 'llm_budget_unavailable',
+      },
+      { status: 503 },
+    );
+  }
   if (isSpendCapError(error)) {
     logger.warn({ context }, '[api] spend cap reached');
     return NextResponse.json(

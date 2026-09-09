@@ -7,7 +7,7 @@ of its own fix: the moment an item reads as evidence rather than as an instructi
 it back. Evidence checklists, failure drills, and standing procedure live in the linked
 docs.
 
-Last reviewed: 2026-09-07.
+Last reviewed: 2026-09-09.
 
 Work is grouped by **what kind of action it needs**, not by when it was filed.
 
@@ -110,27 +110,6 @@ provider. **None of these is a code task.**
   done. Launch is gated on Meta App Review plus a non-role merchant account completing
   the full DM loop: connect → inbound → approve reply → disconnect/reconnect. Ops in
   [runbook.md](production/runbook.md).
-- [ ] **Read the release grant back from Shopify, not from our own row.** The connected
-  production store *is* `palette-dev-3peukw16.myshopify.com` — there is no second store,
-  and earlier wording here implied one. `Integration.metadata.oauthScopes` currently
-  records 12 scopes for it including `write_products` and `write_app_proxy`, but that is
-  our copy of the grant, written at OAuth callback. What has never been done is reading
-  the grant back from Shopify's side, because `shopify app execute --store <domain>` could
-  not reach it from the release account.
-  Read it with
-  `{ currentAppInstallation { app { title } accessScopes { handle } } }` and expect the
-  Shopify card to read needs-attention until that merchant re-authorizes — the intended
-  degradation, not a fault. Derive the rollback target from
-  `npx shopify app versions list --json`, never from a doc, per
-  [production/shopify-app-config-reference.md](production/shopify-app-config-reference.md).
-- [ ] **Write the merchant-facing explanation of the re-authorization prompt.** Owed
-  since before `-9`. A scope added by a release is declared, not granted, so an existing
-  install keeps working until it silently does not: the tool refuses with
-  `missingScopeError` and nothing else in the product says why. Reconnecting from
-  Settings is the fix — the OAuth callback replaces `metadata.oauthScopes` wholesale
-  (`complete-shopify-oauth.ts:258`) — but a merchant has no way to know that from the
-  refusal alone.
-
 ---
 
 ## Console / config
@@ -170,8 +149,23 @@ closing verification passes.
 
 ## Build
 
-Application code, not started. An entry names the surface it lands on and what closing
+Open application-code work. An entry names the surface it lands on and what closing
 it costs — not a design.
+
+- [ ] **Make LLM allowances concurrency-safe.** The daily read now fails closed and the
+  configure page shows spend against the merchant safety cap, but parallel calls can still
+  spend the same remainder and a failed usage write is not recoverable. Reserve a conservative
+  amount durably before each provider call, reconcile actual usage afterward, preserve unknown
+  reservations across process loss, and keep the merchant cap separate from the service allowance
+  and platform emergency stop. Extend the existing spend record rather than creating an unrelated
+  ledger; test duplicate reports, database outages, rollover, and concurrent dashboard/gateway calls.
+
+- [ ] **Define the paid-pilot cost envelope and entitlement contract.** Use `LlmDailySpend` and
+  `AgentTurnUsage` to produce low/expected/high merchant scenarios, then add messaging, storage,
+  hosting, payment fees, and founder support time. Decide one billable conversation definition,
+  included usage, reset behavior, and explicit trial/paid/unknown-price/expired behavior before
+  changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
+  renewal evidence.
 
 - [ ] **Capped SocialAPI launch bridge.** Use the provider only for an allowlisted early
   cohort while Advanced Access is pending; do not replace or pause the direct Meta path.
@@ -191,15 +185,6 @@ it costs — not a design.
   deliberately **not** the prior-episode retrieval parked under Episode memory below —
   that is a ranking problem, and taking the newest N in date order ranks nothing. It
   changes the planner's prompt input, so it owes the eval gate.
-
-- [ ] **Show LLM spend against the cap.** `dailyLLMSpendCapUsd` is editable on the agent
-  configure page and the refusal tells the merchant to increase the daily limit in
-  settings, but nothing in either app renders `LlmDailySpend` or `AgentTurnUsage`: the cap
-  is set blind, and when it trips the agent goes quiet with no surface saying why. Closing
-  it is a spend-against-cap readout beside that input, summing `llm_daily_spend` for
-  `utcDayString()` and falling back to `DEFAULT_DAILY_LLM_SPEND_CAP_USD` when the org has
-  set no cap. `spentNanoUsd` is a `BigInt` and will not serialize across the route
-  boundary as one — convert with `nanoDollarsToUsd` server-side.
 
 ---
 

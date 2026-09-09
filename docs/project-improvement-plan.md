@@ -1,6 +1,6 @@
 # Shopkeeper improvement and validation plan
 
-Created: 2026-09-07. Status: in progress; A1 verified locally on 2026-09-07 and A2 released and accepted on 2026-09-08.
+Created: 2026-09-07. Last reconciled: 2026-09-09. Status: in progress; A1 and A2 are verified, A4 and B2 are in progress, and Gate 1 remains open.
 
 ## Objective
 
@@ -16,7 +16,7 @@ The review inspected the working tree, including existing uncommitted agent/chan
 
 Two weaknesses were reproduced directly: repeated inbox renders with an active ticket and unchanged props, and unsupported-refund wording missed by the reply grounding detector. The visual dashboard audit was incomplete because the local preview encountered a Clerk authentication loop. That is a reproduction/setup problem to investigate, not evidence that production authentication is broken.
 
-External approvals and deployment status below come from repository records and must be checked before acting. In particular, [Agent and channel audit fixes](code-audit-fixes.md) records the outbox migration as applied to production on September 7, with application deployment still outstanding. Preserve that work, establish the actual deployment state, and avoid rebuilding completed fixes.
+External approvals and deployment status below come from repository records and must be checked before acting. The original review found the outbox migration applied while application deployment was outstanding; A2 subsequently released and accepted that work. The current deployment inventory is authoritative for revision identifiers. Preserve completed fixes and avoid rebuilding them.
 
 This document is the implementation and validation plan. Keep immediate open work in [To-do list](to-do-list.md), operational procedures in the [runbook](production/runbook.md), and compatibility retirement in its [existing backlog](compatibility-retirement-backlog.md). Link between them rather than maintaining competing status narratives.
 
@@ -42,6 +42,25 @@ Owners below are roles. The founder can own several roles; name the actual owner
 | D2 | P0 | Run a narrow paid pilot and test acquisition | Founder | 4–6 weeks after readiness | Pilot gates; D1 |
 
 P0 means required for the paid pilot or its evidence. P1 means bounded product/engineering improvement; the pilot gate below distinguishes what must finish before onboarding from what can continue alongside a supervised pilot.
+
+### Status snapshot — 2026-09-09
+
+| ID | State | Current evidence / next dependency |
+| --- | --- | --- |
+| A1 | `verified` | Inbox regression, browser smoke, and lint passed with the A2 candidate. |
+| A2 | `verified` | Released and accepted on `e4cfab72`; subsequent production head `eff1fb9f` has passing CI and Clerk browser checks. See the release inventory. |
+| A3 | `in_progress` | Standard Instagram access and dev-store Shopify scope readback are proven; Advanced Access, external-merchant acceptance, Shopify secret rotation, Gmail reconnect, iMessage device acceptance, and remaining compliance canaries are open. |
+| A4 | `in_progress` | Structured completion facts and targeted behavior evidence are present; deterministic sensitive-copy rendering, a production grounded-reply canary, and strict release-run disposition remain open. |
+| B1 | `not_started` | Stripe rollout is deliberately deferred; cost scenarios, billable-unit semantics, entitlements, and a pilot offer still require owner decisions. |
+| B2 | `in_progress` | Price parity is verified. Fail-closed spend reads and a visible daily usage/cap panel are implemented in the 2026-09-09 working tree; durable reservations and service allowances remain open. |
+| B3 | `not_started` | Depends on the A4 behavior contract. |
+| B4 | `not_started` | Existing typed-result inventory and remaining prefix-parsing conversion are open. |
+| C1 | `not_started` | Bounded list/detail reads and reproducible load measurements are open. |
+| C2 | `not_started` | Authenticated desktop/mobile and real-device workflow review is open. |
+| C3 | `in_progress` | This reconciliation updates release/status truth; the architecture map and broader documentation audit remain open. |
+| C4 | `in_progress` | Current CI and Clerk browser contract pass, but the complete merchant candidate cannot be certified before the other Gate 1 dependencies. |
+| D1 | `in_progress` | Per-turn and daily model-cost records exist and daily usage is now visible; workflow reconciliation and non-model cost/support measures remain open. |
+| D2 | `not_started` | Must not begin until Gate 1 passes. |
 
 ## A. Make the core workflow safe to use
 
@@ -75,7 +94,7 @@ Use [external services work](phase-6-external-services.md), the [Gmail verificat
 - [ ] Confirm whether Instagram Advanced Access is still pending. Complete the review package if necessary and prove a non-role merchant's connect → inbound DM → approve → received reply → disconnect/reconnect cycle. Mark restricted availability accurately until this passes.
 - [ ] While Advanced Access is pending, execute the capped [SocialAPI launch bridge plan](socialapi-launch-bridge-plan.md) for selected external merchants. Keep direct Meta as the strategic transport, enforce the bridge ceiling, and require the documented live/exit gates rather than treating middleware connectivity as Instagram readiness.
 - [ ] Resolve the documented Shopify app-secret exposure. Rotate through the provider and both applications in a coordinated window, validate OAuth and webhook verification afterward, and keep secret values out of evidence artifacts. If already rotated, record that evidence instead.
-- [ ] Read installed Shopify scopes from Shopify, test a real merchant install, and explain reauthorization requirements in the UI. Verify missing scopes produce an actionable recovery path without silently disabling advertised work.
+- [ ] Test a real merchant Shopify install. A 2026-09-09 provider-side readback confirmed the dev store holds every scope required by `SHOPIFY_OAUTH_SCOPES`, and the dashboard now explains why updated access is required and offers a reconnect action when recorded scopes are missing. Real-install acceptance remains open; verify missing scopes produce an actionable recovery path without silently disabling advertised work.
 - [ ] Complete the applicable Gmail grant/reconnect and verification work. Keep forwarding available where suitable, with its own plain-text, attachment, threading, and bounce acceptance checks. Gmail completion must not be used to claim Instagram readiness.
 - [ ] Validate iMessage binding, merchant identity, approvals, stale approvals, disconnects, and recovery on a real linked device.
 - [ ] Close the outstanding Shopify compliance acceptance checks using isolated fixtures and the existing procedures before broad merchant onboarding.
@@ -124,11 +143,12 @@ Done when the offer has a documented cost envelope, every subscription state has
 Entry points: `packages/agent/src/spend.ts`, `packages/db/llm-spend.ts`, `packages/db/spend-store.ts`, model cost accounting, and agent configuration/billing UI.
 
 - [ ] Separate the merchant's optional daily cap, the service's plan allowance, and the platform emergency stop. Raising a merchant-configured cap must not bypass the service allowance. The current $20/day default must not be mistaken for margin protection.
-- [ ] Replace “spend read failed → zero” with an explicit unavailable-budget outcome. Pause new paid model work on accounting failure, retain recoverable inbound work, and explain manual fallback. Do not silently report a successful zero-spend read.
+- [x] Replace “spend read failed → zero” with an explicit unavailable-budget outcome. Pause new paid model work on accounting failure, retain recoverable inbound work, and explain manual fallback. Do not silently report a successful zero-spend read.
 - [ ] Reserve a conservative bounded allowance before provider calls, reconcile actual usage afterward, and prevent concurrent runs from spending the same remaining allowance. Use a durable idempotent record or extend an appropriate existing record; avoid a second independent ledger.
 - [ ] Handle timeout/process-loss reservations conservatively. Release only amounts known to be unused; reconcile uncertain usage. A failed usage write must remain recoverable and must not permit repeated unaccounted calls.
 - [x] Use a shared model-price source for production and evaluations, or enforce parity if packaging requires separate tables. Unknown models must not be silently underpriced.
-- [ ] Show usage, remaining allowance, reset time, and reason for any pause. Warn before exhaustion and offer a clear next action. Restore queued work at a bounded rate after recovery or reset.
+- [x] Show daily model usage, remaining daily cap, reset time, and reason for a cap/accounting pause. Warn before exhaustion and offer a clear next action.
+- [ ] Restore queued work at a bounded rate after accounting recovery or reset; coordinate this with durable reservations rather than adding an independent recovery mechanism.
 - [ ] Verify concurrent dashboard/gateway calls, database outages, duplicate usage reports, unknown models, exhausted allowances, and period rollover.
 
 Done when normal concurrent work cannot bypass the service budget, accounting failures are visible and recoverable, and the residual maximum overshoot is documented and tested. Do not claim a strict dollar ceiling if the provider's in-flight usage cannot be bounded.
@@ -257,7 +277,7 @@ Continue investing when merchants renew, net effort falls, critical risks are co
 
 ### Gate 1: Before the first real merchant uses the advertised workflow
 
-- [ ] A1 is fixed; A2's required reliability changes are deployed and verified.
+- [x] A1 is fixed; A2's required reliability changes are deployed and verified.
 - [ ] A3 passes for every offered channel, including credential rotation and necessary merchant access. If Instagram remains restricted, recruitment and claims explicitly reflect that limitation.
 - [ ] A4's sensitive completion/outcome cases pass. Human approval and manual fallback remain available.
 - [ ] B1/B2 provide an explicit offer, bounded paid usage, visible pauses, and recovery behavior.

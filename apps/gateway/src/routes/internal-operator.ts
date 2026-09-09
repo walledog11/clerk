@@ -1,5 +1,5 @@
 import express, { type Request, type Response, type Router } from 'express';
-import { isSpendCapError, nanoDollarsToUsd } from '@shopkeeper/db';
+import { isLlmBudgetUnavailableError, isSpendCapError, nanoDollarsToUsd } from '@shopkeeper/db';
 import { ApiError } from '@shopkeeper/agent/errors';
 import logger from '../logger.js';
 import { runOperatorFreeFormTurn } from '../message-handlers/operator-free-form-turn.js';
@@ -98,6 +98,12 @@ export function registerInternalOperatorRoutes(router: Router): void {
         awaitingApproval: after.pendingPlans.length > 0,
       });
     } catch (err) {
+      if (isLlmBudgetUnavailableError(err)) {
+        return res.status(503).json({
+          error: 'AI usage accounting is temporarily unavailable, so new AI work is paused. Continue handling requests manually and try again shortly.',
+          code: 'llm_budget_unavailable',
+        });
+      }
       if (isSpendCapError(err)) {
         return res.status(429).json({
           error: 'AI spend cap reached for today. Increase the daily limit in Settings or wait until midnight UTC.',

@@ -11,6 +11,7 @@ vi.mock('@shopkeeper/db', () => ({
     integration: { findFirst: findIntegration },
     integrationDisconnect: { findUnique: findOperation },
   },
+  isLlmBudgetUnavailableError: () => false,
   isSpendCapError: () => false,
 }));
 
