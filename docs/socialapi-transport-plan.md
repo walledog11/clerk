@@ -1,10 +1,12 @@
-# SocialAPI launch bridge plan
+# SocialAPI Instagram transport plan
 
-Created: 2026-09-07. Status: in progress; S0 public-document diligence completed on 2026-09-07. Owner: engineering, with founder ownership of vendor diligence and live rollout.
+Created: 2026-09-07. Reframed 2026-09-09: this is no longer a temporary bridge. Status: in progress; S0 public-document diligence completed on 2026-09-07, no implementation exists. Owner: engineering, with founder ownership of vendor diligence and live rollout.
 
 ## Objective
 
-Use SocialAPI as a temporary, capacity-limited Instagram transport for the first external launch merchants while Shopkeeper's direct Meta app is waiting for Advanced Access. Preserve the direct Meta implementation, keep Meta approval work moving, and move off the bridge before traffic or merchant count makes the shared-vendor dependency material.
+Implement SocialAPI as the selected Instagram transport for `ig_dm` through the first 100 users. Keep the existing direct Meta implementation safe and disabled for new connections, and revisit direct Meta transport, migration, and any cross-provider handoff on a future dated decision.
+
+**What changed on 2026-09-09.** This document was written as a capped bridge underneath a direct-Meta launch that Advanced Access would unblock. That framing is retired. Meta App Review does not gate the canaries, the paid pilot, or expansion toward 100 users; the [improvement plan](project-improvement-plan.md) A3 is authoritative on that. Three assumptions from the original framing are therefore obsolete wherever they still appear below: the eight-merchant ceiling as a *product* limit, the 30-day exit deadline, and direct Meta as the primary transport. What survives is every engineering invariant, the identity-equivalence requirement, the capacity discipline, and the rollback rules — those hold regardless of how long SocialAPI stays.
 
 This plan follows the findings in the [SocialAPI pivot assessment](research/socialapi-pivot-assessment-2026-09-07.md). It adds a provider underneath the existing `ig_dm` product channel; it does not introduce a separate user-visible channel.
 
@@ -21,31 +23,37 @@ The dated [S0 diligence record](production/socialapi-s0-diligence-2026-09-07.md)
 
 ## Decisions and invariants
 
-1. **Direct Meta remains the primary strategic transport.** Existing direct integrations stay direct. No automatic migration is performed.
-2. **SocialAPI is selected server-side per organization.** Launch merchants do not choose a provider. An audited, fixed set of organization-to-brand assignments controls admission during the bridge period; merchants still complete OAuth themselves.
+1. **SocialAPI is the selected transport through the first 100 users.** Existing direct integrations stay direct and no automatic migration is performed, but direct Meta is not the thing this plan is waiting for. A future dated decision reopens it.
+2. **SocialAPI is selected server-side per organization.** Launch merchants do not choose a provider. An audited, fixed set of organization-to-brand assignments controls admission at every stage; merchants still complete OAuth themselves.
 3. **One integration uses one transport at a time.** An Instagram account is never intentionally active through both transports except for a bounded, observed migration handoff.
 4. **There is no automatic send failover.** A SocialAPI-connected merchant has not authorized Shopkeeper's Meta app. A failed SocialAPI send must not be retried through direct Meta.
 5. **The existing Shopkeeper workflow remains authoritative.** Both transports normalize into the current durable `InstagramInboundJobData`, ticket, planning, approval, attachment, and outbound-recording paths.
 6. **Verified Instagram identity remains canonical.** `Integration.externalAccountId` and `Customer.platformId` retain their direct-Meta identity semantics. Prove cross-app account and sender equivalence with real fixtures, or implement and test an explicit identity mapping before external onboarding. A field labeled “native ID” is insufficient evidence. SocialAPI brand, account, and conversation IDs remain routing metadata.
+
+   **What the current code actually keys on, read 2026-09-09.** `InstagramInboundJobData` in `apps/gateway/src/types.ts` carries `instagramAccountId` and `senderIgsid`. In `handleIgDmJob` (`apps/gateway/src/message-handlers/channels.ts`) `instagramAccountId` selects the integration through `loadActiveInstagramIntegration`, and `senderIgsid` is passed straight to `processInboundMessage` as the platform identity — it becomes `Customer.platformId`, half of the `(organizationId, platformId)` unique key. Those are the two fields the spike must compare; everything else is routing metadata.
+
+   **Expect the sender IDs not to match, and design for that.** Instagram-scoped sender IDs are scoped to the Meta app that observes them, and SocialAPI supplies its own Meta app rather than supporting bring-your-own. So the same shopper messaging the same merchant is likely to arrive with a different `senderIgsid` under each transport, which would fragment `Customer` rows across a migration. This is the expected answer to verify in SP and in vendor question 5 — not an established fact, and not a reason to skip the fixture comparison. Two consequences if it holds: the account ID is the field that must be globally stable (it plausibly is, and production is blocked if SocialAPI cannot expose it), and a direct-Meta handoff needs an explicit sender mapping rather than an in-place swap. Note that the 2026-09-09 reframe *reduces* this risk rather than raising it — a transport that stays put never fragments anything; only the migration that is now unscheduled would.
 7. **SocialAPI credentials are infrastructure secrets.** Never store the workspace API key in `Integration`, logs, jobs, or client-visible responses.
-8. **The bridge has an enforced ceiling and exit date.** It cannot expand merely because the first canaries work.
+8. **Capacity is enforced in code, and expansion is staged.** Admission is bounded by the vendor tier actually contracted, not by convention, and it cannot expand merely because the first canaries work. The bound is a capacity contract to renegotiate as the cohort grows — not a deadline to migrate away from.
 
 ## Initial launch envelope
 
+The envelope below is the **first stage**, sized to the entry tier — not a product ceiling. Expanding it is a commercial conversation with the vendor plus the capacity evidence named in S6, and Gate 2 of the improvement plan requires exactly that before the cohort grows toward 100. Define the admission unit (connected merchant organizations and brands) before enforcing any number, so "100 users" maps to enforceable provider capacity.
+
 Use the paid Side Hustle tier because production requires webhooks and support. Apply these deliberately conservative controls:
 
-- Maximum: **8 active production SocialAPI merchant organizations**. Enforce this during connect, not by convention. Reserve capacity for a production canary and operational headroom within the published 10-brand tier.
-- Cohorts: 2 canaries, then 5 merchants, then at most 8.
-- Review trigger: the earliest of **30 calendar days, 5 active merchants, 500 inbound events/day, or 100 outbound replies/day** across the bridge.
-- Before the first external canary, record its activation date and a calendar exit decision deadline **30 days later** in the runbook. By that deadline, complete migration or record an explicit exception with owner, reason, service-continuity plan, and a new dated deadline. Without that decision, freeze onboarding; do not abruptly drop service for connected merchants.
+- First-stage maximum: **8 active production SocialAPI merchant organizations**, the headroom the published 10-brand tier leaves. Enforce this during connect, not by convention. Raising it requires a contracted tier with documented headroom, not an edit to this line.
+- Cohorts: 2 canaries, then 5 merchants, then at most 8 on this tier.
+- Review trigger: the earliest of **30 calendar days, 5 active merchants, 500 inbound events/day, or 100 outbound replies/day** across the SocialAPI cohort.
+- Before the first external canary, record its activation date and a **capacity review** deadline 30 days later in the runbook. That review reads the observed volumes against the contracted tier and decides whether to expand, hold, or renegotiate. It is not a migration deadline; the 2026-09-09 reframing removed the exit date. Without a recorded decision, freeze onboarding; do not abruptly drop service for connected merchants.
 - Freeze new SocialAPI connections immediately for any unresolved cross-tenant routing defect, missing supported DM, attachment-loss incident, two consecutive OAuth failures affecting different merchants, or the provider failure alert defined in S6.
-- Do not upgrade to the 50-brand plan as an operational reflex. Reaching the eight-merchant ceiling requires a written decision to complete direct Meta migration, negotiate stronger SocialAPI terms/dedicated infrastructure, or delay expansion.
+- Do not upgrade to the 50-brand plan as an operational reflex. Reaching the eight-merchant stage limit requires a written decision to negotiate stronger SocialAPI terms or dedicated infrastructure, or to delay expansion — informed by the observed reliability and support-response evidence, not by the calendar.
 
 The event thresholds are review triggers, not message-dropping limits. Once an account is connected, Shopkeeper continues accepting its valid events; the connection gate prevents adding more exposure.
 
-Use separate SocialAPI workspaces/API keys for local or staging tests and production if the vendor supports them. If it does not, keep non-production brands outside the eight production slots and include their consumption in the capacity audit.
+Use separate SocialAPI workspaces/API keys for local or staging tests and production if the vendor supports them. If it does not, keep non-production brands outside the production slots and include their consumption in the capacity audit.
 
-For this capped bridge, provision brands and scoped runtime keys through an audited operator workflow before merchant OAuth. Maintain at most eight assigned production merchant slots, including pending connections. Failed or abandoned OAuth retains its slot until explicitly released; reconnect reuses it. Validate assignment uniqueness and total vendor-brand consumption. Automated brand creation and dynamic slot allocation are deferred.
+For this first stage, provision brands and scoped runtime keys through an audited operator workflow before merchant OAuth. Maintain at most eight assigned production merchant slots, including pending connections. Failed or abandoned OAuth retains its slot until explicitly released; reconnect reuses it. Validate assignment uniqueness and total vendor-brand consumption. Automated brand creation and dynamic slot allocation are deferred.
 
 ## Target architecture
 
@@ -109,11 +117,11 @@ Effort estimates are active engineering days and exclude vendor response time an
 | S2–S5 core | P0 | Complete one production-shaped OAuth → inbound → approval → reply → disconnect path | Engineering | Re-estimate after SP | S1 |
 | S4–S6 hardening | P0 | Recovery, reconnect, deletion, race handling, and operational controls | Engineering / release | Re-estimate after SP | Complete core path |
 | S7 | P0 | Certify with two supervised external canaries | Engineering / founder | 7–14 days observation after acceptance | S0; S1–S6 complete |
-| S8 | P0 | Run capped launch and direct-Meta exit | Founder / release | Bridge period | S7; Meta approval in parallel |
+| S8 | P0 | Run staged launch and capacity review | Founder / release | Continuous | S7 |
 
 S1–S6 below are implementation checklists, not a strictly sequential dependency chain. First build the smallest complete path across S2–S5, including text, an image, a real approved reply, and disconnect. Then complete recovery and lifecycle hardening. Tests, provider-tagged logs, environment validation, and basic failure visibility accompany every increment; S7 assembles live evidence rather than starting integration testing.
 
-The original **9–15 engineering days** is a provisional budget, not a commitment. SP consumes that budget; it is not a separate unbudgeted addition. Re-estimate remaining work after SP and compare expected merchant availability with direct Meta approval progress. Stop bridge investment if vendor gaps or the remaining timeline erase its launch advantage.
+The original **9–15 engineering days** is a provisional budget, not a commitment. SP consumes that budget; it is not a separate unbudgeted addition. Re-estimate remaining work after SP. Because this is now the launch transport rather than a loan against Meta approval, a vendor gap found in SP is a reason to fix the plan or change provider — not a reason to wait for direct Meta.
 
 ### SP. Controlled feasibility spike
 
@@ -223,16 +231,16 @@ Done when send, failure, reconnect, disconnect, and workspace deletion are provi
 ### S6. Observability, capacity, and operations
 
 - [ ] Tag existing integration analytics and ops alerts with `transport=meta_direct|socialapi` while keeping `channel=ig_dm`.
-- [ ] Add counts for OAuth attempts/results, active bridge organizations, signed/unmapped/duplicate webhooks, queue failures, reconciliation discoveries, attachment failures, API status/latency, sends by result category, and reconnect-required accounts.
+- [ ] Add counts for OAuth attempts and results, active SocialAPI organizations, webhooks that were signed, unmapped, or duplicated, queue failures, reconciliation discoveries, attachment failures, provider status and latency, sends by result category, and reconnect-required accounts.
 - [ ] Measure provider-received-to-ticket-persisted lag and approval-to-provider-accepted latency without logging message content or customer identifiers.
 - [ ] Alert immediately on any isolation mismatch, confirmed missing supported message/attachment, or unrecovered reconciliation gap. Alert on invalid signature bursts and webhook-path inbound lag above two minutes; measure recovery lag separately against its five-minute schedule.
 - [ ] Evaluate provider 5xx/timeout above 2% over a rolling 15-minute window only with at least 100 calls; at lower volume, alert and freeze onboarding after three consecutive failures within 15 minutes. Evaluate attachment failures above 1% with at least 100 attempts in 24 hours; below that, review each failure and freeze for confirmed loss. Track retries separately so rates have a defined denominator.
 - [ ] Report active and assigned/pending merchant counts separately; alert at 5/8 and 7/8 assigned slots, and audit all remote brands including test accounts and pending cleanup.
 - [ ] Extend `audit:instagram-rollout` to report transport counts, invalid metadata, missing provider account IDs, duplicate native/provider identities, health, last successful ingress/send, and cap utilization.
 - [ ] Add SocialAPI variables to `turbo.json`, launch-environment validation, network test guards, production inventory, and the runbook. Secret checks report presence/fingerprint only.
-- [ ] Add a synthetic production canary if SocialAPI permits a dedicated test account; otherwise schedule a documented manual canary at least daily during the bridge.
+- [ ] Add a synthetic production canary if SocialAPI permits a dedicated test account; otherwise schedule a documented manual canary at least daily through the supervised stages.
 
-Done when release/ops can tell direct and bridge failures apart, stop onboarding before the ceiling, and diagnose a merchant without viewing message content.
+Done when release/ops can tell direct and SocialAPI failures apart, stop onboarding before the stage limit, and diagnose a merchant without viewing message content.
 
 ### S7. Certification and live canaries
 
@@ -259,29 +267,29 @@ Live acceptance, first with a controlled account and then two non-role merchant 
 
 Entry to S7 requires S0 diligence, completed S1–S6 checks, and controlled-account acceptance. S7 authorizes only the two supervised external canaries, which count toward the eight slots. Its completed 7–14-day observation is the gate for expansion beyond two. Passing mocks or a text-only live test is insufficient.
 
-### S8. Capped launch and exit
+### S8. Staged launch and capacity review
 
 Rollout sequence:
 
 1. Continue the same two supervised merchants admitted in S7; do not start a second two-merchant cohort or reset the observation clock. Review every provider error and reconciliation discovery daily.
 2. After S7's 7–14-day observation and complete acceptance evidence, expand to five. Require at least three clean days at five before considering eight.
 3. Perform the launch-envelope review. Expand to eight only if vendor diligence is closed, attachment/reconciliation evidence is clean, and support response is adequate.
-4. Keep direct Meta Advanced Access and its non-role acceptance loop active in parallel.
+4. At the stage limit, run the capacity review: contracted tier, brand/account headroom, rate limits, support response, and observed reliability against the next cohort size. Gate 2 of the improvement plan consumes this evidence.
 
-Exit to direct Meta once Advanced Access and the non-role end-to-end cycle pass:
+The migration sequence below is **retained but not scheduled.** It is the rehearsed handoff to run *if* a future dated decision reopens direct Meta; nothing in the current plan triggers it, and no deadline requires it. Should that decision come:
 
 1. Freeze new SocialAPI connections; make direct Meta the default for new merchants.
-2. Migrate one bridge canary first using the handoff rehearsed in SP and implemented in S1–S5. Pause automated sends, complete direct OAuth/subscription verification, drain or durably quarantine old-generation work, and persist the old provider cleanup snapshot before atomically changing the integration in place. Preserve `replyIntegrationId`, increment generation, and clear or replace provider-specific thread routes as appropriate.
+2. Migrate one SocialAPI canary first using the handoff rehearsed in SP and implemented in S1–S5. Pause automated sends, complete direct OAuth/subscription verification, drain or durably quarantine old-generation work, and persist the old provider cleanup snapshot before atomically changing the integration in place. Preserve `replyIntegrationId`, increment generation, and clear or replace provider-specific thread routes as appropriate.
 3. Run the verified cross-provider deduplication/mapping strategy during bounded dual-subscription overlap. Recover outstanding inbound work, verify direct inbound and outbound, then durably disconnect the old SocialAPI account using its snapshot and resume sends. Define the overlap deadline and recovery owner in the migration runbook. Failure pauses further migrations; it must not silently discard queued messages or delete the retained integration.
 4. Migrate remaining merchants in scheduled, communicated batches. Verify inbound and outbound after each reconnect.
 5. After zero active SocialAPI integrations for 30 days, run deletion verification, remove the webhook, revoke keys, remove secrets, and move compatibility cleanup to the retirement backlog.
 
-If direct Meta is still unavailable at the ceiling, stop onboarding and make an explicit decision among a stronger SocialAPI contract/dedicated app, another approved provider, or delayed expansion. Do not silently convert the launch bridge into the permanent high-traffic architecture.
+SocialAPI is now expected to carry production traffic for as long as the first 100 users take. Treat it as a load-bearing dependency accordingly: the vendor terms, isolation guarantees, and support tier must fit that role rather than a 30-day loan. The failure mode this section originally guarded against — drifting into a permanent high-traffic architecture without deciding to — is now the explicit decision, which is what makes S0 diligence and the S6 capacity evidence non-optional rather than provisional.
 
 ## Release and rollback rules
 
 - All schema changes are additive and deploy before code that reads them.
-- Dashboard and gateway accept both old direct jobs and new provider-tagged jobs throughout the bridge.
+- Dashboard and gateway accept both old direct jobs and new provider-tagged jobs for as long as both transports have live integrations.
 - Rollback disables **new** SocialAPI connects first. It does not disable ingress or replies for already connected merchants.
 - A severe isolation or integrity incident disables SocialAPI automated outbound, retains signed ingress where safe, and activates the merchant manual-response procedure.
 - Provider switching is an explicit OAuth/reconnect operation. A feature-flag flip alone cannot move a merchant between OAuth apps.
@@ -289,4 +297,4 @@ If direct Meta is still unavailable at the ceiling, stop onboarding and make an 
 
 ## Definition of success
 
-The bridge is successful when Shopkeeper can onboard and learn from its first external Instagram merchants before Meta approval without weakening the existing message, attachment, approval, tenant-isolation, or truthful-outcome guarantees—and can later move those merchants to direct Meta through a controlled reconnect with no stranded conversations or undisclosed data retention.
+The transport is successful when Shopkeeper can onboard, serve, and learn from external Instagram merchants through SocialAPI — from the two supervised canaries through the paid pilot and toward 100 users — without weakening the existing message, attachment, approval, tenant-isolation, or truthful-outcome guarantees, with capacity and vendor terms that fit the cohort it carries, and with the rehearsed reconnect path still available should a future decision move merchants to direct Meta with no stranded conversations or undisclosed data retention.

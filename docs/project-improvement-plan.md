@@ -1,12 +1,12 @@
 # Shopkeeper improvement and validation plan
 
-Created: 2026-09-07. Last reconciled: 2026-09-09. Status: in progress; A1 and A2 are verified, A4 and B2 are in progress, and Gate 1 remains open.
+Created: 2026-09-07. Last reconciled: 2026-09-09. Status: in progress; A1 and A2 are verified, A4's implementation is landed, B2 is in progress, and Gate 1 remains open. **A3 is the critical path and has no implementation** — every other open item is bounded work on code that exists.
 
 ## Objective
 
 Make the customer-message → Shopify context → merchant approval → verified action/reply workflow reliable, economical, and easy enough that a small Shopify merchant pays to keep using it. Address every weakness identified in the September 7 project review before expanding the product's scope or acquisition spending.
 
-Preserve the direction in [Product Truth](product-truth.md): Instagram is the core social support channel, iMessage is the merchant control surface, Shopify supplies operational context and actions, and the dashboard supports setup, review, and manual fallback. Gmail is a fallback; Telegram remains internal testing infrastructure. Broader operating modules and additional merchant-control channels remain deferred until demand justifies them.
+Preserve the direction in [Product Truth](product-truth.md): Instagram is the core social support channel, iMessage is the merchant control surface, Shopify supplies operational context and actions, and the dashboard supports setup, review, and manual fallback. Gmail is a fallback; Telegram remains internal testing infrastructure. SocialAPI is the selected Instagram transport through the first 100 users. Direct Meta integration work is deferred to a future decision and is not a launch, canary, pilot, or first-100-user dependency. Broader operating modules and additional merchant-control channels remain deferred until demand justifies them.
 
 Code defects can be fixed. Demand, differentiation, willingness to pay, and retention must be tested. Completing the engineering checklist alone does not establish a viable business.
 
@@ -28,7 +28,7 @@ Owners below are roles. The founder can own several roles; name the actual owner
 | --- | --- | --- | --- | --- | --- |
 | A1 | P0 | Stop inbox render loop | Engineering | 0.5–1 day | None |
 | A2 | P0 | Reconcile and ship existing reliability fixes | Engineering / release | 1–2 days | A1; current deployment inventory |
-| A3 | P0 | Close access, credential, and provider launch gates | Founder / release | 2–4 days plus external waits | Start immediately; A2 before final canaries |
+| A3 | P0 | Implement and certify SocialAPI for the first 100 users; close other offered-provider gates | Founder / engineering / release | Re-estimate after the controlled spike, plus 7–14 days of canary observation | Start immediately; A2 before external canaries |
 | A4 | P0 | Make completion claims follow actual action outcomes | Agent engineering | 3–5 days | A2; coordinate contract with B4 |
 | B1 | P0 | Establish sustainable pricing and entitlement rules | Founder / engineering | 2–4 days initially | Cost baseline from D1; refine during D2 |
 | B2 | P0 | Enforce service budgets and show usage | Engineering | 3–5 days | B1 definitions |
@@ -48,16 +48,16 @@ P0 means required for the paid pilot or its evidence. P1 means bounded product/e
 | ID | State | Current evidence / next dependency |
 | --- | --- | --- |
 | A1 | `verified` | Inbox regression, browser smoke, and lint passed with the A2 candidate. |
-| A2 | `verified` | Released and accepted on `e4cfab72`; subsequent production head `eff1fb9f` has passing CI and Clerk browser checks. See the release inventory. |
-| A3 | `in_progress` | Standard Instagram access and dev-store Shopify scope readback are proven; Advanced Access, external-merchant acceptance, Shopify secret rotation, Gmail reconnect, iMessage device acceptance, and remaining compliance canaries are open. |
-| A4 | `in_progress` | Structured completion facts and targeted behavior evidence are present; deterministic sensitive-copy rendering, a production grounded-reply canary, and strict release-run disposition remain open. |
-| B1 | `not_started` | Stripe rollout is deliberately deferred; cost scenarios, billable-unit semantics, entitlements, and a pilot offer still require owner decisions. |
-| B2 | `in_progress` | Price parity is verified. Fail-closed spend reads and a visible daily usage/cap panel are implemented in the 2026-09-09 working tree; durable reservations and service allowances remain open. |
-| B3 | `not_started` | Depends on the A4 behavior contract. |
-| B4 | `not_started` | Existing typed-result inventory and remaining prefix-parsing conversion are open. |
-| C1 | `not_started` | Bounded list/detail reads and reproducible load measurements are open. |
-| C2 | `not_started` | Authenticated desktop/mobile and real-device workflow review is open. |
-| C3 | `in_progress` | This reconciliation updates release/status truth; the architecture map and broader documentation audit remain open. |
+| A2 | `verified` | Released and accepted on `e4cfab72`; subsequent production revision `60b373ef` has passing CI and deployed Railway roles. See the release inventory for the separately evidenced Vercel and Clerk state. |
+| A3 | `in_progress` | **The critical path, and the only plan item with no implementation at all** — `socialapi` appears in five documents and in no source file under `apps/` or `packages/`. The 2026-09-09 reframe of the transport plan and the `to-do-list.md` corrections are done. Next two steps are not code: send the drafted vendor questions, and spike SocialAPI-vs-Meta sender identity. Then the production path, external acceptance, capacity contract, Shopify secret rotation, Gmail reconnect, iMessage device acceptance, and compliance canaries. Direct Meta is deferred and does not gate this phase. |
+| A4 | `in_progress` | Structured completion facts and deterministic sensitive-copy rendering are implemented and landed. Open: a production grounded-reply canary, the strict release-run disposition, and the schema-carried-completion rework recorded under A4 as structural debt. |
+| B1 | `not_started` | Split 2026-09-09. The analytical half — cost envelope, billable unit, deterministic entitlements — is Gate 1 and needs no Stripe. The commercial half — prices, checkout, plan mapping — is deferred to Gate 2. Both still need owner decisions. |
+| B2 | `in_progress` | Price parity is verified. Fail-closed spend reads and a visible daily usage/cap panel shipped in `60b373ef`; durable reservations and service allowances remain open. |
+| B3 | `parked` | Depends on the A4 behavior contract; deliberately behind A3. |
+| B4 | `parked` | Existing typed-result inventory and remaining prefix-parsing conversion are open; deliberately behind A3. |
+| C1 | `in_progress` | The active inbox already uses bounded cursor pages and preview rows, and hidden-tab polling is suspended. Bounded thread-detail history, a bounded latest-customer-message query, query-plan inspection, realtime recovery evidence, and reproducible load measurements remain open. |
+| C2 | `parked` | Authenticated desktop/mobile and real-device workflow review is open. Its onboarding bullet depends on the SocialAPI connect flow existing, so it cannot fully close before A3 anyway. |
+| C3 | `in_progress` | The launch-gate contradiction is closed: `to-do-list.md` no longer claims Meta App Review gates launch, and the transport plan no longer claims a temporary bridge, a 30-day exit, or direct-Meta-primary. The architecture map, the four-state integration record, and the broader README audit remain open. |
 | C4 | `in_progress` | Current CI and Clerk browser contract pass, but the complete merchant candidate cannot be certified before the other Gate 1 dependencies. |
 | D1 | `in_progress` | Per-turn and daily model-cost records exist and daily usage is now visible; workflow reconciliation and non-model cost/support measures remain open. |
 | D2 | `not_started` | Must not begin until Gate 1 passes. |
@@ -87,12 +87,16 @@ Entry points: [existing audit fixes](code-audit-fixes.md), [deployment runbook](
 
 Done when both applications run the recorded candidate, the database is compatible, and recovery evidence is attached to that release. Keep an application rollback path compatible with the additive schema; do not promise exactly-once external delivery.
 
-### A3. Close the launch dependencies for the advertised experience
+### A3. Certify SocialAPI and the other launch providers for the advertised experience
 
 Use [external services work](phase-6-external-services.md), the [Gmail verification packet](production/google-gmail-verification-packet.md), and [data-deletion procedures](production/data-deletion.md).
 
-- [ ] Confirm whether Instagram Advanced Access is still pending. Complete the review package if necessary and prove a non-role merchant's connect → inbound DM → approve → received reply → disconnect/reconnect cycle. Mark restricted availability accurately until this passes.
-- [ ] While Advanced Access is pending, execute the capped [SocialAPI launch bridge plan](socialapi-launch-bridge-plan.md) for selected external merchants. Keep direct Meta as the strategic transport, enforce the bridge ceiling, and require the documented live/exit gates rather than treating middleware connectivity as Instagram readiness.
+- [x] Replace the obsolete capped-bridge assumptions in the existing SocialAPI plan with a production plan for the first 100 users. Keep `ig_dm` as the product channel and SocialAPI as its selected transport. Done 2026-09-09: the document is now the [SocialAPI transport plan](socialapi-transport-plan.md); the temporary-bridge framing, the 30-day exit deadline, and direct-Meta-as-primary are retired, and the eight-merchant number is restated as the entry tier's first stage rather than a product ceiling. The `to-do-list.md` entries that still claimed Meta App Review gates launch were corrected in the same change. **Still open:** define the operational admission unit—connected merchant organizations/brands and seats—so “100 users” maps to enforceable provider capacity rather than an ambiguous counter. That number comes from the vendor answers, so it closes with the diligence bullet below.
+- [ ] Close SocialAPI vendor and data-processing diligence before external merchant data is admitted: acceptable DPA and retention terms, scoped credentials, tenant isolation, incident/support commitments, deletion behavior, supported Instagram message/media coverage, recovery behavior, and a commercial tier with documented headroom for the first-100-user envelope.
+- [ ] Send the drafted vendor questions in the [S0 diligence record](production/socialapi-s0-diligence-2026-09-07.md) **now**, before any implementation. Vendor response latency is the longest pole in this plan and it does not start until the mail goes out; every estimate below assumes an answer that has not been requested yet.
+- [ ] Run a controlled SocialAPI feasibility spike, then implement the production path through the existing durable Instagram workflow: merchant OAuth, signed inbound webhook, exact organization/account routing, private media persistence, recovery and deduplication, approval, provider-pinned outbound reply, health/reconnect, disconnect, deletion, observability, and capacity controls. Do not treat middleware connectivity or a text-only test as Instagram readiness. The spike's first question is invariant 6 of the transport plan — whether a SocialAPI sender ID equals the direct-Meta `Customer.platformId`. If it does not, "normalize into the existing durable workflow" stops being true, an explicit identity mapping is required, and every estimate under this bullet changes. Answer that before estimating the rest.
+- [ ] Prove the SocialAPI path first with controlled accounts, then with two supervised non-role merchant canaries: connect → inbound text/media → ticket/plan → approve → received reply → disconnect/reconnect. Observe the canaries for 7–14 days before expanding the paid pilot, and expand in explicit capacity-tested stages toward 100 users.
+- [ ] Keep the existing direct Meta implementation safe and disabled for new launch connections. Do not spend launch-critical time on Advanced Access or require Meta acceptance for SocialAPI canaries, the paid pilot, or expansion through the first 100 users. Revisit direct Meta transport, migration, and any cross-provider handoff on a future dated decision.
 - [ ] Resolve the documented Shopify app-secret exposure. Rotate through the provider and both applications in a coordinated window, validate OAuth and webhook verification afterward, and keep secret values out of evidence artifacts. If already rotated, record that evidence instead.
 - [ ] Test a real merchant Shopify install. A 2026-09-09 provider-side readback confirmed the dev store holds every scope required by `SHOPIFY_OAUTH_SCOPES`, and the dashboard now explains why updated access is required and offers a reconnect action when recorded scopes are missing. Real-install acceptance remains open; verify missing scopes produce an actionable recovery path without silently disabling advertised work.
 - [ ] Complete the applicable Gmail grant/reconnect and verification work. Keep forwarding available where suitable, with its own plain-text, attachment, threading, and bounce acceptance checks. Gmail completion must not be used to claim Instagram readiness.
@@ -100,7 +104,7 @@ Use [external services work](phase-6-external-services.md), the [Gmail verificat
 - [ ] Close the outstanding Shopify compliance acceptance checks using isolated fixtures and the existing procedures before broad merchant onboarding.
 - [ ] Keep TikTok Shop gated until API eligibility, app approval, seller authorization, and a complete external seller workflow are proven. Generic TikTok DMs remain a separate, unimplemented capability. Do not build more adapter code without resolving feasibility.
 
-Done when every channel offered to the pilot cohort has dated acceptance evidence, an identified provider owner, and a recovery path. External approval delays extend the schedule. A fallback-channel pilot can validate that channel only; it cannot close the social-support hypothesis.
+Done when every channel offered to the pilot cohort has dated acceptance evidence, an identified provider owner, and a recovery path; SocialAPI has completed its controlled-account and two-merchant canary sequence; and its contract and measured capacity support staged expansion toward the first 100 users. External vendor, OAuth-platform, or account approvals can extend the schedule, but direct Meta approval cannot. A fallback-channel pilot can validate that channel only; it cannot close the social-support hypothesis.
 
 ### A4. Ground completion language in execution evidence
 
@@ -109,12 +113,30 @@ Entry points: `packages/agent/src/plan-grounding.ts`, `plan-validation.ts`, `run
 - [x] Add regressions for unsupported first-person, plural, passive, and coordinated claims, including “We have issued your refund” and “Your refund has been issued.” Include wrong order, amount, currency, recipient, and partial execution cases.
 - [x] Define a small structured completion-fact contract for supported mutations: action, target, relevant amount/currency, outcome, and execution reference. Reuse the action journal and provider results as the evidence source.
 - [x] Keep proposed actions distinct from committed outcomes. A plan containing a refund tool is insufficient proof that a refund happened. Replies that depend on a mutation must wait for its result.
-- [ ] Render sensitive completion statements from validated facts where practical, while allowing brand voice in surrounding text. If a generated statement cannot be supported, regenerate within the existing budget or require merchant review. Do not keep expanding regexes as the primary correctness mechanism.
+- [x] Render sensitive completion statements from validated facts where practical, while allowing brand voice in surrounding text. If a generated statement cannot be supported, regenerate within the existing budget or require merchant review. Do not keep expanding regexes as the primary correctness mechanism. `renderReplyCompletionClaims` replaces supported claim sentences with copy composed from the fact fields and leaves surrounding text alone; money follows the agent package's existing customer-facing convention (`$20.00`, or `18.50 EUR` for non-USD) rather than ISO-prefixed amounts a customer would read as a bank statement.
 - [x] Preserve truthful statements about historical actions returned by live store reads. Treat customer text, old summaries, and unexecuted plans as untrusted claims rather than proof of completion.
 - [x] Specify the approval contract for post-execution wording: facts may resolve an approved conditional reply, but a changed recipient, new promise, or materially different action requires renewed approval. Known failure and unknown outcome need distinct customer/operator copy.
 - [ ] Run targeted model evaluation and the release gate under the [existing evaluation contract](agent-eval-gates.md). Exact candidate `c8a5b3c2` has passing behavior evidence for all 48 dashboard core fixtures and the gateway hard case; the original release invocation exhausted its budget, so strict single-invocation certification remains open. The owner requested no further paid run after the final targeted pass.
 
 Done when the regression matrix cannot emit a completion claim unsupported by its recorded facts, an uncertain action cannot become a success message, and truthful historical information still works. Finite tests do not prove hallucinations impossible; keep monitoring sampled real outcomes.
+
+**Structural debt this created, recorded 2026-09-09 rather than fixed.** The safety-critical half is
+`unsupportedReplyCompletionClaims`, which grades the model's own text and rejects it; that half is
+sound and runs against the original tool call, so the renderer cannot launder an unsupported claim
+past it. The rendering half selects *what* to rewrite by matching English — `MUTATION_VERB`,
+`MUTATION_VERB_PROGRESSIVE`, `CLAIM_CONTINUATION`, contrastive-phrase carve-outs — and then edits
+the reply the customer reads. That is a repair pass on customer-visible text, which
+`AGENT_AUDIT.md` records as deleted for cause, and it means `plan-grounding.ts` now grows a case
+every time a phrasing slips through. The structural fix the architecture law already names is to put
+the completion statement in the **tool schema**: `send_reply` accepts an optional structured
+`completion` the executor renders, so the model never authors the sentence that needs grading.
+That is a planner-surface change and needs the eval gate, so it is not free — but it is the version
+that stops growing. Two smaller consequences to resolve alongside it: the approval card is no
+longer WYSIWYG (the merchant approves one sentence, the customer receives another; `AgentAction`
+records what was sent, so the audit stays honest), and `formatMoney` now has four independent
+implementations across `shopify/sales-pulse.ts`, the dashboard context panel,
+`conversation-attribution.ts`, and `lib/format/currency.ts` — `publicMoney` deliberately matches
+the first rather than becoming a fifth.
 
 ## B. Align costs, context, and contracts
 
@@ -126,15 +148,24 @@ Owner decision on 2026-09-07: defer Stripe price creation, price mapping, and pa
 for the near future. Keep this section open as later business work, but do not make Stripe pricing
 a blocker for the current engineering and controlled-pilot work or invent temporary price IDs.
 
+Restated 2026-09-09, because the deferral and the gate contradicted each other. B1 splits in two.
+The **analytical half** — cost measurement, one defined billable unit, usage scenarios, and
+deterministic entitlement behavior for every subscription state — is Gate 1 work and does not
+touch Stripe; a missing price mapping granting unlimited AI access is a defect regardless of
+whether checkout exists. The **commercial half** — Stripe prices, checkout, plan mapping, and the
+surfaces that quote them — is Gate 2 work, needed when D2 tests renewal at a real price. A
+supervised pilot can be invoiced by hand. Bullets below are marked to whichever half they belong.
+
 The reviewed offer is $19 for 500 conversations and $49 for unlimited conversations. Full Starter usage yields $0.038 revenue per conversation. At a proposed 80% gross-margin target, only $0.0076 per conversation remains for all direct delivery costs. These are arithmetic scenarios, not measured customer costs or proof that a particular price will work.
 
-- [ ] Measure model cost across classification, planning, execution, retries, summaries, operator turns, and scheduled work. Include messaging, storage, hosting allocation, payment fees, and customer support effort. Report cold-cache and expensive-tail cases separately.
-- [ ] Build low, expected, and high usage scenarios per merchant. Show contribution margin and a separate fully loaded view that values founder support time.
-- [ ] Define one billable unit, reset period, and treatment of reopened threads, episode rollover, retries, deleted threads, and operator messages. Reconcile the current calendar-month/thread-created counter with checkout and marketing language.
-- [ ] Replace unlimited usage with explicit included usage and a clearly disclosed service allowance. Keep both tiers' core capabilities consistent with the existing product decision; vary usage and seats unless evidence supports a deliberate change.
-- [ ] Choose the initial paid-pilot offer from the cost scenarios and merchant interviews. Test renewal at that price; do not infer willingness to pay from free use.
-- [ ] Give trial, recognized paid, unknown-price, and expired subscriptions explicit entitlement behavior. A missing price mapping must not silently create unlimited AI access. Preserve appropriate read/manual access and explain billing/configuration problems.
-- [ ] Update pricing, checkout, in-app usage, Stripe mappings, and support copy together. Specify treatment of existing customers before changing their limits. No surprise overages or retroactive charges.
+- [ ] *(Gate 1 — analytical)* Measure model cost across classification, planning, execution, retries, summaries, operator turns, and scheduled work. Include messaging, storage, hosting allocation, payment fees, and customer support effort. Report cold-cache and expensive-tail cases separately.
+- [ ] *(Gate 1 — analytical)* Include SocialAPI subscription, fair-use or overage exposure, brand/account capacity, support tier, and operational reconciliation work in the provider-cost envelope. Model the pilot and first-100-user stages separately.
+- [ ] *(Gate 1 — analytical)* Build low, expected, and high usage scenarios per merchant. Show contribution margin and a separate fully loaded view that values founder support time.
+- [ ] *(Gate 1 — analytical)* Define one billable unit, reset period, and treatment of reopened threads, episode rollover, retries, deleted threads, and operator messages. Reconcile the current calendar-month/thread-created counter with checkout and marketing language.
+- [ ] *(Gate 1 — analytical)* Replace unlimited usage with explicit included usage and a clearly disclosed service allowance. Keep both tiers' core capabilities consistent with the existing product decision; vary usage and seats unless evidence supports a deliberate change.
+- [ ] *(Gate 2 — commercial)* Choose the initial paid-pilot offer from the cost scenarios and merchant interviews. Test renewal at that price; do not infer willingness to pay from free use.
+- [ ] *(Gate 1 — analytical)* Give trial, recognized paid, unknown-price, and expired subscriptions explicit entitlement behavior. A missing price mapping must not silently create unlimited AI access. Preserve appropriate read/manual access and explain billing/configuration problems.
+- [ ] *(Gate 2 — commercial)* Update pricing, checkout, in-app usage, Stripe mappings, and support copy together. Specify treatment of existing customers before changing their limits. No surprise overages or retroactive charges.
 
 Done when the offer has a documented cost envelope, every subscription state has deterministic limits, and the merchant sees the same promise on all surfaces. Final price and allowance are decisions supported by evidence, not fixed assumptions in this plan.
 
@@ -183,9 +214,11 @@ Done when active paths use structured outcomes end to end and any remaining lega
 
 Entry points: `apps/dashboard/src/app/api/threads/route.ts`, thread detail/message consumers, `apps/dashboard/src/lib/messaging/thread-list-query.ts`, and inbox pagination hooks.
 
-- [ ] Make thread-list responses bounded previews. Give conversation history a bounded cursor-based endpoint or response, with explicit load-older behavior. Audit all callers before removing full-history responses.
-- [ ] Preserve chronological ordering and stable pagination when timestamps tie or new messages arrive. Fetch the latest customer message per thread using a database query with bounded result cardinality; inspect generated SQL before assuming an ORM `distinct` bounds scanned or transferred rows.
-- [ ] Inspect plans and indexes against realistic tenant-scoped data. Add an index only for demonstrated query work. Keep hidden-tab polling suspended and verify realtime reconnect fallback.
+- [x] Keep the active inbox on bounded cursor pages and preview responses. The current client requests 25 rows and the API defaults to a bounded 50-row page.
+- [ ] Give conversation history a bounded cursor-based endpoint or response, with explicit load-older behavior. Audit all detail callers before removing full-history responses.
+- [x] Preserve stable thread-list pagination with a cursor containing both `lastMessageAt` and `id`, including timestamp ties and newly arriving messages.
+- [ ] Fetch the latest customer message per thread using a database query with bounded result cardinality; inspect generated SQL before assuming the current ORM `distinct` bounds scanned or transferred rows.
+- [ ] Inspect plans and indexes against realistic tenant-scoped data. Add an index only for demonstrated query work. Keep the existing hidden-tab polling suspension and verify realtime reconnect fallback.
 - [ ] Benchmark isolated local/staging datasets representing 1× and 10× the expected pilot volume, long threads, attachment bursts, webhook retries, and concurrent operators. Use stubbed providers for load; no production mutation traffic.
 - [ ] Record hardware/service tier, dataset size, concurrency, cold/warm cache, database time, response size, memory, queue age, and p50/p95 latency. Separate provider/model latency from application work.
 
@@ -199,7 +232,7 @@ Entry points: onboarding components, `apps/dashboard/src/proxy.ts`, `src/lib/e2e
 
 - [ ] Reproduce the local Clerk loop with the documented preview command. Determine whether key resolution, middleware initialization, or preview setup caused it. Make isolated preview reproducible without weakening production authentication or allowing production auth bypass.
 - [ ] After A1, inspect real rendered desktop and mobile flows: sign-up, Shopify connection, customer channel connection, iMessage binding, first request, approval, correction, takeover, recovery, and disconnect/reconnect.
-- [ ] Resolve the onboarding mismatch: the reviewed step sequence directs users through email while the product's wedge is social support. Present the available customer-origin channel choice honestly and let eligible merchants complete the Instagram path without unnecessary email setup. Keep a clear fallback for restricted Instagram access.
+- [ ] Resolve the onboarding mismatch: the current step sequence directs users through email while the product's wedge is social support. Make SocialAPI-backed Instagram the primary customer-channel setup path for admitted merchants without requiring email first. Explain SocialAPI's role before authorization, handle capacity or eligibility failures explicitly, and keep Gmail as an optional fallback rather than as the route around Meta restrictions.
 - [ ] Check keyboard navigation, focus restoration, dialog announcements, touch targets, screen-reader labels, reduced motion, and mobile keyboard/composer behavior. Capture loading, empty, error, and expired-plan states as well as the happy path.
 - [ ] Make the approval card explain the proposed action, affected order, money involved, and relevant evidence. Keep detailed audits available without making them mandatory reading for every approval.
 - [ ] Use existing notification/digest controls to batch routine notices, deduplicate reminders, and respect duty hours. Immediate alerts should reflect urgency or required decisions. Do not relax financial approval policies merely to reduce notifications.
@@ -209,7 +242,7 @@ Done when the complete advertised workflow has browser/device evidence, no criti
 
 ### C3. Restore documentation trust and reduce maintenance friction
 
-- [ ] Reconcile README channel status, polling/realtime behavior, navigation, attachment support, operator channel naming, and testing counts with implementation and deployment evidence. Remove completed to-do entries only after confirming their actual status.
+- [ ] Reconcile README channel status, polling/realtime behavior, navigation, attachment support, operator channel naming, and testing counts with implementation and deployment evidence. Update or retire the obsolete SocialAPI “temporary bridge,” eight-merchant ceiling, direct-Meta-primary, and Advanced-Access-launch-gate claims in the README, to-do list, runbook, research/launch records, and Product Truth. Remove completed to-do entries only after confirming their actual status.
 - [ ] Record four separate states for integrations: implemented, locally verified, deployed, and externally accepted. Keep strategic intent in Product Truth and current operational status in the launch records.
 - [ ] Add a concise architecture map showing inbound persistence/queueing, agent planning, approval ownership, action execution, provider delivery, and recovery. Identify the authoritative owner of plan state, customer identity, billing eligibility, and action outcomes.
 - [ ] Document the shared agent package's supported host interface. Consolidate exports or abstractions only where a real change currently requires duplicated work or knowledge of internals.
@@ -240,7 +273,7 @@ Reuse `packages/analytics`, `AgentTurnUsage`, request/action records, and [exist
 - [ ] Make activation mean a connected merchant has received a real customer request and completed a verified action/reply. Report channel-specific funnels; the current documented email step must not exclude the social cohort from activation analysis.
 - [ ] Distinguish automated resolution, approved resolution, manual takeover, blocked action, known failure, unknown outcome, and reopened request. A sent reply alone is not proof of resolution.
 - [ ] Measure initial setup time, founder help, active merchant review time, substantive edits, unsolicited reminders, and meaningful weekly use. Use observation/time diaries where click timing would falsely count time away from the app as work.
-- [ ] Attribute all model/provider costs to the organization and period, including background work and failed/retried requests. Reconcile aggregates against provider totals and flag unattributed spend.
+- [ ] Attribute all model/provider costs to the organization and period, including SocialAPI base-plan allocation, background work, reconciliation traffic, and failed/retried requests. Reconcile aggregates against provider totals and flag unattributed spend.
 - [ ] Track founder support minutes and assign a stated hourly cost in the economic analysis. Separate one-time setup from ongoing support.
 - [ ] Establish incident measures for unsupported completion claims, wrong targets, duplicate actions, lost accepted messages, and time to resolve unknown outcomes. Avoid logging raw message content into general analytics.
 
@@ -250,7 +283,7 @@ Done when five sample workflows reconcile from request through action/reply, usa
 
 The following is a validation protocol, not a claim of existing traction or authority to contact merchants during this documentation task.
 
-- [ ] Recruit five to ten independent, owner-operated Shopify brands in one segment, initially testing apparel/accessories with recurring social questions and order changes. Screen for enough weekly support work to plausibly save several hours; record current tools and their limitations.
+- [ ] After the two supervised SocialAPI canaries pass, recruit five to ten independent, owner-operated Shopify brands in one segment, initially testing apparel/accessories with recurring social questions and order changes. Screen for enough weekly support work to plausibly save several hours; record current tools and their limitations. This is the first paid validation cohort, not an instruction to admit all 100 users at once.
 - [ ] Before connecting Shopkeeper, collect a one-week baseline of support volume, active handling time, response delays, and error/rework costs. Separate unusually quiet or peak weeks.
 - [ ] Run four to six weeks of real, initially supervised use after the pilot gates pass. Record every founder intervention; manual rescue is a service cost, not autonomous product success.
 - [ ] Compare matched request types against the baseline. Report routine and complex cases separately, include unanswered/reopened cases, and show per-merchant results rather than only cohort averages.
@@ -275,29 +308,43 @@ Continue investing when merchants renew, net effort falls, critical risks are co
 
 ## Pilot and expansion gates
 
-### Gate 1: Before the first real merchant uses the advertised workflow
+### Canary entry gate: Before the first supervised external SocialAPI merchant
 
 - [x] A1 is fixed; A2's required reliability changes are deployed and verified.
-- [ ] A3 passes for every offered channel, including credential rotation and necessary merchant access. If Instagram remains restricted, recruitment and claims explicitly reflect that limitation.
+- [ ] SocialAPI vendor/data-processing gates, tenant isolation, scoped credentials, controlled-account acceptance, and the production-shaped OAuth → inbound → approval → received-reply → disconnect path pass.
+- [ ] The Shopify secret is rotated and the canary's Shopify grant, iMessage binding, manual fallback, deletion path, and operator recovery path are ready.
+- [ ] A4's sensitive completion/outcome cases pass for the canary candidate, and C4's applicable deterministic and browser checks pass with a recorded SHA.
+- [ ] D1 can reconcile each canary request through provider ingress, action/reply, cost, retry/failure state, and founder intervention.
+
+This gate authorizes only the two named, closely supervised SocialAPI canaries. Their 7–14-day observation is A3 evidence, not a prerequisite that can be obtained before any external merchant is admitted.
+
+### Gate 1: Before expanding beyond the two canaries into the paid pilot
+
+- [x] A1 is fixed; A2's required reliability changes are deployed and verified.
+- [ ] A3 passes for every offered channel. SocialAPI has completed controlled-account acceptance and the two-merchant observation window, with capacity and recovery evidence for the next stage. Direct Meta approval is not part of this gate.
 - [ ] A4's sensitive completion/outcome cases pass. Human approval and manual fallback remain available.
-- [ ] B1/B2 provide an explicit offer, bounded paid usage, visible pauses, and recovery behavior.
+- [ ] B1 has a measured cost envelope, one defined billable unit, and deterministic entitlement behavior for every subscription state — trial, recognized paid, unknown price, expired — so a missing price mapping cannot silently grant unlimited AI access. B2 provides bounded paid usage, visible pauses, and recovery behavior. **Stripe price creation and paid checkout are explicitly not in this gate** (owner decision 2026-09-07, restated 2026-09-09): a supervised pilot can be invoiced by hand, and requiring the deferred half here made this gate unpassable by construction. Paid checkout moves to Gate 2, where D2's renewal test actually needs it.
 - [ ] C1 establishes bounded core reads and capacity sufficient for the pilot; broader optimization may follow measurement.
 - [ ] C2 demonstrates the core device/browser flow and resolves critical usability/authentication blockers.
 - [ ] C4 certifies the selected candidate; D1 records the necessary evidence.
 
 B3 and remaining B4/C3 improvements may continue during a small supervised pilot if their residual limitations are disclosed and do not undermine these gates. Treat any discovered privacy, authorization, or outcome-integrity defect as a gate regardless of its task label.
 
-### Gate 2: Before substantial acquisition spending or new operating modules
+**Sequencing note, 2026-09-09.** Every remaining Gate 1 item except A3 is bounded, understood work on code that exists. A3 is the only one with no implementation at all, and it gates the pilot alone — a certified candidate with no customer channel cannot reach a merchant. So B3, B4, C2, and C1's remaining items are parked, not cancelled: start them when A3 has a shape, or when A3 is blocked waiting on the vendor and there is free capacity. Do not let a bounded item run first because it is easier to estimate.
+
+### Gate 2: Before expanding the validated cohort toward 100 users, substantial acquisition spending, or new operating modules
 
 - [ ] All engineering items in this plan are closed with evidence or explicitly re-scoped based on pilot findings.
+- [ ] B1's deferred commercial half is closed: Stripe prices exist, checkout and plan mapping are live, and pricing/checkout/in-app usage/support copy all state the same promise.
 - [ ] D2 demonstrates paid renewals, net time savings, and a defensible cost envelope.
 - [ ] Typical and expensive merchant workloads fit the chosen offer and operational capacity.
+- [ ] SocialAPI's commercial tier, account/brand capacity, rate limits, support response, data-processing terms, and observed reliability fit the staged path to 100 users.
 - [ ] A repeatable acquisition route and the merchant's reason to choose Shopkeeper are documented.
 
 ## Suggested calendar and status discipline
 
-Start A1, external-access work, documentation reconciliation, and the measurement design immediately. In the first two weeks, prioritize A2/A4, budget correctness, and the pricing model. Use the following two weeks for bounded context/result work, usability, load measurement, and release acceptance. Several tasks can overlap by owner; a solo developer should sequence them and expect a longer technical preparation period.
+**Reordered 2026-09-09.** Documentation reconciliation of the launch-gate contradiction is done; the A4 rendering work is landed. What remains is dominated by one item. Send the vendor questions today — nothing in this plan overlaps the vendor's response time, and that clock does not start until the mail goes out. Run the identity spike next, because its answer sets every estimate under A3. Start SocialAPI vendor diligence and the controlled feasibility spike alongside measurement design. Preserve the completed A1/A2 work; prioritize closing A4, budget correctness, and the pricing model while the SocialAPI production path is built. Then complete bounded context/result work, onboarding and usability, load measurement, and release acceptance. Several tasks can overlap by owner; a solo developer should sequence them and re-estimate after the SocialAPI spike rather than inheriting the old bridge schedule.
 
-Begin the four-to-six-week paid observation period only after Gate 1 passes. A planning envelope is roughly eight to ten weeks including technical preparation, and longer if external approvals or the listed estimates require it. Do not compress the observation period to preserve a date, and do not represent provider review turnaround as under engineering control.
+Admit only the two supervised external canaries after the canary entry gate. Begin the four-to-six-week paid observation period only after their 7–14-day A3 observation and Gate 1 pass. Expand toward 100 users only after Gate 2 and in capacity-tested stages. The previous eight-to-ten-week envelope is no longer authoritative; re-estimate after the controlled SocialAPI spike and vendor response. Do not compress either observation period to preserve a date, and do not treat direct Meta review timing as part of the launch schedule.
 
-For every item, record owner, state (`not_started`, `in_progress`, `blocked_external`, or `verified`), dependency, implementation revision, and evidence link. Mark an item verified only against its acceptance criteria. Keep deploy evidence, local checks, provider acceptance, and customer validation distinguishable. A weekly review should answer: what risk was removed, what did merchants demonstrate, and what evidence permits the next investment?
+For every item, record owner, state (`not_started`, `parked`, `in_progress`, `blocked_external`, or `verified`), dependency, implementation revision, and evidence link. `parked` means deliberately sequenced behind something else and named as such — distinct from `not_started`, which means nobody has decided. Mark an item verified only against its acceptance criteria. Keep deploy evidence, local checks, provider acceptance, and customer validation distinguishable. A weekly review should answer: what risk was removed, what did merchants demonstrate, and what evidence permits the next investment?

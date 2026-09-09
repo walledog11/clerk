@@ -252,6 +252,140 @@ function claimingSentences(text: string): string[] {
   return found;
 }
 
+function matchingCompletionFacts(
+  sentence: string,
+  facts: readonly CompletionFact[],
+  allowedOutcomes: ReadonlySet<CompletionFactOutcome>,
+  ctx?: FactContext,
+): CompletionFact[] {
+  const usableFacts = facts.filter((fact) => (
+    allowedOutcomes.has(fact.outcome)
+    && factTargetsCurrentCustomer(fact, ctx)
+    && factMatchesDetails(sentence, fact)
+  ));
+  const matching = claimSpans(sentence, REPLY_MUTATION_CLAIM_PATTERNS).flatMap((span) => {
+    const specific = SPECIFIC_CLAIM_ACTIONS.filter(([cue]) => cue.test(span));
+    return specific.length > 0
+      ? usableFacts.filter((fact) => specific.some(([, allowed]) => allowed.has(fact.action)))
+      : /\borders?\b/i.test(span)
+        ? usableFacts.filter((fact) => GENERIC_ORDER_ACTIONS.has(fact.action))
+        : [];
+  });
+
+  const seen = new Set<string>();
+  return matching.filter((fact) => {
+    const key = JSON.stringify([
+      fact.action,
+      fact.target?.kind,
+      fact.target?.id,
+      fact.amount,
+      fact.currency,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function publicOrderLabel(fact: CompletionFact): string | null {
+  if (fact.target?.kind !== "order") return null;
+  const candidate = fact.target.aliases?.[0] ?? fact.target.id;
+  if (!candidate || (!fact.target.aliases?.[0] && !/^#?\d+$/.test(candidate))) return null;
+  return candidate.startsWith("#") ? candidate : `#${candidate}`;
+}
+
+// The customer reads this sentence, so money follows the same convention as the
+// merchant-facing copy in shopify/sales-pulse.ts — a symbol for USD, a trailing
+// ISO code otherwise. "USD 20.00" reads like a bank statement. Cents are kept
+// even when whole, because a refund total is exact.
+function publicMoney(fact: CompletionFact): string | null {
+  const amount = fact.amount ? canonicalAmount(fact.amount) : null;
+  const currency = fact.currency?.trim().toUpperCase();
+  if (!amount || !currency) return null;
+  return currency === "USD" ? `$${amount}` : `${amount} ${currency}`;
+}
+
+function renderCompletionFact(fact: CompletionFact): string {
+  const order = publicOrderLabel(fact);
+  const orderSuffix = order ? ` for order ${order}` : "";
+  const money = publicMoney(fact);
+  const moneySuffix = money ? ` of ${money}` : "";
+
+  switch (fact.action) {
+    case "refund":
+      return `A refund${moneySuffix} has been issued${orderSuffix}.`;
+    case "return":
+      return `A return has been created${orderSuffix}.`;
+    case "exchange":
+      return `An exchange has been created${orderSuffix}.`;
+    case "cancellation":
+      return order ? `Order ${order} has been canceled.` : "The order has been canceled.";
+    case "store_credit":
+      return `Store credit${moneySuffix} has been issued.`;
+    case "address_update":
+      return order ? `The address for order ${order} has been updated.` : "The address has been updated.";
+    case "fulfillment":
+      return order ? `Order ${order} has been fulfilled.` : "The order has been fulfilled.";
+    case "order_creation":
+      return "The order has been created.";
+    case "order_update":
+      return order ? `Order ${order} has been updated.` : "The order has been updated.";
+    case "discount":
+      return "The discount has been applied.";
+  }
+}
+
+function renderClaimingText(
+  text: string,
+  facts: readonly CompletionFact[],
+  allowedOutcomes: ReadonlySet<CompletionFactOutcome>,
+  ctx?: FactContext,
+): string {
+  return text.split(/(\n)/).map((line) => {
+    if (line === "\n") return line;
+    const protectedLine = line.replace(/(?<=\d)\.(?=\d)/g, "\u0000");
+    return (protectedLine.match(/[^.!?]+[.!?]*\s*/g) ?? [protectedLine]).map((rawSentence) => {
+      const sentence = rawSentence.replace(/\u0000/g, ".");
+      const normalized = sentence.replace(/[‘’]/g, "'");
+      if (
+        CUSTOMER_ATTRIBUTION.test(normalized)
+        || !REPLY_MUTATION_CLAIM_PATTERNS.some((pattern) => pattern.test(normalized))
+      ) {
+        return sentence;
+      }
+      const matching = matchingCompletionFacts(normalized, facts, allowedOutcomes, ctx);
+      if (matching.length === 0) return sentence;
+      const leading = sentence.match(/^\s*/)?.[0] ?? "";
+      const trailing = sentence.match(/\s*$/)?.[0] ?? "";
+      return `${leading}${matching.map(renderCompletionFact).join(" ")}${trailing}`;
+    }).join("");
+  }).join("");
+}
+
+/**
+ * Replace model-authored mutation claims with customer-safe copy derived only
+ * from successful completion facts. Non-sensitive surrounding copy remains as
+ * approved/generated; unsupported claims remain unchanged so the execution
+ * guard can reject them.
+ */
+export function renderReplyCompletionClaims(
+  toolCall: Pick<RawToolCall, "id" | "name" | "input">,
+  facts: readonly CompletionFact[],
+  ctx?: FactContext,
+): RawToolCall {
+  const field = REPLY_TEXT_FIELDS[toolCall.name];
+  const input = recordInput(toolCall.input);
+  const value = field ? input?.[field] : undefined;
+  if (!field || !input || typeof value !== "string" || !value.trim()) return toolCall;
+  return {
+    ...toolCall,
+    input: {
+      ...input,
+      [field]: renderClaimingText(value, facts, new Set(["success"]), ctx),
+    },
+  };
+}
+
 export function detectUngroundedReplyText(
   rawToolCalls: readonly RawToolCall[],
   evidence: GroundingEvidence = {},

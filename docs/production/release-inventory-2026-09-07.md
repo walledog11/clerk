@@ -198,3 +198,22 @@ if application code changes before deployment.
   `npm run verify:pr` gate passed on 2026-09-09: static checks, unit and node tests, 12 browser smoke
   tests, the complete coverage/integration matrix and critical thresholds, and all seven builds.
   This working tree is verified locally but is not part of the production `eff1fb9f` revision.
+
+## Budget safeguards release reconciliation — 2026-09-09
+
+- The previously local budget/UI work was committed and pushed as
+  `60b373efdccd6f01c20fa4edb02e79fa1d19f675`; `master` and `origin/master` were clean and
+  aligned at that revision when reconciled.
+- GitHub CI run `34398546433` passed secret scan, static verification and audit, unit tests,
+  integration and coverage, all builds, and browser E2E. Evals run `34398546281` passed the
+  free deterministic preflight; every paid job was skipped, so it is not an A4 release-gate
+  certification.
+- Railway production gateway deployment `7f8aa1c3-949c-4ff6-887d-d163833dc640` and worker
+  deployment `2e5ef64a-fe17-4b7b-8cc6-09fa50154080` are `SUCCESS`, running, and report
+  `meta.commitHash` as exact revision `60b373ef`.
+- Vercel production deployment `dpl_F9Z6gbyVPBYoWTqZzYMbF8eLas4r` is `READY` and owns the
+  production and git-master aliases. The CLI inspection did not expose a source SHA, so this
+  record does not infer one from deployment timing or aliases.
+- This release advances B2's fail-closed accounting and visible usage/cap work and A3's
+  Shopify reauthorization guidance. It does not close durable model-spend reservations,
+  service allowances, provider acceptance, A4's deterministic completion rendering, or Gate 1.

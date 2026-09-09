@@ -23,7 +23,10 @@ import {
   executedCompletionFacts,
   type CompletionFact,
 } from "./completion-facts.js";
-import { unsupportedReplyCompletionClaims } from "./plan-grounding.js";
+import {
+  renderReplyCompletionClaims,
+  unsupportedReplyCompletionClaims,
+} from "./plan-grounding.js";
 
 export type AgentToolCall = {
   id: string;
@@ -266,13 +269,20 @@ export async function executeAgentToolCall(
   } = input;
   ctx.assertExecutionAllowed?.();
   const category = moduleTools?.[toolCall.name]?.category ?? TOOL_CATEGORIES[toolCall.name];
+  const completionFacts = [
+    ...(input.completionEvidence ?? []),
+    ...executedCompletionFacts(actionsPerformed, ctx),
+  ];
+  const executableToolCall = toolCall.name === "send_reply" || toolCall.name === "send_email"
+    ? renderReplyCompletionClaims(toolCall, completionFacts, ctx)
+    : toolCall;
 
   logger.info({
     orgId: ctx.orgId,
     threadId: supportThread?.id ?? null,
     tool: toolCall.name,
-    inputKeys: inputKeys(toolCall.input),
-    inputChars: inputChars(toolCall.input),
+    inputKeys: inputKeys(executableToolCall.input),
+    inputChars: inputChars(executableToolCall.input),
   }, "[agent] tool call");
 
   const startedAt = Date.now();
@@ -285,7 +295,7 @@ export async function executeAgentToolCall(
     : undefined;
 
   const completeAction = !readOnly && category !== "read"
-    ? await input.beginAction?.(toolCall, providerOperationKey)
+    ? await input.beginAction?.(executableToolCall, providerOperationKey)
     : undefined;
   ctx.assertExecutionAllowed?.();
 
@@ -303,10 +313,7 @@ export async function executeAgentToolCall(
     errorDetail = result;
   } else if (
     (toolCall.name === "send_reply" || toolCall.name === "send_email")
-    && unsupportedReplyCompletionClaims(toolCall, [
-      ...(input.completionEvidence ?? []),
-      ...executedCompletionFacts(actionsPerformed, ctx),
-    ], ctx).length > 0
+    && unsupportedReplyCompletionClaims(toolCall, completionFacts, ctx).length > 0
   ) {
     result = `Error: skipped ${toolCall.name} because its completion claim is not supported by a successful action result.`;
     status = "error";
@@ -322,7 +329,13 @@ export async function executeAgentToolCall(
             },
           }
         : ctx;
-      const executed = await executeToolWithStatus(toolCall.name, toolCall.input, toolContext, settings, moduleTools);
+      const executed = await executeToolWithStatus(
+        executableToolCall.name,
+        executableToolCall.input,
+        toolContext,
+        settings,
+        moduleTools,
+      );
       result = executed.result;
       status = executed.status;
       if (status !== "success") errorDetail = result;
@@ -375,7 +388,7 @@ export async function executeAgentToolCall(
   const action: ActionEntry = {
     tool: toolCall.name,
     result,
-    input: toolCall.input,
+    input: executableToolCall.input,
     toolCallId: toolCall.id,
     ...(providerOperationKey ? { providerOperationKey } : {}),
     durationMs,
