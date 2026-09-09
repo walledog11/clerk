@@ -387,19 +387,18 @@ describe('POST /api/integrations/gmail/callback', () => {
 
     expect(res.status).toBe(303);
 
-    await vi.waitFor(() => {
+    await vi.waitFor(async () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
-    });
-
-    const integration = await db.integration.findFirstOrThrow({
-      where: { organizationId: org!.id, platform: ChannelType.email },
-    });
-    expect(integration.metadata).toMatchObject({
-      oauthScopes: ['https://www.googleapis.com/auth/gmail.readonly'],
-      gmail: {
-        inboundStatus: 'active',
-        historyId: '67890',
-      },
+      const integration = await db.integration.findFirstOrThrow({
+        where: { organizationId: org!.id, platform: ChannelType.email },
+      });
+      expect(integration.metadata).toMatchObject({
+        oauthScopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+        gmail: {
+          inboundStatus: 'active',
+          historyId: '67890',
+        },
+      });
     });
   });
 
