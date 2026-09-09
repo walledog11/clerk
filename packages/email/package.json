@@ -80,7 +80,7 @@
     "@shopkeeper/agent": "*",
     "@shopkeeper/db": "*",
     "@vercel/blob": "2.3.3",
-    "mailparser": "^3.9.14",
+    "mailparser": "3.9.23",
     "postmark": "4.0.7"
   }
 }
