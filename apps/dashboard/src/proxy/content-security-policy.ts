@@ -34,6 +34,21 @@ function providerAuthorizeOrigins(): string[] {
     'https://www.facebook.com',
   ];
 
+  // SocialAPI mints the authorize URL at connect time, so its host is not
+  // knowable here. The vendor domain is allowed as a whole while the transport
+  // is switched on, plus whatever origin a non-production base URL points at.
+  if (process.env.SOCIALAPI_ENABLED?.trim().toLowerCase() === 'true') {
+    origins.push('https://social-api.ai', 'https://*.social-api.ai');
+    const baseUrl = process.env.SOCIALAPI_BASE_URL?.trim();
+    if (baseUrl) {
+      try {
+        origins.push(new URL(baseUrl).origin);
+      } catch {
+        // A malformed value is already rejected by the SocialAPI config loader.
+      }
+    }
+  }
+
   const tiktokAuthUrl = process.env.TIKTOK_SHOP_AUTH_URL ?? process.env.TIKTOK_SHOP_AUTHORIZE_URL;
   if (tiktokAuthUrl) {
     try {

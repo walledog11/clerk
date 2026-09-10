@@ -208,9 +208,14 @@ it costs — not a design.
   participant, and follow it to a ticket, a plan, a phone approval, and a received reply.
   Set `SOCIALAPI_API_KEY` on the dashboard so the approved reply can actually leave. Only after
   that: `dm.sent`
-  correlation, the ephemeral-vs-gallery image classification, recovery/dedupe, OAuth,
+  correlation, the ephemeral-vs-gallery image classification, recovery/dedupe,
   reconnect, disconnect, deletion, and capacity controls
-  ([transport plan](socialapi-transport-plan.md) S1–S6). Close the vendor/data-processing
+  ([transport plan](socialapi-transport-plan.md) S1–S6). **Merchant OAuth landed 2026-09-09** —
+  one connect entry point dispatching on `resolveInstagramConnectTransport`, admission by the
+  `SOCIALAPI_BRAND_ASSIGNMENTS` map, brand-scoped account verification, and ownership decided on
+  `providerAccountId`. It has not been run against a live merchant OAuth, and the vendor exposes
+  no native Instagram account id, so `externalAccountId` holds the provider id and
+  Professional-account eligibility is unverified at connect. Close the vendor/data-processing
   gates in [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md) before any
   external merchant data. Certify per [improvement plan](project-improvement-plan.md) A3.
 

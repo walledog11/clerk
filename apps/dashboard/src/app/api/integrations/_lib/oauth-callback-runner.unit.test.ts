@@ -208,6 +208,36 @@ describe('runOAuthCallback', () => {
     );
   });
 
+  // A provider that mints its own state leaves `state` to the provider and
+  // carries ours elsewhere. The runner must correlate on ours and pass the
+  // provider's through untouched for the completion step to verify.
+  it('correlates on the named state parameter and leaves the provider state to complete', async () => {
+    const complete = vi.fn().mockResolvedValue({ ok: true, integrationId: 'integration_1' });
+
+    await runOAuthCallback({
+      complete,
+      descriptor: { ...descriptor, stateParam: 'attempt' },
+      request: new Request(
+        `https://callback.test/oauth?code=oauth_code&attempt=${STATE}&state=provider-state`,
+      ),
+    });
+
+    expect(mockValidateSession).toHaveBeenCalledWith(expect.objectContaining({ state: STATE }));
+    expect(complete.mock.calls[0]![0].searchParams.get('state')).toBe('provider-state');
+  });
+
+  it('does not correlate on a provider state when another parameter carries ours', async () => {
+    const complete = vi.fn();
+
+    await runOAuthCallback({
+      complete,
+      descriptor: { ...descriptor, stateParam: 'attempt' },
+      request: new Request('https://callback.test/oauth?code=oauth_code&state=' + STATE),
+    });
+
+    expect(mockValidateSession).toHaveBeenCalledWith(expect.objectContaining({ state: null }));
+  });
+
   it('keeps a successful callback successful when analytics fails', async () => {
     mockCaptureCompleted.mockRejectedValueOnce(new Error('telemetry unavailable'));
 

@@ -2,9 +2,11 @@
 
 Status: partial. Account inventory, controlled text/image discovery, provider-accepted text reply,
 participant receipt, webhook endpoint registration, and signed `dm.received` delivery passed.
-Milestone-zero ingress and outbound through the durable workflow are implemented and
-deterministically covered but not yet deployed or exercised against a live DM. Outbound `dm.sent` correlation, reconnect, and
-disconnect remain open. Image coverage and send-result correlation have unresolved provider gaps.
+Milestone-zero ingress and outbound through the durable workflow are implemented and proven live.
+Merchant connect (S2) is implemented and deterministically covered but has not been run against a
+live merchant OAuth. Outbound `dm.sent` correlation, reconnect, and
+disconnect remain open. Image coverage, send-result correlation, and the native Instagram account
+id have unresolved provider gaps.
 
 ## Scope and handling
 
@@ -175,6 +177,59 @@ The consequence for certification is that this run exercised ingress, classifica
 provider-pinned outbound, but **not** the approval leg. Proving that leg needs a DM whose plan
 contains an `action`-category call — a refund or order change naming an order — which will route to
 `needs_review` and reach the merchant's phone.
+
+## Merchant connect slice — landed 2026-09-09
+
+The pinned row was the only way a workspace could hold a SocialAPI integration. It now has a
+merchant-facing connect, built but **not yet run against a live merchant OAuth**:
+
+- One connect entry point for the channel. `/api/integrations/instagram/auth` asks
+  `resolveInstagramConnectTransport` which transport the workspace is on and dispatches; the
+  integrations card links there whichever answer it gets. A workspace on the SocialAPI assignment
+  map can no longer reach the direct-Meta authorize URL even while `INSTAGRAM_INTEGRATION_ENABLED`
+  is on for it.
+- Admission is the operator assignment map, not a count. `SOCIALAPI_BRAND_ASSIGNMENTS` holds
+  `clerk_org_id:brand_id` pairs and a map larger than `SOCIALAPI_MAX_ACTIVE_ORGS` (ceiling 8) closes
+  connect entirely. Because brands are provisioned by hand anyway, bounding the map bounds the slots
+  with no connect-time race to lose.
+- SocialAPI mints the OAuth state, so ours could not ride `state`. It travels in the redirect URI as
+  `attempt`, keys the sealed attempt cookie, and `runOAuthCallback` correlates on it. The provider's
+  state is sealed into that cookie at connect and compared before the exchange, so both halves are
+  bound and neither is taken from the browser alone. The attempt cookie is written only after the
+  vendor returns an authorization URL, so an outage leaves no half-started attempt.
+- The callback re-resolves the brand from the assignment map rather than trusting the callback, and
+  refuses if the sealed brand no longer matches. The account is then read back **brand-scoped**,
+  which is what proves it landed in the workspace's own brand; an account whose `status` is not
+  `active`, or which already carries a `reconnect_reason`, is refused rather than persisted.
+- `persistSocialApiConnection` decides ownership on `providerAccountId` — the column gateway ingress
+  resolves — so a provider account another workspace holds is refused at connect instead of
+  discovered later by a webhook resolving to two rows. It writes `accessToken: null` (a leftover
+  Meta token would make the row look reachable from Meta-signed ingress), the
+  `transport: 'socialapi'` metadata the worker branches on, and releases the threads of a replaced
+  row rather than stranding their replies.
+- Two proxy-layer gaps were found and closed in the same pass, both silent failures rather than
+  errors: `/api/integrations/instagram/socialapi/callback` was not in `publicRoutePatterns` (the
+  direct pattern ends at `callback`), and the SocialAPI authorize host was absent from CSP
+  `form-action`, which is the 2026-08-15 failure one provider later — Chrome checks every redirect
+  hop of a form submission, so the connect would have died on the popup spinner with no console
+  error. The vendor domain is allowed only while `SOCIALAPI_ENABLED` is set.
+- **Not built:** the "Powered by SocialAPI" disclosure and privacy link (blocked on capturing the
+  live consent screen, S0), compensation for a remote account created by a failed attempt, and
+  disconnect/reconnect/deletion.
+
+**Native account id is an open gap.** Neither `POST /oauth/exchange` nor `GET /accounts` returns
+Instagram's own account id or an account type. `externalAccountId` therefore holds the provider id,
+recorded as `instagram.externalAccountIdSource: 'provider'`, and Professional-account eligibility
+cannot be verified at connect. Nothing breaks today — ingress resolves `providerAccountId` and the
+job carries the same row's `externalAccountId` back to the worker — but cross-transport account
+ownership is unenforced, and is unreachable only because direct Meta is closed to new workspaces.
+Vendor question 5 already asks for the native id.
+
+Deterministic coverage: 8 connect-config tests, 5 connect-start tests, 8 callback-completion tests,
+4 persistence integration tests against a real database, 2 transport-dispatch tests on the shared
+auth route, plus new cases on the two shared seams this touched (`stateParam` correlation in the
+callback runner, supplied-state validation in the session module) and on the proxy public-path and
+CSP lists. Full unit, integration, typecheck, lint, knip and doc-reference checks pass.
 
 ## Locally verified receiver slice
 

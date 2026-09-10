@@ -48,16 +48,30 @@ export async function requireAuthenticatedOAuthSession(): Promise<OAuthSessionRe
   return { ok: true, session: { userId, orgId } };
 }
 
+/**
+ * Mints the correlation state that identifies one connect attempt. A provider
+ * that issues its own state needs ours to exist before the provider call — it
+ * travels in the redirect URI — so the value may be supplied, but only in the
+ * shape this module would have generated.
+ */
+export function createOAuthState(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
+
 export async function createOAuthSessionCookies(
   request: Request,
   config: OAuthSessionConfig,
   session: AuthenticatedOAuthSession,
   extra: Record<string, string | null | undefined> = {},
+  suppliedState?: string,
 ): Promise<{ state: string; returnTo: string | null; mode: OAuthFlowMode }> {
   const { searchParams } = new URL(request.url);
   const returnTo = safeReturnTo(searchParams.get('returnTo'));
   const mode = isOAuthFlowMode(searchParams.get('mode')) ? searchParams.get('mode') as OAuthFlowMode : 'redirect';
-  const state = crypto.randomBytes(16).toString('hex');
+  if (suppliedState !== undefined && !OAUTH_STATE_PATTERN.test(suppliedState)) {
+    throw new Error('OAuth state must be 32 hex characters');
+  }
+  const state = suppliedState ?? createOAuthState();
   const attempt = {
     provider: config.provider,
     state,

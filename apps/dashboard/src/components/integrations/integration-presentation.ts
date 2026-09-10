@@ -14,7 +14,8 @@ import { deriveGmailPresentation, type GmailPresentation } from "./gmail-configu
 
 export interface IntegrationDeploymentFlags {
   gmailNativeInboundEnabled: boolean
-  instagramIntegrationEnabled: boolean
+  /** Whether *either* Instagram transport is open to this workspace. */
+  instagramConnectAvailable: boolean
   tiktokShopConfigured: boolean
   imessageHandle: string | null
 }
@@ -82,7 +83,7 @@ function availabilityFor(
   if (
     definition.kind === "oauth"
     && definition.availabilityFlag === "instagram"
-    && !flags.instagramIntegrationEnabled
+    && !flags.instagramConnectAvailable
     && !integrations.some((integration) => definition.matches(integration))
   ) {
     return { state: "coming-soon", label: "Coming soon" }

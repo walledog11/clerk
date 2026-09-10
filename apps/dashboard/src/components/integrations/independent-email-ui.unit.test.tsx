@@ -17,7 +17,7 @@ const EMAIL_CONFIG = getIntegrationDefinition('email') as WorkspaceIntegrationDe
 const GMAIL_CONFIG = getIntegrationDefinition('gmail') as WorkspaceIntegrationDefinition;
 const FLAGS = {
   gmailNativeInboundEnabled: true,
-  instagramIntegrationEnabled: true,
+  instagramConnectAvailable: true,
   tiktokShopConfigured: true,
   imessageHandle: null,
 };

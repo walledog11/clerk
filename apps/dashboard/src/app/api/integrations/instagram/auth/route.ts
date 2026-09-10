@@ -2,16 +2,15 @@ import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createPostRedirectResponse } from '@/lib/server/post-redirect-response';
 import logger from '@/lib/server/logger';
-import {
-  getInstagramOAuthAuthorizeConfig,
-  isInstagramIntegrationEnabledForOrg,
-} from '@/lib/env';
+import { getInstagramOAuthAuthorizeConfig } from '@/lib/env';
 import { buildInstagramAuthorizationUrl } from '@/lib/integrations/instagram-api-client';
+import { resolveInstagramConnectTransport } from '@/lib/socialapi/config';
 import {
   createOAuthSessionCookies,
   requireAuthenticatedOAuthSession,
 } from '@/app/api/integrations/_lib/oauth-session';
 import { oauthPageRedirect } from '@/app/api/integrations/_lib/oauth-callback';
+import { startSocialApiInstagramConnect } from './socialapi-connect';
 
 function fingerprint(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 12);
@@ -25,8 +24,14 @@ export async function POST(request: Request) {
   const sessionResult = await requireAuthenticatedOAuthSession();
   if (!sessionResult.ok) return sessionResult.response;
   const session = sessionResult.session;
-  if (!isInstagramIntegrationEnabledForOrg(session.orgId)) {
+  // One connect entry point for the channel, one owner of which transport it
+  // starts. The card links here whichever transport the workspace is on.
+  const transport = resolveInstagramConnectTransport(session.orgId);
+  if (transport === null) {
     return NextResponse.json({ error: 'instagram_not_available' }, { status: 403 });
+  }
+  if (transport === 'socialapi') {
+    return startSocialApiInstagramConnect(request, session);
   }
 
   const oauthConfig = getInstagramOAuthAuthorizeConfig();

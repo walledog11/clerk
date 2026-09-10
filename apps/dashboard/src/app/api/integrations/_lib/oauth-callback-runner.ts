@@ -39,6 +39,13 @@ export interface OAuthCallbackProviderDescriptor<ErrorCode extends OAuthErrorCod
   logPrefix: string;
   provider: OAuthProvider;
   serverError: ErrorCode;
+  /**
+   * Query parameter carrying *our* correlation state. It is `state` for every
+   * provider that echoes the value we gave it; a provider that mints its own
+   * state names a different parameter, and its `state` is then the provider's
+   * to verify rather than ours.
+   */
+  stateParam?: string;
   stateMismatchError: ErrorCode;
 }
 
@@ -51,7 +58,7 @@ export async function runOAuthCallback<ErrorCode extends OAuthErrorCode>(options
 }): Promise<Response> {
   const { complete, descriptor, request } = options;
   const { searchParams } = new URL(request.url);
-  const state = searchParams.get('state');
+  const state = searchParams.get(descriptor.stateParam ?? 'state');
   const providerError = searchParams.get('error');
   const code = firstSearchParam(searchParams, descriptor.codeAliases ?? ['code']);
 

@@ -1,13 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createSessionCookies, requireSession } = vi.hoisted(() => ({
+const { createSessionCookies, requireSession, startSocialApi } = vi.hoisted(() => ({
   createSessionCookies: vi.fn(),
   requireSession: vi.fn(),
+  startSocialApi: vi.fn(),
 }));
 
 vi.mock('@/app/api/integrations/_lib/oauth-session', () => ({
   createOAuthSessionCookies: createSessionCookies,
   requireAuthenticatedOAuthSession: requireSession,
+}));
+
+vi.mock('./socialapi-connect', () => ({
+  startSocialApiInstagramConnect: startSocialApi,
 }));
 
 import { POST } from './route';
@@ -22,6 +27,7 @@ describe('POST /api/integrations/instagram/auth', () => {
       session: { orgId: 'org_123', userId: 'user_123' },
     });
     createSessionCookies.mockResolvedValue({ state: 'state_123', returnTo: null });
+    startSocialApi.mockResolvedValue(new Response(null, { status: 303 }));
   });
 
   afterEach(() => {
@@ -113,5 +119,35 @@ describe('POST /api/integrations/instagram/auth', () => {
 
     expect(response.status).toBe(303);
     expect(createSessionCookies).toHaveBeenCalledOnce();
+  });
+
+  // The card links to one connect entry point for the channel. Which transport
+  // it starts is resolved here, so an assigned workspace must never reach the
+  // direct-Meta authorize URL even while the direct flag is still on.
+  it('hands an assigned workspace to SocialAPI instead of direct Meta', async () => {
+    vi.stubEnv('SOCIALAPI_ENABLED', 'true');
+    vi.stubEnv('SOCIALAPI_API_KEY', 'sapi-key');
+    vi.stubEnv('SOCIALAPI_BRAND_ASSIGNMENTS', 'org_123:brand_1');
+
+    const request = new Request('http://localhost/api/integrations/instagram/auth', {
+      method: 'POST',
+    });
+    await POST(request);
+
+    expect(startSocialApi).toHaveBeenCalledWith(request, { orgId: 'org_123', userId: 'user_123' });
+    expect(createSessionCookies).not.toHaveBeenCalled();
+  });
+
+  it('leaves an unassigned workspace on direct Meta while that flag is open', async () => {
+    vi.stubEnv('SOCIALAPI_ENABLED', 'true');
+    vi.stubEnv('SOCIALAPI_API_KEY', 'sapi-key');
+    vi.stubEnv('SOCIALAPI_BRAND_ASSIGNMENTS', 'org_other:brand_1');
+
+    const response = await POST(new Request('http://localhost/api/integrations/instagram/auth', {
+      method: 'POST',
+    }));
+
+    expect(startSocialApi).not.toHaveBeenCalled();
+    expect(new URL(response.headers.get('location')!).origin).toBe('https://www.instagram.com');
   });
 });

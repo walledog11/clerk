@@ -21,6 +21,9 @@ export const publicRoutePatterns = [
   "/api/webhooks(.*)",
   "/api/integrations/shopify/callback(.*)",
   "/api/integrations/instagram/callback(.*)",
+  // The SocialAPI transport has its own callback path; the pattern above ends
+  // at `callback` and does not reach it.
+  "/api/integrations/instagram/socialapi/callback(.*)",
   "/api/integrations/gmail/callback(.*)",
   "/api/agent/io-send-internal(.*)",
   "/api/messages/auto-ack(.*)",

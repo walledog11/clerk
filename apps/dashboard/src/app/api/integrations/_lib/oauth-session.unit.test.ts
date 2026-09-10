@@ -104,6 +104,44 @@ describe('OAuth attempt sessions', () => {
     expect(mockDelete).not.toHaveBeenCalled();
   });
 
+  // A provider that mints its own OAuth state needs ours to exist before the
+  // provider call, because ours travels in the redirect URI. It may be supplied,
+  // but only in the shape this module would have generated — a state it cannot
+  // key a cookie by must never be sealed.
+  it('accepts a supplied state in the minted shape and refuses any other', async () => {
+    const supplied = 'c'.repeat(32);
+    const attempt = await createOAuthSessionCookies(
+      new Request('https://dashboard.test/auth'),
+      { provider: 'instagram' },
+      { userId: 'user_1', orgId: 'org_1' },
+      { socialApiState: 'provider-state' },
+      supplied,
+    );
+
+    expect(attempt.state).toBe(supplied);
+    expect(mockSet).toHaveBeenCalledWith(
+      `instagram_oauth_attempt_${supplied}`,
+      expect.any(String),
+      expect.anything(),
+    );
+
+    const validated = await validateOAuthCallbackSession({
+      extraCookieKeys: ['socialApiState'],
+      logPrefix: 'test',
+      provider: 'instagram',
+      state: supplied,
+    });
+    expect(validated.ok && validated.session.extra.socialApiState).toBe('provider-state');
+
+    await expect(createOAuthSessionCookies(
+      new Request('https://dashboard.test/auth'),
+      { provider: 'instagram' },
+      { userId: 'user_1', orgId: 'org_1' },
+      {},
+      '../cookie',
+    )).rejects.toThrow(/32 hex/);
+  });
+
   it.each([
     ['another organization', { userId: 'user_1', orgId: 'org_2', orgRole: 'org:admin' }],
     ['a non-admin role', { userId: 'user_1', orgId: 'org_1', orgRole: 'org:member' }],

@@ -17,6 +17,7 @@ export const OAUTH_ERROR_MESSAGES = {
   no_email: 'The provider did not return an email address. Please choose an account with an email address and try again.',
   not_professional_account: 'Only Instagram Professional accounts (Business or Creator) can connect.',
   instagram_account_in_use: 'This Instagram account is already connected to another Shopkeeper workspace.',
+  instagram_account_not_ready: 'Instagram authorized the connection, but the account is not ready to receive DMs yet. Please try again in a few minutes.',
   webhook_subscription_failed: 'Instagram connected, but DM delivery could not be activated. Please try again.',
   provider_unavailable: 'The provider is temporarily unavailable. Please try again later.',
   no_ig_account: 'No eligible Instagram Professional account was found.',

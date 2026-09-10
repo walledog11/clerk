@@ -1,6 +1,6 @@
 # SocialAPI Instagram transport plan
 
-Created: 2026-09-07. Reframed 2026-09-09: this is no longer a temporary bridge. Status: in progress; S0 public-document diligence completed on 2026-09-07, no implementation exists. Owner: engineering, with founder ownership of vendor diligence and live rollout.
+Created: 2026-09-07. Reframed 2026-09-09: this is no longer a temporary bridge. Status: in progress. S0 public-document diligence completed 2026-09-07; the DPA and written vendor answers remain open. Milestone zero is live — a real Instagram DM became a ticket, was planned, and the reply left through SocialAPI ([evidence](production/socialapi-spike-evidence-2026-09-09.md)). Merchant connect (S2) landed 2026-09-09 behind the assignment map; it has not yet been run against a live merchant OAuth. Owner: engineering, with founder ownership of vendor diligence and live rollout.
 
 ## Objective
 
@@ -192,17 +192,31 @@ Done when existing direct Meta tests pass unchanged or with compatibility-only a
 
 Entry points: a new `packages/integrations/src/socialapi` module, dashboard environment helpers, Instagram auth/callback routes, integration connection persistence, and integration UI.
 
-- [ ] Implement the core REST surface first: begin Instagram connect, exchange OAuth code, fetch account, send conversation message, and disconnect account. Add health, list/sync recovery, and deletion operations as their checklists require. Brand/key provisioning remains an operator workflow.
-- [ ] Apply bounded timeouts, response-shape validation, safe error mapping, and no blind retry of non-idempotent sends.
-- [ ] Validate `SOCIALAPI_ENABLED`, `SOCIALAPI_MAX_ACTIVE_ORGS` (at most eight), fixed organization/brand assignments, and server credential references. Keep provisioning credentials separate from scoped runtime keys. Add `SOCIALAPI_BASE_URL` only as a test/local override; production must pin the official HTTPS origin.
-- [ ] Reuse Shopkeeper's authenticated OAuth session and persist/verify SocialAPI state against the initiating organization. Do not trust callback organization or brand identifiers from the browser.
-- [ ] Resolve exactly one pre-provisioned brand and assigned slot for the authenticated organization; callbacks cannot create brands or change assignments.
-- [ ] After exchange, fetch and validate platform=`instagram`, native account ID, Professional-account eligibility, username, and ownership before persisting.
-- [ ] Persist the connection only after the provider account is usable. Persist attempt ownership and make callback replay harmless. On local failure, durably schedule compensation only for a remote account proven to have been created by this attempt and not adopted by a successful connection; ambiguous ownership requires reconciliation.
-- [ ] Make the existing Connect Instagram action choose SocialAPI only for organizations in the fixed assignment set; an existing direct integration stays direct unless explicitly migrating. Show “Powered by SocialAPI” before authorization and link Shopkeeper's updated privacy disclosure.
-- [ ] Validate the fixed assignment set and slot before starting OAuth and transactionally recheck assignment/current integration before persistence. Pending assignments count toward eight; reconnect uses the same slot. If dynamic allocation is introduced later, require durable expiring reservations: a count before the browser redirect does not reserve capacity.
+- [x] Implement the core REST surface first: begin Instagram connect, exchange OAuth code, fetch account, send conversation message, and disconnect account. Add health, list/sync recovery, and deletion operations as their checklists require. Brand/key provisioning remains an operator workflow. Done in `packages/integrations/src/socialapi/client.ts`; health, sync recovery and deletion are still absent.
+- [x] Apply bounded timeouts, response-shape validation, safe error mapping, and no blind retry of non-idempotent sends.
+- [x] Validate `SOCIALAPI_ENABLED`, `SOCIALAPI_MAX_ACTIVE_ORGS` (at most eight), fixed organization/brand assignments, and server credential references. Keep provisioning credentials separate from scoped runtime keys. Add `SOCIALAPI_BASE_URL` only as a test/local override; production must pin the official HTTPS origin. Done 2026-09-09 in `apps/dashboard/src/lib/socialapi/config.ts`: `SOCIALAPI_BRAND_ASSIGNMENTS` holds `clerk_org_id:brand_id` pairs, a map larger than the cap closes connect rather than overfilling the vendor account, and a base-URL override is ignored in production.
+- [x] Reuse Shopkeeper's authenticated OAuth session and persist/verify SocialAPI state against the initiating organization. Do not trust callback organization or brand identifiers from the browser. Done 2026-09-09. SocialAPI mints its own state, so ours cannot ride `state`: it travels in the redirect URI as `attempt`, keys the sealed attempt cookie, and the runner correlates on it (`stateParam` in `oauth-callback-runner.ts`). The provider's state is sealed into the cookie at connect and compared before the exchange, so both halves are bound.
+- [x] Resolve exactly one pre-provisioned brand and assigned slot for the authenticated organization; callbacks cannot create brands or change assignments. The callback re-resolves the brand from the operator assignment map and refuses when the sealed brand no longer matches.
+- [ ] After exchange, fetch and validate platform=`instagram`, native account ID, Professional-account eligibility, username, and ownership before persisting. **Partly done, with a gap.** Platform, username and brand ownership are verified by a brand-scoped account read, and an account whose `status` is not `active` or which carries a `reconnect_reason` is refused. **Neither `POST /oauth/exchange` nor `GET /accounts` returns Instagram's own account id or an account type**, so native identity and Professional-account eligibility cannot be validated from the documented surface. See "Native account id" below.
+- [ ] Persist the connection only after the provider account is usable. Persist attempt ownership and make callback replay harmless. On local failure, durably schedule compensation only for a remote account proven to have been created by this attempt and not adopted by a successful connection; ambiguous ownership requires reconciliation. Persistence order and single-use attempt cookies are done; **compensation for a remote account created by a failed attempt is not built**.
+- [x] Make the existing Connect Instagram action choose SocialAPI only for organizations in the fixed assignment set; an existing direct integration stays direct unless explicitly migrating. Show “Powered by SocialAPI” before authorization and link Shopkeeper's updated privacy disclosure. Transport selection is done: `resolveInstagramConnectTransport` is the one owner and `/api/integrations/instagram/auth` dispatches on it, so the card keeps one connect entry point. **The “Powered by SocialAPI” disclosure and privacy link are not built** and are blocked on capturing the live consent screen (S0).
+- [ ] Validate the fixed assignment set and slot before starting OAuth and transactionally recheck assignment/current integration before persistence. Pending assignments count toward eight; reconnect uses the same slot. If dynamic allocation is introduced later, require durable expiring reservations: a count before the browser redirect does not reserve capacity. The assignment map bounds slots structurally, so there is no count to race; the transactional recheck of the current integration is done in `persistSocialApiConnection`.
 
 Done when one assigned organization connects through SocialAPI, an unassigned organization retains the current direct behavior/gate, callback replay is harmless, and cross-organization ownership attempts fail.
+
+**Native account id — open, found 2026-09-09.** `parseOAuthExchange` returns `account_id`,
+`platform` and `username`; `parseAccount` returns the provider id, brand, platform, username, name,
+status and reconnect reason. Instagram's own account id appears in neither. `externalAccountId`
+therefore holds the *provider* id for a SocialAPI row, and the row records
+`instagram.externalAccountIdSource: 'provider'` so nothing mistakes it for a native one — the
+`Integration.externalAccountId` schema comment and `integrations_instagram_account_unique` both
+assume native. Nothing breaks today: ingress resolves `providerAccountId`, and the job carries the
+same row's `externalAccountId` back to the worker, so the join is self-consistent whichever id it
+holds. What is not enforced is cross-transport ownership — the same Instagram account could be
+claimed once through Meta under its native id and once through SocialAPI under a provider id.
+Direct Meta is closed to new workspaces, so this is currently unreachable rather than fixed. Ask the
+vendor for the native id (question 5 of the S0 letter already asks); until it is available,
+Professional-account eligibility also cannot be checked at connect.
 
 ### S3. Signed inbound webhook
 

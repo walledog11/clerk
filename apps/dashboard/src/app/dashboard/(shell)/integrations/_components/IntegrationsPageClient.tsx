@@ -78,7 +78,7 @@ function renderIntegrationSkeletonSection(
 interface IntegrationsPageProps {
   imessageHandle: string | null
   gmailNativeInboundEnabled: boolean
-  instagramIntegrationEnabled: boolean
+  instagramConnectAvailable: boolean
   tiktokShopConfigured: boolean
   initialIntegrations?: Integration[]
   shopifyClientId: string | null
@@ -96,7 +96,7 @@ export default function IntegrationsPageClient(props: IntegrationsPageProps) {
 function IntegrationsPageContent({
   imessageHandle,
   gmailNativeInboundEnabled,
-  instagramIntegrationEnabled,
+  instagramConnectAvailable,
   tiktokShopConfigured,
   initialIntegrations,
   shopifyClientId,
@@ -147,7 +147,7 @@ function IntegrationsPageContent({
     integrations,
     flags: {
       gmailNativeInboundEnabled,
-      instagramIntegrationEnabled,
+      instagramConnectAvailable,
       tiktokShopConfigured,
       imessageHandle,
     },
@@ -155,7 +155,7 @@ function IntegrationsPageContent({
   }), [
     gmailNativeInboundEnabled,
     imessageHandle,
-    instagramIntegrationEnabled,
+    instagramConnectAvailable,
     integrations,
     isAdmin,
     tiktokShopConfigured,

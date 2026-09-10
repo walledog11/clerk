@@ -13,7 +13,7 @@ import { deriveIntegrationCardModels } from "./integration-presentation"
 
 const FLAGS = {
   gmailNativeInboundEnabled: false,
-  instagramIntegrationEnabled: true,
+  instagramConnectAvailable: true,
   tiktokShopConfigured: true,
   imessageHandle: "+15555550100",
 }

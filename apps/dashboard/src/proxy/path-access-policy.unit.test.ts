@@ -30,6 +30,11 @@ describe("proxy path access policy", () => {
     expect(isPublicPath("/api/webhooks/clerk")).toBe(true);
     expect(isPublicPath("/api/webhooks/email")).toBe(true);
     expect(isPublicPath("/api/integrations/shopify/callback")).toBe(true);
+    // Both Instagram transports land their own callback path. The direct
+    // pattern ends at `callback`, so the SocialAPI one needs its own entry or
+    // the proxy 401s the connect before the route can run.
+    expect(isPublicPath("/api/integrations/instagram/callback")).toBe(true);
+    expect(isPublicPath("/api/integrations/instagram/socialapi/callback")).toBe(true);
     expect(isPublicPath("/api/agent/io-send-internal")).toBe(true);
     expect(isPublicPath("/api/messages/auto-ack")).toBe(true);
     expect(isPublicPath("/api/messages/internal")).toBe(true);

@@ -11,7 +11,7 @@ import {
 
 const FLAGS = {
   gmailNativeInboundEnabled: true,
-  instagramIntegrationEnabled: true,
+  instagramConnectAvailable: true,
   tiktokShopConfigured: true,
   imessageHandle: "+15555550100",
 }
@@ -225,7 +225,7 @@ describe("integration presentation", () => {
       integrations: [],
       flags: {
         ...FLAGS,
-        instagramIntegrationEnabled: false,
+        instagramConnectAvailable: false,
         tiktokShopConfigured: false,
         imessageHandle: "   ",
       },
@@ -243,7 +243,7 @@ describe("integration presentation", () => {
     const connected = integration({ id: "ig-1", platform: "ig_dm" })
     const models = deriveIntegrationCardModels({
       integrations: [connected],
-      flags: { ...FLAGS, instagramIntegrationEnabled: false },
+      flags: { ...FLAGS, instagramConnectAvailable: false },
       isAdmin: true,
     })
     const instagram = models.find((model) => model.definition.id === "instagram")
