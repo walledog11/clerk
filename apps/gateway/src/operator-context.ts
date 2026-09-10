@@ -490,9 +490,12 @@ export async function appendPendingPlan(
   });
 }
 
+// `code` distinguishes "nothing is queued" from "several are, say which" —
+// callers must not tell those apart by reading the sentence. Only the first
+// means the merchant adjudicated something that is not there.
 export type SelectPendingPlanResult =
   | { plan: PendingPlan }
-  | { error: string };
+  | { error: string; code: 'none_pending' | 'needs_disambiguation' | 'needs_thread_review' };
 
 function summarizePendingPlan(plan: PendingPlan): string {
   const who = plan.customerName ? plan.customerName.split(' ')[0] : 'the customer';
@@ -519,17 +522,18 @@ export function selectPendingPlan(
   digest?: PendingDigest | null,
 ): SelectPendingPlanResult {
   if (plans.length === 0) {
-    return { error: 'Error: no plan is awaiting the merchant\'s approval.' };
+    return { error: 'Error: no plan is awaiting the merchant\'s approval.', code: 'none_pending' };
   }
   const selectable = (plan: PendingPlan): SelectPendingPlanResult => {
     const briefingItem = digest?.items.find((item) => item.threadId === plan.threadId
       && (!item.planId || item.planId === plan.planId));
     if (briefingItem && briefingItem.kind !== 'approval') {
-      return { error: 'This conversation needs an instruction, not approval. Read the request and ask what the merchant wants done.' };
+      return { error: 'This conversation needs an instruction, not approval. Read the request and ask what the merchant wants done.', code: 'needs_thread_review' };
     }
     if (pendingPlanNeedsThreadReview(plan, digest)) {
       return {
         error: 'The request details were unavailable in the briefing. Open the thread before approving this plan.',
+        code: 'needs_thread_review',
       };
     }
     return { plan };
@@ -543,7 +547,7 @@ export function selectPendingPlan(
     ? `Multiple plans are pending — ask which one before acting: ${pendingPlanOptions(plans, digest)}.`
     : `That reference does not match the pending plan. Ask the merchant to confirm: ${pendingPlanOptions(plans, digest)}.`;
   if (!trimmed) {
-    return { error: ambiguous };
+    return { error: ambiguous, code: 'needs_disambiguation' };
   }
 
   if (/^\d+$/.test(trimmed)) {
@@ -557,26 +561,27 @@ export function selectPendingPlan(
     const item = digest?.items[ordinal - 1];
     if (item) {
       if (item.needsThreadReview) {
-        return { error: 'Open the thread to read the original request before acting on this conversation.' };
+        return { error: 'Open the thread to read the original request before acting on this conversation.', code: 'needs_thread_review' };
       }
       if (item.kind !== 'approval') {
         return {
           error: `Number ${ordinal} in the briefing is not a drafted plan, so there is nothing to approve. Tell the merchant what it is and ask what they want done.`,
+          code: 'needs_thread_review',
         };
       }
       const byOrdinal = item.planId
         ? plans.find((plan) => plan.planId === item.planId && plan.threadId === item.threadId)
         : plans.find((plan) => plan.threadId === item.threadId);
       if (byOrdinal) return selectable(byOrdinal);
-      return { error: `The plan for number ${ordinal} is no longer pending — it may already have run.` };
+      return { error: `The plan for number ${ordinal} is no longer pending — it may already have run.`, code: 'needs_disambiguation' };
     }
     if (digest && digest.items.length > 0) {
-      return { error: `There is no number ${ordinal} on that briefing. ${ambiguous}` };
+      return { error: `There is no number ${ordinal} on that briefing. ${ambiguous}`, code: 'needs_disambiguation' };
     }
 
     const index = ordinal - 1;
     if (index >= 0 && index < plans.length) return selectable(plans[index]!);
-    return { error: ambiguous };
+    return { error: ambiguous, code: 'needs_disambiguation' };
   }
 
   const byPlanId = plans.filter((plan) => plan.planId === trimmed);
@@ -586,7 +591,7 @@ export function selectPendingPlan(
   const byName = plans.filter((plan) => plan.customerName?.toLowerCase().includes(needle));
   if (byName.length === 1) return selectable(byName[0]!);
 
-  return { error: ambiguous };
+  return { error: ambiguous, code: 'needs_disambiguation' };
 }
 
 async function pendingPlanMatchesCurrentCache(

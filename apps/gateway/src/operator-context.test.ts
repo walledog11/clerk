@@ -421,7 +421,7 @@ describe('selectPendingPlan', () => {
   const b = planFor('thread-b', 'plan-b', { customerName: 'Jake Long' });
 
   it('errors when nothing is pending', () => {
-    expect(selectPendingPlan([])).toEqual({ error: expect.stringContaining('no plan') });
+    expect(selectPendingPlan([])).toEqual({ error: expect.stringContaining('no plan'), code: 'none_pending' });
   });
 
   it('returns the only plan when no ref is supplied and honors an explicit ref', () => {
@@ -441,12 +441,12 @@ describe('selectPendingPlan', () => {
       sentAt: '2026-08-23T12:00:00.000Z',
     });
 
-    expect(result).toEqual({ error: expect.stringContaining('Open the thread') });
+    expect(result).toEqual({ error: expect.stringContaining('Open the thread'), code: 'needs_thread_review' });
   });
 
   it('asks which one when several are pending and no ref is given', () => {
     const result = selectPendingPlan([a, b]);
-    expect(result).toEqual({ error: expect.stringContaining('ask which one') });
+    expect(result).toEqual({ error: expect.stringContaining('ask which one'), code: 'needs_disambiguation' });
   });
 
   it('selects by ordinal, planId, and customer name', () => {
@@ -469,7 +469,7 @@ describe('selectPendingPlan', () => {
     const replacement = { ...a, planId: 'replacement-plan' };
     const digest = { items: [{ threadId: a.threadId, planId: a.planId, kind: 'approval' as const }],
       threadIds: [], sentAt: new Date().toISOString() };
-    expect(selectPendingPlan([replacement], '1', digest)).toEqual({ error: expect.stringContaining('no longer pending') });
+    expect(selectPendingPlan([replacement], '1', digest)).toEqual({ error: expect.stringContaining('no longer pending'), code: 'needs_disambiguation' });
   });
 
   it('does not approve a merchant question through a name or bare yes', () => {

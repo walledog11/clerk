@@ -41,7 +41,19 @@ export async function handlePendingPlanCommand(
 ): Promise<boolean> {
   const { chatId, senderRef: memberKey, reply, presence } = message;
   const pendingPlan = mostRecentPendingPlan(context.pendingPlans);
-  if (!pendingPlan) return false;
+  if (!pendingPlan) {
+    // A bare yes/no/skip is a decision about a specific draft. With none queued
+    // there is nothing to decide, and falling through to the model turned the
+    // word "Yes" into a fresh instruction it satisfied by attempting the refund
+    // itself (2026-09-10). Answer it here instead — unless a question is
+    // pending, which a bare "yes" can legitimately be answering.
+    if (context.pendingQuestion) return false;
+    logger.info({ chatId, command: command.type }, '[Operator] Decision with nothing queued');
+    await reply(
+      "Nothing is waiting for your approval right now — that draft is gone, so I haven't done anything. If you still want it, open the conversation and I'll write it up again.",
+    );
+    return true;
+  }
   if (pendingPlanNeedsThreadReview(pendingPlan, context.pendingDigest)) {
     await reply('The request details were unavailable in the briefing. Open the thread before deciding what to do with this plan.');
     return true;

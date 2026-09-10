@@ -71,6 +71,41 @@ afterEach(async () => {
 });
 
 describe('approve_pending_plan', () => {
+  // 2026-09-10: the merchant's "Yes" named a plan the queue no longer held, the
+  // tool errored, and the model went on to attempt the refund itself. The error
+  // has to withdraw the turn's authority, not just report itself.
+  it('withdraws the turn\'s action authority when nothing is queued', async () => {
+    const memberKey = 'member:empty';
+    const tools = await buildTools(memberKey);
+    const ctx = { ...baseCtx } as BaseAgentContext;
+
+    const result = await tools.approve_pending_plan.execute({}, ctx, settings, emptyDeps);
+
+    expect(result.status).toBe('error');
+    expect(ctx.actionAuthorityBlock).toMatchObject({ code: 'adjudicated_item_missing' });
+    expect(mockExecuteOperatorAgentTurn).not.toHaveBeenCalled();
+  });
+
+  // Several plans queued is a "say which one" problem, not an absent one: the
+  // merchant did name something real, so the turn keeps its authority.
+  it('keeps action authority when the reference is merely ambiguous', async () => {
+    const memberKey = 'member:ambiguous';
+    for (const threadId of ['ticket_a', 'ticket_b']) {
+      await appendPendingPlan(org.id, memberKey, {
+        threadId,
+        instruction: `refund ${threadId}`,
+        rawToolCalls: [{ id: 'tc1', name: 'add_internal_note', input: { text: 'note' } }],
+      }, 5);
+    }
+    const tools = await buildTools(memberKey);
+    const ctx = { ...baseCtx } as BaseAgentContext;
+
+    const result = await tools.approve_pending_plan.execute({}, ctx, settings, emptyDeps);
+
+    expect(result.status).toBe('error');
+    expect(ctx.actionAuthorityBlock).toBeUndefined();
+  });
+
   it('keeps an invalid draft parked and executes nothing', async () => {
     const memberKey = 'member:invalid';
     await updateContext(org.id, memberKey, {
