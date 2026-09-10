@@ -4,7 +4,7 @@ import type { OrgSettings, ProducedPlanSignalCode } from "./types.js";
 import { executeToolStructured } from "./tools/executor.js";
 import type { ToolStatus } from "./tools/result.js";
 import type { AgentContext, ShopifyOrderSummary } from "./agent-context.js";
-import { isStorefrontContext } from "./guest-policy.js";
+import { hasUnresolvedShopifyCustomer } from "./guest-policy.js";
 import { normalizeOrderName } from "./order-reference.js";
 
 type PlanningReadToolResult = {
@@ -64,7 +64,7 @@ export function appendInitialPlanningSignals(input: {
   // A guest shopper has no Shopify customer by construction, so this would fire
   // on every storefront plan and ask the merchant to verify a link that cannot
   // exist. A signal present on every plan is a signal nobody reads.
-  if (ctx.shopify && !ctx.thread.shopifyCustomerId && !operatorMode && !isStorefrontContext(ctx)) {
+  if (hasUnresolvedShopifyCustomer(ctx, operatorMode)) {
     codes.push("shopify_customer_unresolved");
   }
 }

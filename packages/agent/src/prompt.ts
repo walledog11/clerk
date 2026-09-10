@@ -1,7 +1,11 @@
 import type { OrgSettings } from "./types.js";
 import { resolveAgentSettings } from "./settings.js";
 import { isOperatorChannel } from "./thread-constants.js";
-import { isStorefrontContext, isVerifiedContext } from "./guest-policy.js";
+import {
+  hasUnresolvedShopifyCustomer,
+  isStorefrontContext,
+  isVerifiedContext,
+} from "./guest-policy.js";
 import type { AgentContext } from "./agent-context.js";
 import {
   CONTEXT_BUDGETS,
@@ -260,6 +264,7 @@ export function buildSystemPromptParts(ctx: AgentContext, settings?: Partial<Org
   const isOperatorMode = isOperatorChannel(ctx.thread.channelType);
   const verifiedMode = isVerifiedContext(ctx);
   const storefrontMode = isStorefrontContext(ctx);
+  const unresolvedCustomer = hasUnresolvedShopifyCustomer(ctx, isOperatorMode);
   const verifiedOrderNames = (ctx.verifiedOrders ?? []).map((o) => o.orderName);
   const verifiedOrderList = verifiedOrderNames.length === 1
     ? `order ${verifiedOrderNames[0]}`
@@ -281,7 +286,12 @@ export function buildSystemPromptParts(ctx: AgentContext, settings?: Partial<Org
         : "This visitor is not linked to any Shopify customer, and cannot be. Product search is the only Shopify tool available here."
       : isOperatorMode
         ? "No Shopify customer ID is pre-loaded. If you need to look up or act on a customer, call find_customer with by='query' first."
-        : "No Shopify customer ID is pre-loaded for this thread. If you need to look up or act on a customer, call find_customer with by='query' first to resolve their ID.";
+        // Nothing on a social DM ties the sender to a customer record, so this
+        // is the branch most Instagram threads take. Gated on the same predicate
+        // as the tool set, so the read named here is a read the agent holds.
+        : unresolvedCustomer
+          ? `No Shopify customer ID is pre-loaded for this thread, so nothing here establishes who the sender is. For a plain "where is my order" question, call get_order_fulfillment_status with the order number they gave - and the checkout email too, if they gave one - and answer from what it returns. Ask for the order number when you do not have one; do not guess at an order. The fuller order and customer reads still work, but they return the name, address, contact details and amounts on the order, which is not detail to hand an unverified sender: use them only when the question genuinely needs it, and expect the merchant to review that reply before it goes out. If you need to look up or act on a customer, call find_customer with by='query' first to resolve their ID.`
+          : "No Shopify customer ID is pre-loaded for this thread. If you need to look up or act on a customer, call find_customer with by='query' first to resolve their ID.";
 
   if (isOperatorMode) {
     const linkedCustomerSection = ctx.thread.shopifyCustomerId
