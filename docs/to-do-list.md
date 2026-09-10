@@ -195,26 +195,29 @@ it costs — not a design.
   reaches the participant's Instagram app.
 
 - [ ] **Finish the SocialAPI Instagram transport past milestone zero.** This is
-  the critical path and the only A3 item that matters until it runs: `ig_dm` is the
-  product channel, SocialAPI is its selected transport through the first 100 users, and
-  no real DM has ever produced a Shopkeeper ticket. Milestone-zero ingress is built —
-  a signed `dm.received` is resolved to its workspace through the indexed
-  `Integration.providerAccountId` and durably queued as a
+  the critical path and the only A3 item that matters until it runs end to end: `ig_dm` is
+  the product channel and SocialAPI is its selected transport through the first 100 users.
+  Milestone-zero ingress is built and now deployed — a signed `dm.received` is resolved to
+  its workspace through the indexed `Integration.providerAccountId` and durably queued as a
   `provider: 'socialapi'` Instagram job keyed on the native `platform_id`, the worker skips the
   Meta-token paths a SocialAPI row cannot use, and an approved reply leaves through SocialAPI's
-  conversation endpoint. What is left is running it:
-  deploy the migration, then the gateway, `npm run spike:socialapi -- pin --execute` to point one
-  `ig_dm` row at the controlled account, send a DM from the controlled
-  participant, and follow it to a ticket, a plan, a phone approval, and a received reply.
-  Set `SOCIALAPI_API_KEY` on the dashboard so the approved reply can actually leave. Only after
-  that: `dm.sent`
+  conversation endpoint. **Shipped 2026-09-10**:
+  `20260909120000_add_integration_provider_account_id` applied to production ahead of its code,
+  `b683650a` live on Vercel and Railway with CI green and `/health/deep` ok, the spike's pinned
+  `ig_dm` row backfilled into `provider_account_id`, and `SOCIALAPI_API_KEY` already set on the
+  dashboard — so the environment pin is retired and `SOCIALAPI_PINNED_*` is deleted from both
+  hosts. Outbound picks the transport from the row's `metadata.transport`, not a flag, so the
+  approval leg above is unblocked with no further configuration. Only after it: `dm.sent`
   correlation, the ephemeral-vs-gallery image classification, recovery/dedupe,
   reconnect, disconnect, deletion, and capacity controls
   ([transport plan](socialapi-transport-plan.md) S1–S6). **Merchant OAuth landed 2026-09-09** —
   one connect entry point dispatching on `resolveInstagramConnectTransport`, admission by the
   `SOCIALAPI_BRAND_ASSIGNMENTS` map, brand-scoped account verification, and ownership decided on
-  `providerAccountId`. It has not been run against a live merchant OAuth, and the vendor exposes
-  no native Instagram account id, so `externalAccountId` holds the provider id and
+  `providerAccountId`. It is closed in production and deliberately so: `SOCIALAPI_ENABLED` and
+  `SOCIALAPI_BRAND_ASSIGNMENTS` are both unset, `getSocialApiConnectConfig` returns null, and no
+  workspace is offered a SocialAPI connect. Provisioning a brand and setting those two is what
+  admits the first merchant; it has never been run against a live merchant OAuth, and the vendor
+  exposes no native Instagram account id, so `externalAccountId` holds the provider id and
   Professional-account eligibility is unverified at connect. Close the vendor/data-processing
   gates in [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md) before any
   external merchant data. Certify per [improvement plan](project-improvement-plan.md) A3.
