@@ -7,7 +7,7 @@ import {
 } from '@shopkeeper/integrations/socialapi';
 import { getSocialApiWebhookConfig } from '../config/runtime-config.js';
 import { JOB } from '../constants.js';
-import { loadPinnedSocialApiIntegration } from '../lib/instagram-integration.js';
+import { resolveSocialApiIntegration } from '../lib/instagram-integration.js';
 import logger from '../logger.js';
 import { rateLimit, sendTooManyRequests } from '../rate-limit.js';
 import type { InstagramInboundJobData } from '../types.js';
@@ -115,22 +115,19 @@ function toInboundJob(
 /**
  * Admits one verified `dm.received` to the durable inbound queue before the route
  * acknowledges it, so a queue failure becomes a vendor retry rather than a lost
- * message. Returns `not_routed` when no pinned account matches — that is an
- * acknowledged no-op, not an error.
+ * message. Returns `not_routed` when the account maps to no connected workspace
+ * — that is an acknowledged no-op, not an error.
  */
 async function admitInboundDm(body: unknown): Promise<IngressOutcome> {
-  const { pinnedAccountId, pinnedIntegrationId } = getSocialApiWebhookConfig();
-  if (!pinnedAccountId || !pinnedIntegrationId) return 'not_routed';
-
   const inbound = normalizeSocialApiDmReceived(body);
-  if (!inbound || inbound.accountId !== pinnedAccountId) return 'not_routed';
+  if (!inbound) return 'not_routed';
 
   try {
-    const integration = await loadPinnedSocialApiIntegration(pinnedIntegrationId);
+    const integration = await resolveSocialApiIntegration(inbound.accountId);
     if (!integration) {
-      logger.error(
-        { integrationId: fingerprint(pinnedIntegrationId) },
-        '[Webhook] Pinned SocialAPI integration is missing or not a SocialAPI row — dropping',
+      logger.warn(
+        { accountId: fingerprint(inbound.accountId) },
+        '[Webhook] SocialAPI account maps to no active SocialAPI integration — ignoring',
       );
       return 'not_routed';
     }

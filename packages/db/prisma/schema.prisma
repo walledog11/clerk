@@ -377,6 +377,10 @@ model Integration {
   platform          ChannelType
   emailProvider     EmailProvider? @map("email_provider")
   externalAccountId String         @map("external_account_id") @db.VarChar(255)
+  // The transport provider's own account identifier (SocialAPI `acc_...`), null
+  // for every directly-connected account. `externalAccountId` stays the native
+  // platform id so the per-platform ownership indexes keep meaning what they say.
+  providerAccountId String?        @map("provider_account_id") @db.VarChar(255)
   fromEmail         String?        @map("from_email") @db.VarChar(255)
   accessToken       String?        @map("access_token") @db.Text
   refreshToken      String?        @map("refresh_token") @db.Text
@@ -404,6 +408,9 @@ model Integration {
   // account tied to one workspace: integrations_instagram_account_unique and
   // integrations_shopify_account_unique, both on (external_account_id) filtered
   // by platform. They are the race-safe backstop for the connect-time guards.
+  // A fourth, integrations_provider_account_unique on (provider_account_id)
+  // filtered to non-null rows, both serves provider webhook lookup and keeps one
+  // provider account resolving to exactly one integration.
   @@index([organizationId])
   @@index([organizationId, lifecycleStatus])
   @@map("integrations")

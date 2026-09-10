@@ -119,18 +119,29 @@ export async function loadActiveInstagramIntegration(input: {
   return toActiveInstagramIntegration(integration);
 }
 
-/**
- * Milestone-zero routing for the controlled SocialAPI spike: resolve the pinned
- * integration row by id alone, before OAuth or an indexed `providerAccountId`
- * column exists. The webhook has already matched the pinned account id.
- */
-export async function loadPinnedSocialApiIntegration(
-  integrationId: string,
+// Provider ingress resolves provider-fronted rows only, keyed on the provider's
+// own account id. The organization is always read from the row that matches:
+// a webhook never names the workspace it belongs to.
+export async function resolveSocialApiIntegration(
+  providerAccountId: string,
 ): Promise<ActiveSocialApiIntegration | null> {
-  const integration = await db.integration.findFirst({
-    where: { id: integrationId, platform: 'ig_dm', lifecycleStatus: 'active' },
+  const integrations = await db.integration.findMany({
+    where: {
+      platform: 'ig_dm',
+      providerAccountId,
+      lifecycleStatus: 'active',
+    },
     select: activeInstagramSelect,
+    take: 2,
   });
+
+  if (integrations.length > 1) {
+    throw new AmbiguousInstagramIntegrationError(
+      `SocialAPI account ${providerAccountId} resolves to multiple active integrations`,
+    );
+  }
+
+  const integration = integrations[0];
   if (!integration || !isSocialApiMetadata(integration.metadata)) return null;
   return {
     transport: 'socialapi',

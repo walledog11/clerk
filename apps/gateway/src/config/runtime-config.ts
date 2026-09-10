@@ -242,22 +242,11 @@ export function getTelegramConfig(): TelegramConfig {
 
 export interface SocialApiWebhookConfig {
   secret: string | null;
-  /**
-   * Milestone-zero routing: one SocialAPI account pinned to one existing
-   * `ig_dm` integration row, so a controlled DM can reach the durable workflow
-   * before OAuth and the indexed `providerAccountId` column exist. Both must be
-   * set for ingress; with either absent the route stays observation-only.
-   * S1 replaces this with account lookup.
-   */
-  pinnedAccountId: string | null;
-  pinnedIntegrationId: string | null;
 }
 
 export function getSocialApiWebhookConfig(): SocialApiWebhookConfig {
   return {
     secret: readOptionalTrimmedEnv('SOCIALAPI_WEBHOOK_SECRET'),
-    pinnedAccountId: readOptionalTrimmedEnv('SOCIALAPI_PINNED_ACCOUNT_ID'),
-    pinnedIntegrationId: readOptionalTrimmedEnv('SOCIALAPI_PINNED_INTEGRATION_ID'),
   };
 }
 

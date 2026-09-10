@@ -198,13 +198,13 @@ it costs — not a design.
   the critical path and the only A3 item that matters until it runs: `ig_dm` is the
   product channel, SocialAPI is its selected transport through the first 100 users, and
   no real DM has ever produced a Shopkeeper ticket. Milestone-zero ingress is built —
-  a signed `dm.received` for one env-pinned account is durably queued as a
+  a signed `dm.received` is resolved to its workspace through the indexed
+  `Integration.providerAccountId` and durably queued as a
   `provider: 'socialapi'` Instagram job keyed on the native `platform_id`, the worker skips the
   Meta-token paths a SocialAPI row cannot use, and an approved reply leaves through SocialAPI's
   conversation endpoint. What is left is running it:
-  deploy the gateway, `npm run spike:socialapi -- pin --execute` to point one `ig_dm` row
-  at the controlled account, set `SOCIALAPI_PINNED_ACCOUNT_ID` and
-  `SOCIALAPI_PINNED_INTEGRATION_ID` on Railway, send a DM from the controlled
+  deploy the migration, then the gateway, `npm run spike:socialapi -- pin --execute` to point one
+  `ig_dm` row at the controlled account, send a DM from the controlled
   participant, and follow it to a ticket, a plan, a phone approval, and a received reply.
   Set `SOCIALAPI_API_KEY` on the dashboard so the approved reply can actually leave. Only after
   that: `dm.sent`

@@ -195,12 +195,13 @@ async function inspect(
 
 
 /**
- * Milestone-zero routing row. Creates or re-points one `ig_dm` integration to a
+ * Operator routing row. Creates or re-points one `ig_dm` integration to a
  * SocialAPI account so a controlled DM can reach the durable workflow before
- * OAuth exists. `@shopkeeper/db` is imported lazily so every other subcommand
- * still runs with no database configured. Unlike `inspect`, this prints the account
- * id in full: it is routing configuration the operator must copy into the gateway,
- * not evidence, so keep its output out of committed artifacts.
+ * OAuth exists. `providerAccountId` is what the webhook resolves, so a row
+ * written here is reachable with no gateway environment change — which is also
+ * why the account id no longer needs printing in full. `@shopkeeper/db` is
+ * imported lazily so every other subcommand still runs with no database
+ * configured.
  */
 async function pinIntegration(
   api: ReturnType<typeof createSocialApiClient>,
@@ -243,7 +244,12 @@ async function pinIntegration(
   const integration = existing
     ? await db.integration.update({
       where: { id: existing.id },
-      data: { accessToken: null, lifecycleStatus: 'active', metadata },
+      data: {
+        accessToken: null,
+        lifecycleStatus: 'active',
+        providerAccountId: socialApiAccountId,
+        metadata,
+      },
       select: { id: true },
     })
     : await db.integration.create({
@@ -251,6 +257,7 @@ async function pinIntegration(
         organizationId,
         platform: 'ig_dm',
         externalAccountId,
+        providerAccountId: socialApiAccountId,
         accessToken: null,
         lifecycleStatus: 'active',
         metadata,
@@ -263,11 +270,6 @@ async function pinIntegration(
     accountSelection: configuredAccountId ? 'configured' : 'sole_assigned_account',
     integrationId: integration.id,
     accountFingerprint: fingerprint(socialApiAccountId),
-    pinnedAccountId: socialApiAccountId,
-    next: [
-      `Set SOCIALAPI_PINNED_INTEGRATION_ID=${integration.id} on the gateway.`,
-      'Set SOCIALAPI_PINNED_ACCOUNT_ID to the pinnedAccountId above on the gateway.',
-    ],
   };
 }
 

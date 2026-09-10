@@ -176,7 +176,7 @@ Entry points: `packages/integrations/src/instagram`, `packages/db/prisma/schema.
 
 - [ ] Define a discriminated `InstagramTransport`/active-integration contract for `meta_direct` and `socialapi`; direct requires its stored Meta token, while SocialAPI requires `providerAccountId` and a server-resolved scoped credential. Keep the boundary limited to Instagram's actual needs.
 - [ ] Treat missing `instagram.transport` on existing rows as `meta_direct`.
-- [ ] Add nullable `providerAccountId`, an appropriate provider/account uniqueness index, and a hand-written additive migration that preserves the existing raw partial indexes.
+- [x] Add nullable `providerAccountId`, an appropriate provider/account uniqueness index, and a hand-written additive migration that preserves the existing raw partial indexes. Done 2026-09-09 in `20260909120000_add_integration_provider_account_id`: the column, a backfill of the pinned row from `metadata.instagram.socialApiAccountId`, and `integrations_provider_account_unique` on (`provider_account_id`) filtered to non-null rows, which both serves the webhook lookup and stops one provider account resolving to two workspaces. `external_account_id` is untouched, so the three existing partial indexes keep meaning what they say.
 - [ ] Keep `externalAccountId` native and preserve one Instagram account per Shopkeeper organization/account ownership rules.
 - [ ] Extend `InstagramInboundJobData` with provider, provider account, conversation, and connection-generation fields without breaking queued direct-Meta jobs.
 - [ ] Add strict metadata readers/writers; do not scatter JSON casts across routes.
@@ -221,20 +221,25 @@ through SocialAPI's conversation endpoint using the workspace `SOCIALAPI_API_KEY
 disconnect routing, reconnect generations, and outage behavior — is open.
 
 **Milestone-zero ingress — 2026-09-09.** The route no longer only observes. A verified
-`dm.received` whose `data.account_id` equals `SOCIALAPI_PINNED_ACCOUNT_ID` is normalized and added
-to the existing inbound queue as a `provider: 'socialapi'` Instagram job before the route
-acknowledges, so a queue failure returns `500` and the vendor retries. Deduplication keys on the
-native `platform_id` (falling back to raw `message.mid`), never the provider interaction id. Every
-other event, and every account that is not pinned, stays acknowledged-and-observed. This is the
-shortest path that reaches the durable workflow: routing is one env-pinned account rather than
-account lookup, so the bullets below that describe OAuth, `providerAccountId` resolution,
-reconciliation, and capacity are still open, and S1 replaces the pin.
+`dm.received` is normalized and added to the existing inbound queue as a `provider: 'socialapi'`
+Instagram job before the route acknowledges, so a queue failure returns `500` and the vendor
+retries. Deduplication keys on the native `platform_id` (falling back to raw `message.mid`), never
+the provider interaction id. Every other event, and every account that resolves to no connected
+workspace, stays acknowledged-and-observed.
+
+**Account resolution — 2026-09-09.** The two environment variables that pinned one provider account
+to one integration row are gone. `resolveSocialApiIntegration` reads `data.account_id` through the
+indexed `providerAccountId` column, requires `platform`, `transport` and `lifecycleStatus` to match,
+and takes the organization from the row it finds — the webhook never names a workspace. A single
+provider account resolving to two active rows throws `AmbiguousInstagramIntegrationError` rather
+than picking one. Ingress no longer needs a gateway environment change per merchant, so what OAuth
+adds is the row, not the routing. Reconciliation, connection generations, and capacity remain open.
 
 - [x] Add `POST /webhooks/socialapi` using `SOCIALAPI_WEBHOOK_SECRET` and V2 HMAC-SHA256 over `<timestamp>.<raw body>`. Validate header format/length before constant-time comparison and reject timestamps outside a five-minute past/future tolerance; do not silently downgrade normal deliveries to V1. Done 2026-09-09 in `c3b8a79e`; unit tests and two production `dm.received` deliveries passed.
 - [x] Handle the vendor's initial `webhook.test` registration ping as the sole unsigned exception because it arrives before the endpoint secret is revealed. Require the exact event header and strict, small ping schema; rate-limit it, perform no persistence/queue/configuration side effect, and return only the acknowledgement. Reject unsigned test-shaped requests from all other paths. Once the endpoint exists, require V2 for test deliveries as well as normal events. Done 2026-09-09: registration succeeded, the secret was installed directly in Railway, and the unsigned shape returned `401` afterward. The provider's separately triggered signed synthetic test currently has an event header/body mismatch and returns `400`; real deliveries pass.
 - [x] Acknowledge supported inbound events only after durable queue admission, within the vendor's ten-second deadline. Return a retryable error for transient database/queue failures. Explicitly acknowledge authenticated test deliveries and intentionally ignored events without manufacturing message jobs. Done 2026-09-09 for `dm.received`; enqueue precedes the `200` and a queue failure returns `500`.
 - [x] Accept `dm.received`; ignore or use `dm.sent` only to reconcile an outbound result; explicitly classify referral and unknown events. Done 2026-09-09 for the accept/ignore split: only `dm.received` creates work. `dm.sent` reconciliation is still unbuilt and needs the identifier answer from the spike's open evidence.
-- [ ] Resolve `data.account_id` through indexed `providerAccountId`, require platform/transport/lifecycle match, and never accept an organization identifier from the webhook. Milestone zero matches one env-pinned account and loads that integration by id, asserting its `transport: 'socialapi'` metadata; the organization is always read from the row, never the webhook. The indexed column and multi-account lookup are open.
+- [x] Resolve `data.account_id` through indexed `providerAccountId`, require platform/transport/lifecycle match, and never accept an organization identifier from the webhook. Done 2026-09-09 in `resolveSocialApiIntegration`; the env pin is removed and a duplicate provider account throws rather than resolving. Connection-generation matching arrives with S1's reconnect handling.
 - [x] Normalize verified canonical sender/message IDs (using the tested mapping if necessary), original provider timestamp, conversation ID, text, and media into the existing Instagram job. Include provider account and connection generation from the validated integration. Done 2026-09-09 except connection generation, which arrives with S1's reconnect handling. `normalizeSocialApiDmReceived` reads `data.platform_id` with a raw `message.mid` fallback for the message id and `data.author.id` with a raw `sender.id` fallback for the sender.
 - [ ] Preserve existing rate limits, body limits, no-content logging, trace IDs, bulk queue behavior, and signature-failure alerts with `provider=socialapi`.
 - [ ] Make retries idempotent using the existing organization-scoped external-message uniqueness guarantee.

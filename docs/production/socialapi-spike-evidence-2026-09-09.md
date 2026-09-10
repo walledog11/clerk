@@ -118,6 +118,9 @@ The receiver is no longer observation-only. What changed, and what it does not y
   `SOCIALAPI_PINNED_INTEGRATION_ID`, with `npm run spike:socialapi -- pin --execute` creating or
   re-pointing the `ig_dm` row. With either variable unset the route stays observation-only. S1
   replaces this with the indexed `providerAccountId` column.
+  **Superseded later on 2026-09-09:** both variables are gone and the route resolves
+  `data.account_id` through `Integration.providerAccountId`. `pin --execute` now writes that
+  column, so it remains the way a controlled row is created. The rest of this record stands.
 - The thread stores the webhook's `conversation_id` in `Thread.externalSpaceId`, and an approved
   reply for a SocialAPI thread leaves through SocialAPI's conversation endpoint with the workspace
   `SOCIALAPI_API_KEY`. It shares the 24-hour window check, reply-integration routing, and outbound
