@@ -250,6 +250,35 @@ describe("planAgent capture loop", () => {
     });
   });
 
+  // The Instagram case: the sender is a real customer, but nothing links them to
+  // a Shopify record and nothing on that channel ever will, so an order question
+  // has to be answerable from a read that discloses no personal detail.
+  it("offers the guest-safe shipping read when the thread has no Shopify customer", async () => {
+    installAgentLogger(makeLogger());
+    mockCreate.mockResolvedValueOnce(singleToolUse("send_reply", { text: "It shipped Tuesday." }));
+
+    await planAgent(makeCtx({
+      thread: {
+        ...makeCtx().thread,
+        channelType: "ig_dm",
+        shopifyCustomerId: null,
+      },
+    }), "Where is my order?");
+
+    expect(toolNamesForCall(0)).toContain("get_order_fulfillment_status");
+  });
+
+  it("withholds it once the thread has a linked Shopify customer", async () => {
+    installAgentLogger(makeLogger());
+    mockCreate.mockResolvedValueOnce(singleToolUse("send_reply", { text: "It shipped Tuesday." }));
+
+    await planAgent(makeCtx({
+      thread: { ...makeCtx().thread, channelType: "ig_dm" },
+    }), "Where is my order?");
+
+    expect(toolNamesForCall(0)).not.toContain("get_order_fulfillment_status");
+  });
+
   it("widens once from a clean transcript when the model signals a namespace miss", async () => {
     const injectedLogger = makeLogger();
     installAgentLogger(injectedLogger);

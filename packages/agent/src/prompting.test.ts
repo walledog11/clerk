@@ -200,6 +200,34 @@ describe('buildSystemPrompt', () => {
   });
 });
 
+describe('unverified sender guidance', () => {
+  // The prompt names a tool, so it has to be gated on the same condition that
+  // puts that tool in the set. A thread that is told to call a read it does not
+  // hold answers "let me look that up" and then does not.
+  it('points an unlinked thread at the shipping read it actually holds', () => {
+    const prompt = buildSystemPrompt(makeCtx({
+      thread: { ...makeCtx().thread, channelType: 'ig_dm' },
+    }));
+
+    expect(prompt).toContain('get_order_fulfillment_status');
+    expect(prompt).toContain('nothing here establishes who the sender is');
+  });
+
+  it('says nothing about it once the thread has a linked customer', () => {
+    const prompt = buildSystemPrompt(makeCtx({
+      thread: { ...makeCtx().thread, channelType: 'ig_dm', shopifyCustomerId: '10000005551' },
+    }));
+
+    expect(prompt).not.toContain('get_order_fulfillment_status');
+  });
+
+  it('says nothing about it when no Shopify integration is connected', () => {
+    const prompt = buildSystemPrompt(makeCtx({ shopify: null }));
+
+    expect(prompt).not.toContain('get_order_fulfillment_status');
+  });
+});
+
 describe('buildComposerAskPrompt', () => {
   it('does not include a customer memory section', () => {
     const prompt = buildComposerAskPrompt(makeCtx());

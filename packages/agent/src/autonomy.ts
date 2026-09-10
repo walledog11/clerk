@@ -98,6 +98,11 @@ const QUICK_REPLY_READ_TOOLS = new Set([
   "get_shopify_customer",
   "get_shopify_orders",
   "get_order_by_name",
+  // Returns shipping state and dates for one order and nothing that identifies
+  // anyone, which is why it is the read an unverified sender is answered from.
+  // Omitting it made that answer a plan the merchant had to approve, defeating
+  // the reason the tool exists.
+  "get_order_fulfillment_status",
   "get_order_tracking",
 ]);
 

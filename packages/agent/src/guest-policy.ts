@@ -134,3 +134,26 @@ export function verifiedToolBlockReason(name: string): string {
 export function orderScopeBlockReason(name: string): string {
   return `${name} was called for an order this visitor has not confirmed. They proved control of the email on one order only; reading another order would disclose a stranger's details. Hand this to the shop.`;
 }
+
+// The thread has a customer channel behind it but nothing tying that person to
+// a Shopify customer record. Only the email channel resolves that link on its
+// own (context.ts searches Shopify by the sender's address), so a social DM
+// stays unresolved for the life of the thread unless the merchant links it by
+// hand.
+//
+// One definition, two consumers that have to agree: the `shopify_customer_unresolved`
+// planning signal, whose severity turns blocking the moment a plan reads
+// customer or order data, and the tool set — which is where the guest-safe
+// shipping read is admitted, so the agent has something to answer a routine
+// status question with that does not disclose a stranger's details.
+export function hasUnresolvedShopifyCustomer(
+  ctx: Pick<BaseAgentContext, "authState" | "shopify"> & {
+    thread: { shopifyCustomerId: string | null };
+  },
+  operatorMode: boolean,
+): boolean {
+  return Boolean(ctx.shopify)
+    && !ctx.thread.shopifyCustomerId
+    && !operatorMode
+    && !isStorefrontContext(ctx);
+}

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { AgentContext } from "./agent-context.js";
 import type { ProducedPlanSignalCode } from "./types.js";
-import { GUEST_TOOL_NAMES, isGuestAllowedTool, isGuestContext, isGuestOnlyTool } from "./guest-policy.js";
+import {
+  GUEST_TOOL_NAMES,
+  hasUnresolvedShopifyCustomer,
+  isGuestAllowedTool,
+  isGuestContext,
+  isGuestOnlyTool,
+} from "./guest-policy.js";
 import { appendInitialPlanningSignals } from "./planner-read-tools.js";
 import { resolveAgentSettings, type AutonomyTier } from "./settings.js";
 import { TOOL_DEFINITIONS, selectAgentTools } from "./tools/registry/index.js";
@@ -95,6 +101,25 @@ describe("planning signals", () => {
     expect(codes).toEqual(["shopify_customer_unresolved"]);
   });
 
+  // The signal's precondition and the guest-safe read's availability are the
+  // same question asked by two callers, so they are one function. These pin the
+  // answer rather than each caller's copy of it.
+  it("reports an unresolved customer on a social DM with no link", () => {
+    const ctx = makeCtx({ thread: { ...makeCtx().thread, channelType: "ig_dm" } });
+    expect(hasUnresolvedShopifyCustomer(ctx, false)).toBe(true);
+  });
+
+  it("reports none once the thread is linked, on a guest thread, on an operator turn, or with no Shopify", () => {
+    const base = makeCtx({ thread: { ...makeCtx().thread, channelType: "ig_dm" } });
+    expect(hasUnresolvedShopifyCustomer(
+      { ...base, thread: { ...base.thread, shopifyCustomerId: "10000005551" } },
+      false,
+    )).toBe(false);
+    expect(hasUnresolvedShopifyCustomer({ ...base, ...GUEST }, false)).toBe(false);
+    expect(hasUnresolvedShopifyCustomer(base, true)).toBe(false);
+    expect(hasUnresolvedShopifyCustomer({ ...base, shopify: null }, false)).toBe(false);
+  });
+
   it("signals when the recent-orders pre-fetch failed", () => {
     const codes: ProducedPlanSignalCode[] = [];
     appendInitialPlanningSignals({
@@ -131,10 +156,11 @@ describe("guest allowlist", () => {
     ]);
   });
 
-  it("keeps the guest-only tool out of every non-guest tool list", () => {
-    // The support planner's tool set must be unchanged by anything added for
-    // storefront chat, or the eval gate is owed for a surface that did not
-    // actually change. Asserted rather than reasoned about.
+  it("keeps the guest-only tool out of a thread whose customer is known", () => {
+    // A linked thread has the fuller reads and no disclosure problem, so its
+    // tool set is exactly what it was. The unresolved case is the one that
+    // changed, and it changed the support planner's surface — which is why the
+    // eval gate is owed for it.
     const nonGuest = selectAgentTools(undefined).filter((tool) => !isGuestOnlyTool(tool.name));
     expect(nonGuest.map((tool) => tool.name)).not.toContain("get_order_fulfillment_status");
     expect(isGuestOnlyTool("get_order_fulfillment_status")).toBe(true);

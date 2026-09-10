@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decideAutonomy } from "./autonomy.js";
+import { buildPlanSteps } from "./planner-steps.js";
 import { resolveAgentSettings } from "./settings.js";
 import type { AgentPlan, OrgSettings, RawToolCall } from "./types.js";
 
@@ -14,14 +15,9 @@ function plan(calls: RawToolCall[], overrides: Partial<AgentPlan> = {}): AgentPl
   return {
     instruction: "Handle it",
     rawToolCalls: calls,
-    steps: calls.filter((call) => call.name !== "search_kb").map((call) => ({
-      id: call.id,
-      tool: call.name,
-      label: call.name,
-      description: call.name,
-      category: call.name === "create_refund" ? "action" : call.name === "send_reply" ? "communication" : "internal",
-      enabled: true,
-    })),
+    // The production step builder, not a local imitation of it: read tools are
+    // absent from a plan's steps, and the quick-reply shape is decided on that.
+    steps: buildPlanSteps(calls),
     validation: { status: "valid", issues: [] },
     routingEvidence: { classifierState: "aligned", codes: [] },
     ...overrides,
@@ -190,5 +186,44 @@ describe("decideAutonomy", () => {
       reply,
     ]), settings());
     expect(fallback.kind).toBe("needs_review");
+  });
+
+  // The shipping read an unverified sender is answered from. It discloses
+  // nothing about the person on the order, so it leaves the unresolved-customer
+  // signal advisory — and it has to be a recognized quick-reply read too, or the
+  // answer it exists to make possible still costs the merchant an approval.
+  it("sends a shipping-status answer for a customer it could not resolve", () => {
+    const status: RawToolCall = {
+      id: "status",
+      name: "get_order_fulfillment_status",
+      input: { order_number: "#1032" },
+    };
+    const verdict = decideAutonomy(plan([status, reply], {
+      signals: [{
+        code: "shopify_customer_unresolved",
+        severity: "advisory",
+        message: "Couldn't find a Shopify customer.",
+      }],
+    }), settings());
+    expect(verdict).toMatchObject({ kind: "quick_reply", toolCalls: [reply] });
+  });
+
+  it("still routes the fuller order read for that customer to the merchant", () => {
+    const lookup: RawToolCall = {
+      id: "lookup",
+      name: "get_order_by_name",
+      input: { order_name: "#1032" },
+    };
+    const verdict = decideAutonomy(plan([lookup, reply], {
+      signals: [{
+        code: "shopify_customer_unresolved",
+        severity: "blocking",
+        message: "Couldn't find a Shopify customer.",
+      }],
+    }), settings());
+    expect(verdict).toMatchObject({
+      kind: "needs_review",
+      reasons: ["shopify_customer_unresolved"],
+    });
   });
 });

@@ -9,7 +9,12 @@ import { buildSystemPromptParts, buildComposerAskPrompt } from "./prompt.js";
 import { isOperatorChannel } from "./intent.js";
 import { buildMessageHistory } from "./message-history.js";
 import { runAgentLoop } from "./agent-loop.js";
-import { isGuestOnlyTool, isStorefrontAllowedTool, storefrontToolNames } from "./guest-policy.js";
+import {
+  hasUnresolvedShopifyCustomer,
+  isGuestOnlyTool,
+  isStorefrontAllowedTool,
+  storefrontToolNames,
+} from "./guest-policy.js";
 import type { ActionEntry, BaseAgentContext, AgentResult } from "./agent-context.js";
 import type { PersistedAgentAction } from "./agent-actions.js";
 import { createModelUsageMetrics, hashInstructionForLog } from "./usage.js";
@@ -226,12 +231,16 @@ export async function runAgent(
     const storefrontTools = storefrontToolNames(ctx);
     const storefrontMode = storefrontTools !== null;
     const grantedScopes = ctx.shopify?.grantedScopes ?? null;
+    // Mirrors the planner: a thread with no Shopify customer behind it reaches
+    // the guest-safe shipping read, so an approved plan can execute the step the
+    // planner was allowed to draft.
+    const guestOnlyReachable = storefrontMode || hasUnresolvedShopifyCustomer(ctx, operatorMode);
     const selectedCoreTools = readOnly
       ? selectAgentTools(settings, storefrontMode
           ? READ_TOOL_NAMES.filter((name) => isStorefrontAllowedTool(ctx, name))
-          : READ_TOOL_NAMES, grantedScopes).filter((tool) => storefrontMode || !isGuestOnlyTool(tool.name))
+          : READ_TOOL_NAMES, grantedScopes).filter((tool) => guestOnlyReachable || !isGuestOnlyTool(tool.name))
       : selectAgentTools(settings, storefrontTools, grantedScopes).filter((tool) => (
-          (storefrontMode || !isGuestOnlyTool(tool.name))
+          (guestOnlyReachable || !isGuestOnlyTool(tool.name))
           && (!gatewayOperatorMode || !OPERATOR_HIDDEN_TOOL_NAMES.has(tool.name))
         ));
     const tools = readOnly

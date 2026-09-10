@@ -2,7 +2,12 @@ import { buildSplitCachedSystemPrompt } from "./ai/anthropic.js";
 import { pickModel } from "./ai/index.js";
 import type { AgentContext } from "./agent-context.js";
 import { runAgentLoop } from "./agent-loop.js";
-import { isGuestOnlyTool, isStorefrontContext, storefrontToolNames } from "./guest-policy.js";
+import {
+  hasUnresolvedShopifyCustomer,
+  isGuestOnlyTool,
+  isStorefrontContext,
+  storefrontToolNames,
+} from "./guest-policy.js";
 import { isOperatorChannel } from "./intent.js";
 import { isMerchantAnswerPlanningInstruction } from "./kb-learned.js";
 import logger from "./logger.js";
@@ -76,10 +81,17 @@ export async function planAgent(
   // happen.
   const storefrontTools = storefrontToolNames(ctx);
   const grantedScopes = ctx.shopify?.grantedScopes ?? null;
+  // The guest-safe shipping read is admitted to a thread whose sender is tied to
+  // no Shopify customer — the same condition that makes a plan built on the
+  // fuller order reads cost the merchant an approval. Without it the agent's
+  // only way to answer "where is my order" on a social DM is a read that
+  // discloses the order's personal detail, which is why every such question
+  // reached the merchant.
+  const unresolvedCustomer = hasUnresolvedShopifyCustomer(ctx, operatorMode);
   let availableTools = storefrontTools
     ? selectAgentTools(settings, storefrontTools, grantedScopes)
     : selectAgentTools(settings, null, grantedScopes)
-        .filter((tool) => !isGuestOnlyTool(tool.name));
+        .filter((tool) => unresolvedCustomer || !isGuestOnlyTool(tool.name));
   if (merchantAnswerReplan) {
     availableTools = availableTools.filter(tool => tool.name !== "ask_operator");
   }
