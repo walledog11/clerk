@@ -83,12 +83,16 @@ SHA-256 prefixes were used only to compare identifier equality inside the transi
    is not.
 4. Exercise a controlled webhook retry and bounded recovery read using the native `platform_id` as
    the candidate canonical message key; confirm one durable result once application ingress exists.
-5. Route the controlled message through Shopkeeper ticket creation, planning, approval, and a
-   received reply while the 24-hour window is open.
+5. ~~Route the controlled message through Shopkeeper ticket creation, planning, and a received
+   reply while the 24-hour window is open.~~ Done 2026-09-10; see the live run below. Still open:
+   send a DM whose plan carries an `action`-category call so the approval leg reaches the phone, and
+   confirm the participant received the reply in their Instagram app.
 6. Exercise disconnect/reconnect only after the account and recovery target are explicitly
    confirmed.
 
-No go/no-go decision is justified by this partial controlled-spike evidence.
+The 2026-09-10 live run justifies a provisional go on transport feasibility: the path works end to
+end for text. It does not close identity, media, recovery, or vendor diligence, and it does not
+authorize external merchant data.
 
 ## Milestone-zero ingress slice — landed 2026-09-09
 
@@ -133,6 +137,41 @@ node-script, typecheck, lint, knip, and doc-reference checks pass.
 
 The dashboard integration suite went red once during this work and passed on two immediate reruns
 with no code change, matching the known workspace-concurrency flake rather than anything here.
+
+## Live end-to-end run — 2026-09-10
+
+The first real Instagram DM to produce a Shopkeeper ticket. Merge commit `351894e8` deployed to
+Railway (deep health reported database, Redis, worker, queues and iMessage healthy) and to Vercel
+production. The controlled account is pinned to the `Linen & Loom` workspace, chosen because it is
+the only organization holding both an active iMessage operator binding and a live Shopify
+connection. Its `ig_dm` thread count was zero immediately before the send, so the thread below is
+attributable to this message alone.
+
+- A DM reading "Could you let me know where my order is" arrived as a signed `dm.received`, passed
+  V2 verification, was queued, and produced thread `f161a9b1` in `open` status.
+- `Customer.platformId` is SocialAPI's author id. `Thread.externalSpaceId` holds the provider
+  conversation id, and `Thread.replyIntegrationId` is the pinned SocialAPI integration.
+- The stored `Message.externalMessageId` is the native Instagram message id — a base64 value
+  decoding to an `ig_item:...IGMessage...` identifier, confirming the native `platform_id` join
+  rather than the provider interaction id, live and not only in fixtures.
+- The classifier ran on the SocialAPI-originated message: tag `Order Status`, summary "Customer
+  asks for the status or location of their order but provides no order number."
+- The agent replied asking for an order number or checkout email, and the reply left through
+  SocialAPI: the persisted `Message.providerMessageId` is a `sapi_dm_...` identifier, so outbound
+  used the provider conversation endpoint and not Meta's Graph API.
+- The `AgentAction` row records `send_reply`, category `communication`, status `success`, mode
+  `auto_executed`, with no approver.
+
+**Why no merchant approval was requested, and why that is correct.** The organization has
+`autoExecuteMode: "off"` and `autonomyTier: "guarded"`. In `decideAutonomy`, `autoExecuteMode`
+gates plans containing a **mutative** (`action` category) call. This plan's only step was
+`send_reply`, which is `communication`, so it fell through to the `quick_reply` branch, which
+auto-sends a single safe reply under any tier above `watch`. That is the designed shape and it
+predates this work — an `auto_executed` `send_reply` is recorded on the email path on 2026-08-30.
+The consequence for certification is that this run exercised ingress, classification, planning and
+provider-pinned outbound, but **not** the approval leg. Proving that leg needs a DM whose plan
+contains an `action`-category call — a refund or order change naming an order — which will route to
+`needs_review` and reach the merchant's phone.
 
 ## Locally verified receiver slice
 

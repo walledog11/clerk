@@ -184,7 +184,17 @@ it costs — not a design.
   changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
   renewal evidence.
 
-- [ ] **Make one real Instagram DM reach the merchant's phone and get answered.** This is
+- [ ] **Get a SocialAPI plan in front of the merchant's phone for approval.** The inbound half is
+  proven: on 2026-09-10 a real Instagram DM became thread `f161a9b1`, was classified `Order
+  Status`, and the agent's reply left through SocialAPI with a `sapi_dm_...` id
+  ([evidence](production/socialapi-spike-evidence-2026-09-09.md)). What that run did **not**
+  exercise is approval: the plan was a single clarifying `send_reply`, and `decideAutonomy` sends
+  those via `quick_reply` because `autoExecuteMode` gates only `action`-category calls. Send a DM
+  that names an order and asks for a refund or a change, so the plan carries a mutative call,
+  routes to `needs_review`, and arrives on the bound iMessage line. Confirm the approved reply
+  reaches the participant's Instagram app.
+
+- [ ] **Finish the SocialAPI Instagram transport past milestone zero.** This is
   the critical path and the only A3 item that matters until it runs: `ig_dm` is the
   product channel, SocialAPI is its selected transport through the first 100 users, and
   no real DM has ever produced a Shopkeeper ticket. Milestone-zero ingress is built —
