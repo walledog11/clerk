@@ -212,7 +212,7 @@ export function detectUngroundedEscalationReasons(
     if (CUSTOMER_ATTRIBUTION.test(normalized)) return [];
     const preceding = rawToolCalls.slice(0, index);
     const facts = [
-      ...proposedCompletionFacts(preceding, evidence.ctx),
+      ...proposedCompletionFacts(preceding, evidence.ctx, evidence.readResults),
       ...historicalCompletionFacts(preceding, evidence.readResults),
     ];
     if (claimsAreGrounded(normalized, MUTATION_CLAIM_PATTERNS, facts, new Set(["proposed", "success"]), evidence.ctx)) return [];
@@ -399,7 +399,7 @@ export function detectUngroundedReplyText(
     if (typeof value !== "string" || !value.trim()) return [];
     const preceding = rawToolCalls.slice(0, index);
     const facts = [
-      ...proposedCompletionFacts(preceding, evidence.ctx),
+      ...proposedCompletionFacts(preceding, evidence.ctx, evidence.readResults),
       ...historicalCompletionFacts(preceding, evidence.readResults),
     ];
     const found = unsupportedReplyCompletionClaims(

@@ -35,6 +35,53 @@ describe("completion facts", () => {
     })]);
   });
 
+  it("takes an order alias from this turn's read when context has no such order", () => {
+    const calls = [
+      { id: "read", name: "get_order_by_name", input: { order_name: "1031" } },
+      { id: "refund", name: "create_refund", input: { order_id: "6163445514474", amount: "43.48" } },
+    ];
+    const readResults = {
+      read: JSON.stringify({ id: "6163445514474", name: "#1031", currency: "USD" }),
+    };
+
+    expect(proposedCompletionFacts(calls, undefined, readResults)).toEqual([
+      expect.objectContaining({
+        action: "refund",
+        target: { kind: "order", id: "6163445514474", aliases: ["#1031"] },
+      }),
+    ]);
+    expect(proposedCompletionFacts(calls)).toEqual([
+      expect.objectContaining({ target: { kind: "order", id: "6163445514474" } }),
+    ]);
+  });
+
+  it("carries the order alias through execution as well as proposal", () => {
+    // The approved plan is only half the round trip. If the executed refund
+    // fact loses the alias the proposal had, the merchant approves a valid
+    // plan and the completion sentence fails grading on the way out.
+    const read = {
+      tool: "get_order_by_name",
+      toolCallId: "read",
+      result: JSON.stringify({ id: "6163445514474", name: "#1031", currency: "USD" }),
+      status: "success" as const,
+    };
+    const refund = {
+      tool: "create_refund",
+      toolCallId: "refund",
+      input: { order_id: "6163445514474", amount: "43.48", currency: "USD" },
+      result: "Refunded $43.48",
+      status: "success" as const,
+    };
+
+    expect(executedCompletionFacts([read, refund])).toContainEqual(
+      expect.objectContaining({
+        action: "refund",
+        outcome: "success",
+        target: { kind: "order", id: "6163445514474", aliases: ["#1031"] },
+      }),
+    );
+  });
+
   it("derives cancellation's refund side effect only from a confirmed result", () => {
     const action = {
       tool: "cancel_order",
