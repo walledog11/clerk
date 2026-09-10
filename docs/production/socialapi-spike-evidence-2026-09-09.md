@@ -246,3 +246,50 @@ body limit. The route tests, gateway typecheck/lint/build, and integrations buil
 2026-09-09. Commit `c3b8a79e` is deployed and its endpoint is registered. Two real signed
 `dm.received` deliveries passed against that observation-only build; the ingress slice recorded
 above supersedes the no-work behavior and is not yet deployed or live-verified.
+
+## Approval leg — 2026-09-10
+
+Milestone zero proved inbound and outbound but not approval: its plan was a single clarifying
+`send_reply`, which `decideAutonomy` auto-sends via `quick_reply` because `autoExecuteMode` gates
+only `action`-category calls. This run supplied the missing half by sending a DM whose plan had to
+carry a mutative call.
+
+**The run.** A DM on thread `f161a9b1` reading "Hi I ordered the wrong item for order 1031. Could
+you refund it?" was classified `Returns`. The planner resolved the order through
+`get_order_by_name` — `#1031`, `$43.48 USD`, `paid`, unfulfilled — and proposed `create_refund`,
+`add_internal_note`, `send_reply`. The `action` category routed it to `needs_review`, and the card
+reached the bound iMessage line 34 seconds after the DM arrived. The merchant replied `Yes`; the
+turn ran as `mode: human_approved` and `pendingPlans` cleared to zero.
+
+`create_refund` then returned `policy_block` with `code: "currency_mismatch"` on both the
+currency-qualified call and a retry without one. The agent re-read the ticket and the order, and
+escalated to the merchant rather than proceeding. **No customer-facing message was sent and no
+completion was claimed.** A failed money movement produced an honest escalation, which is the
+behavior A4 exists to guarantee and the first time it has been observed against a real provider
+failure rather than a fixture.
+
+**The blocked first attempt, and why it is the useful evidence.** The same message text planned an
+hour earlier was rejected by `validatePlan` as `ungrounded_customer_reply`, making the whole plan
+invalid; the phone received "nothing can run from this draft" instead of a card. The cause was not
+the model overclaiming. `proposedCompletionFacts` built the refund fact's target through
+`orderTarget`, which attaches the human-readable order name only from `ctx.recentOrders` —
+populated from the *resolved* Shopify customer. An Instagram sender id is not a Shopify customer,
+so that list was empty, the fact carried a bare numeric order id, the reply named `#1031`, and a
+supported claim read as unsupported. The plan already held the name in its own `get_order_by_name`
+result. Fixed in `0e5bcec0` (PR #88) by passing the turn's read results into the fact builders on
+both the proposal and execution sides. The two runs are an A/B on identical message text 39 minutes
+apart, differing only in the deployed commit:
+
+| | before `0e5bcec0` | after |
+| --- | --- | --- |
+| `validation.status` | `invalid` (`ungrounded_customer_reply`) | `valid`, no issues |
+| operator card | "I couldn't produce a safe executable draft… Nothing can run from this draft." | "Here's what I'd do: 1. Issue refund 2. Add internal note 3. Reply to the customer… Sound good?" |
+| `pendingPlans` entry | present, `validation: invalid` | present, `actionLabel: "run those 3 steps"` |
+
+**Still open from this run**, all tracked in `to-do-list.md`: the `currency_mismatch` block in
+`packages/agent/src/shopify/refunds.ts`, which is the last thing between this leg and a closed
+round trip; `approve_pending_plan` returning "no plan is awaiting the merchant's approval" twice
+before the plan it approves executed anyway; and `AgentAction.approverId` being null on rows marked
+`human_approved`. The plan also still carries `shopify_customer_unresolved` as a blocking signal —
+the agent found the order but never identified the shopper, which is a separate identity problem
+and the same gap that caused the grounding failure.

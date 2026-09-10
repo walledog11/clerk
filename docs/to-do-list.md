@@ -85,7 +85,13 @@ provider. **None of these is a code task.**
   unsupported mutation claims before approval, and the send path now requires a matching
   successful completion fact. Watch one real action/reply pair and confirm its action-journal
   result and provider operation reference support the copy. Include one truthful historical
-  refund or fulfillment statement grounded by a live order read.
+  refund or fulfillment statement grounded by a live order read. **Half-observed 2026-09-10.**
+  The negative case is proven for real: an approved refund failed with `policy_block` and the
+  agent sent the customer nothing and claimed nothing, escalating to the merchant instead. The
+  validator was also caught wrongly rejecting a *supported* claim and fixed in `0e5bcec0`. What
+  is still unobserved is the positive pair — a mutation that actually succeeds and a reply whose
+  copy its own journal result supports — because no agent mutation has yet committed in
+  production. Blocked behind the refund currency guard.
 
 ### Channels and providers
 
@@ -184,15 +190,44 @@ it costs — not a design.
   changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
   renewal evidence.
 
-- [ ] **Get a SocialAPI plan in front of the merchant's phone for approval.** The inbound half is
-  proven: on 2026-09-09 a real Instagram DM became thread `f161a9b1`, was classified `Order
-  Status`, and the agent's reply left through SocialAPI with a `sapi_dm_...` id
-  ([evidence](production/socialapi-spike-evidence-2026-09-09.md)). What that run did **not**
-  exercise is approval: the plan was a single clarifying `send_reply`, and `decideAutonomy` sends
-  those via `quick_reply` because `autoExecuteMode` gates only `action`-category calls. Send a DM
-  that names an order and asks for a refund or a change, so the plan carries a mutative call,
-  routes to `needs_review`, and arrives on the bound iMessage line. Confirm the approved reply
-  reaches the participant's Instagram app.
+- [ ] **Finish the SocialAPI approval leg at the refund.** Everything up to the write is
+  proven in production on 2026-09-10, on thread `f161a9b1`: a real Instagram DM naming order
+  1031 planned `create_refund` + `add_internal_note` + `send_reply`, routed to `needs_review`
+  because the plan carried an `action`-category call, and reached the bound iMessage line 34
+  seconds after the DM. The merchant replied `Yes`, the turn ran as `mode: human_approved`,
+  and `pendingPlans` cleared. **The refund itself did not go through** — `create_refund`
+  returned `policy_block` / `currency_mismatch` twice, the agent re-read the order, and it
+  escalated to the merchant instead of claiming success. The customer received nothing, which
+  is the A4 invariant holding under a real failure. What remains for the leg is the refund
+  block below, then confirming the approved reply reaches the participant's Instagram app.
+  Note the first live run's plan was blocked by `ungrounded_customer_reply` until `0e5bcec0`
+  ([PR #88](https://github.com/walledog11/shopkeeper/pull/88)) landed; the before/after on the
+  same message text is the clearest evidence that fix works.
+
+- [ ] **Unblock the refund currency guard.** `packages/agent/src/shopify/refunds.ts` blocks a
+  refund when the order's currency and the currency Shopify returns from `calculateRefund`
+  differ (`code: "currency_mismatch"`). Order #1031 reports `currency: "USD"` and ships to
+  Toronto, and the block fired on both the currency-qualified call and the retry without one.
+  The untested reading is presentment-vs-shop currency: `order.currency` is the shop currency
+  while the calculation comes back in the customer's presentment currency, in which case the
+  guard is right that they differ and wrong to call it unsafe — and no US merchant with an
+  international customer can be refunded by the agent. Read what `calculateRefund` actually
+  returned before changing the comparison. This is the last thing standing between the
+  approval leg and a completed A3 round trip.
+
+- [ ] **`approve_pending_plan` errors before the plan it approves runs.** In the 2026-09-10
+  approval turn the control tool fired twice — 09:44:45 and 09:44:50 — both returning "no plan
+  is awaiting the merchant's approval", and then `create_refund` executed anyway as
+  `human_approved`. The control tool and the executor disagree about whether a pending
+  approval exists. Matches the persist-before-send race already recorded for operator plans;
+  confirm whether that is the same defect or a second one before fixing either.
+
+- [ ] **`AgentAction.approverId` is null on human-approved rows.** Every row in the
+  2026-09-10 approval turn carries `mode: "human_approved"` with `approverId: null` and no
+  `approvedAt`. The audit trail can say a human approved and not which human, which is the one
+  question an audit record of a money movement exists to answer. The operator turn knows the
+  identity — the agent note on the operator thread carries `clerkUserId` — so this is a
+  plumbing gap, not a missing signal.
 
 - [ ] **Finish the SocialAPI Instagram transport past milestone zero.** This is
   the critical path and the only A3 item that matters until it runs end to end: `ig_dm` is
