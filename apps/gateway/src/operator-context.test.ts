@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { db } from '@shopkeeper/db';
 import {
   createTestOrg,
@@ -24,6 +24,7 @@ import { buildAgentPlanCacheRecord } from '@shopkeeper/agent/plan-cache';
 import { hashInstruction, hashPlan } from '@shopkeeper/agent/agent-actions';
 import { resolveAgentSettings } from '@shopkeeper/agent/settings';
 import type { AgentPlan } from '@shopkeeper/agent/types';
+import logger from './logger.js';
 
 function planFor(threadId: string, planId: string, overrides: Partial<PendingPlan> = {}): PendingPlan {
   return {
@@ -570,6 +571,30 @@ describe('loadLivePendingPlans', () => {
     expect(pruned.pendingPlans[0]?.requestDisplay?.kind).toBe('system');
     // The stale entry is also removed from the stored queue.
     expect((await getContext(org.id, 'q7')).pendingPlans.map((plan) => plan.planId)).toEqual([live.planId]);
+  });
+
+  // The 2026-09-10 shape: a card goes to the phone, the thread re-plans six
+  // seconds later, and the parked entry is discarded while the merchant is still
+  // reading it. The drop was silent, so reconstructing it needed a production
+  // forensic pass against expired logs.
+  it('names the reason when a re-plan supersedes a card the merchant was sent', async () => {
+    const customer = await createTestCustomer(org.id, 'replan@example.com', { name: 'Sarah' });
+    const thread = await createTestThread(org.id, customer.id, 'email');
+    const parked = await currentPendingPlan({ thread });
+    await appendPendingPlan(org.id, 'q-replan', parked, 3);
+
+    // Re-plan the thread: same customer message, a new plan id.
+    await currentPendingPlan({ thread, instruction: 'refund the customer' });
+    const infoSpy = vi.spyOn(logger, 'info');
+
+    const pruned = await loadLivePendingPlans(org.id, 'q-replan', await getContext(org.id, 'q-replan'));
+
+    expect(pruned.pendingPlans).toEqual([]);
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: thread.id, planId: parked.planId, reason: 'plan_replaced' }),
+      expect.stringContaining('dropped'),
+    );
+    infoSpy.mockRestore();
   });
 
   it('prunes identity-less and version-old parked entries before offering approval', async () => {

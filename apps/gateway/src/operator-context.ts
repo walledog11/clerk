@@ -15,6 +15,7 @@ import type { ExpectedPlanIdentity } from '@shopkeeper/agent/plan-execution';
 import { getPlanExecution } from '@shopkeeper/agent/execution-ledger';
 import { AGENT_PLAN_CACHE_VERSION, readAgentPlanCacheRecordShape } from '@shopkeeper/agent/plan-cache-shape';
 import { hashInstruction, hashPlan } from '@shopkeeper/agent/agent-actions';
+import logger from './logger.js';
 import { isRecord } from './lib/typing.js';
 import { readRequestDisplay, type RequestDisplay } from './message-handlers/request-display.js';
 
@@ -594,30 +595,47 @@ export function selectPendingPlan(
   return { error: ambiguous, code: 'needs_disambiguation' };
 }
 
-async function pendingPlanMatchesCurrentCache(
+/**
+ * Why a parked plan is no longer offerable, or null when it still is.
+ *
+ * Six separate conditions used to collapse into one boolean, so a card the
+ * merchant was looking at could be discarded and the only trace was that their
+ * "yes" met an empty queue. Reconstructing which condition fired took a
+ * production forensic pass with the logs already expired (2026-09-10). Each one
+ * now names itself.
+ */
+type PendingPlanStaleReason =
+  | 'identity_incomplete'
+  | 'cache_absent'
+  | 'cache_version_superseded'
+  | 'plan_replaced'
+  | 'source_message_advanced'
+  | 'plan_edited'
+  | 'instruction_changed';
+
+async function pendingPlanStaleReason(
   organizationId: string,
   plan: PendingPlan,
-): Promise<boolean> {
+): Promise<PendingPlanStaleReason | null> {
   // Identity-less queue entries predate durable approval and cannot describe a
   // current cache unambiguously. Do not offer them and wait for an approval to
   // discover that they are stale.
   if (!plan.planId || !plan.sourceMessageId || !plan.planHash || !plan.instructionHash) {
-    return false;
+    return 'identity_incomplete';
   }
   const thread = await db.thread.findFirst({
     where: { id: plan.threadId, organizationId },
     select: { cachedPlan: true, cachedPlanMessageId: true },
   });
   const cached = readAgentPlanCacheRecordShape(thread?.cachedPlan);
-  return Boolean(
-    cached
-    && cached.version === AGENT_PLAN_CACHE_VERSION
-    && cached.planId === plan.planId
-    && cached.lastCustomerMessageId === plan.sourceMessageId
-    && thread?.cachedPlanMessageId === plan.sourceMessageId
-    && hashPlan(cached.plan) === plan.planHash
-    && hashInstruction(cached.instruction) === plan.instructionHash
-  );
+  if (!cached) return 'cache_absent';
+  if (cached.version !== AGENT_PLAN_CACHE_VERSION) return 'cache_version_superseded';
+  if (cached.planId !== plan.planId) return 'plan_replaced';
+  if (cached.lastCustomerMessageId !== plan.sourceMessageId) return 'source_message_advanced';
+  if (thread?.cachedPlanMessageId !== plan.sourceMessageId) return 'source_message_advanced';
+  if (hashPlan(cached.plan) !== plan.planHash) return 'plan_edited';
+  if (hashInstruction(cached.instruction) !== plan.instructionHash) return 'instruction_changed';
+  return null;
 }
 
 async function resolveStalePendingPlanContext(
@@ -669,8 +687,19 @@ export async function loadLivePendingPlans(
       ? await getPlanExecution(organizationId, plan.planId).catch(() => null)
       : null;
     const terminal = execution && execution.status !== 'pending' && execution.status !== 'claimed';
-    const current = terminal ? false : await pendingPlanMatchesCurrentCache(organizationId, plan);
-    if (terminal || !current) {
+    const reason = terminal ? null : await pendingPlanStaleReason(organizationId, plan);
+    if (terminal || reason) {
+      // The merchant may be looking at this card right now, so say what was
+      // dropped and why. Silence here is what turned one production incident
+      // into a forensic reconstruction against expired logs.
+      logger.info({
+        organizationId,
+        memberKey,
+        threadId: plan.threadId,
+        planId: plan.planId ?? null,
+        reason: terminal ? 'execution_terminal' : reason,
+        ...(terminal ? { executionStatus: execution?.status } : {}),
+      }, '[Operator] Parked plan dropped before the merchant could act on it');
       await resolveStalePendingPlanContext(organizationId, memberKey, plan).catch(() => undefined);
       continue;
     }
