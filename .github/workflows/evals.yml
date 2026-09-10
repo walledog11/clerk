@@ -42,10 +42,15 @@ on:
         options: ['off', 'on']
         default: 'off'
       max_usd:
+        # Run 34541492999 died at $0.7031/$0.70 with 47 of 49 core fixtures
+        # done and 16 of its 114 calls unspent: the binding constraint is
+        # dollars, not calls, and the preflight's per-call estimate runs about
+        # 9% light against what the core suite actually costs. Measured
+        # 2026-09-10 at 49 core fixtures, release mode, judges off.
         description: 'Approved total spend allocation across dashboard and gateway jobs'
         type: string
         required: true
-        default: '0.75'
+        default: '0.90'
       max_model_calls:
         description: 'Hard total model-call allocation across dashboard and gateway jobs'
         type: string
