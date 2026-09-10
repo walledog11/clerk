@@ -45,6 +45,36 @@ afterEach(async () => {
 });
 
 describe('executeOperatorAgentTurn', () => {
+  // Every row of the 2026-09-10 operator turn said `human_approved` with a null
+  // approver, because the turn named no mode and the default supplied the
+  // strongest one. The merchant who typed the instruction is on record here.
+  it('names the merchant who sent the instruction', async () => {
+    await executeOperatorAgentTurn({
+      orgId: org.id,
+      instruction: 'refund order #1031',
+      operatorKey: 'member:m1',
+      clerkUserId: 'usr_42',
+    });
+
+    const [params] = mockExecuteAgentTurn.mock.calls[0] as [Record<string, unknown>];
+    expect(params.auditMode).toBe('human_approved');
+    expect(params.approval).toMatchObject({ approverId: expect.stringContaining('usr_42') });
+    // They authorized the instruction, not a set of tool calls they read first.
+    expect(params.approval).not.toHaveProperty('approvedPlanHash');
+  });
+
+  it('claims no approval when the sender cannot be identified', async () => {
+    await executeOperatorAgentTurn({
+      orgId: org.id,
+      instruction: 'refund order #1031',
+      operatorKey: 'member:m1',
+    });
+
+    const [params] = mockExecuteAgentTurn.mock.calls[0] as [Record<string, unknown>];
+    expect(params.auditMode).toBeUndefined();
+    expect(params.approval).toBeUndefined();
+  });
+
   it('resolves the durable operator thread for free-form turns', async () => {
     const result = await executeOperatorAgentTurn({
       orgId: org.id,

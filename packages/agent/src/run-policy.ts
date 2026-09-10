@@ -19,7 +19,15 @@ export interface RunAgentPolicyOptions {
 export function resolveRunPolicy(settings?: OrgSettings, options?: RunAgentPolicyOptions) {
   const resolvedSettings = resolveAgentSettings(settings);
   const readOnly = options?.readOnly ?? false;
-  const effectiveMode: AgentActionMode = options?.mode ?? (readOnly ? "read_only" : "human_approved");
+  // An unstated mode used to resolve to `human_approved`, so every turn that did
+  // not name one claimed a human had approved it — with no approver to name, so
+  // `approverId` was null. That put agent-initiated operator work in the Review
+  // page's "you approved" panel and made the audit trail for a money movement
+  // unable to answer the one question it exists to answer. The strongest label
+  // in the enum is not a default: absence of a stated authorization is not
+  // approval, and a caller that means `human_approved` says so and supplies an
+  // approver with it.
+  const effectiveMode: AgentActionMode = options?.mode ?? (readOnly ? "read_only" : "auto_executed");
   const approval = effectiveMode === "human_approved" ? options?.approval : undefined;
   const maxIterations = readOnly
     ? READ_ONLY_MAX_ITERATIONS

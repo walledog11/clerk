@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_SETTINGS_DEFAULTS } from "./settings.js";
 import { runAgent } from "./run.js";
+import { resolveRunPolicy } from "./run-policy.js";
 import type { AgentContext } from "./agent-context.js";
 
 const {
@@ -534,5 +535,32 @@ describe("runAgent policy enforcement", () => {
     );
 
     expect(result.summary).toBe("Escalated to merchant: Shopify is down.");
+  });
+});
+
+describe("resolveRunPolicy authorization labelling", () => {
+  // The 2026-09-10 operator turn recorded `mode: human_approved` with a null
+  // approver on every row, including an attempted refund, because an unstated
+  // mode resolved to the strongest label in the enum.
+  it("does not claim human approval for a turn that states no mode", () => {
+    expect(resolveRunPolicy(AGENT_SETTINGS_DEFAULTS).effectiveMode).toBe("auto_executed");
+  });
+
+  it("still reads read-only from the readOnly flag alone", () => {
+    expect(resolveRunPolicy(AGENT_SETTINGS_DEFAULTS, { readOnly: true }).effectiveMode)
+      .toBe("read_only");
+  });
+
+  it("keeps the approval only for a stated human_approved turn", () => {
+    const approval = {
+      approverId: "usr_1:Sam",
+      approvedAt: new Date(),
+      instructionHash: "hash",
+    };
+
+    expect(resolveRunPolicy(AGENT_SETTINGS_DEFAULTS, { mode: "human_approved", approval }).approval)
+      .toBe(approval);
+    expect(resolveRunPolicy(AGENT_SETTINGS_DEFAULTS, { mode: "auto_executed", approval }).approval)
+      .toBeUndefined();
   });
 });
