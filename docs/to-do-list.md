@@ -186,16 +186,19 @@ it costs — not a design.
 
 - [ ] **Build the SocialAPI Instagram transport.** This is the critical path: `ig_dm`
   is the product channel, SocialAPI is its selected transport through the first 100
-  users, and today the provider exists only in documentation — no source file in `apps/`
-  or `packages/` mentions it. Two things gate every estimate below them, and neither is
-  code: send the drafted vendor questions in
-  [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md), and spike whether a
-  SocialAPI sender ID equals the direct-Meta `Customer.platformId` (invariant 6 of the
+  users. Reusable client and webhook-verification scaffolding exists, but it is not wired
+  into either application and has no live-provider evidence. First run a controlled
+  connect → inbound text/image → ticket/plan → approve → received reply → disconnect
+  spike and determine whether a SocialAPI sender ID equals the direct-Meta
+  `Customer.platformId` (invariant 6 of the
   [transport plan](socialapi-transport-plan.md)). If it does not, "normalize into the
   existing durable Instagram workflow" stops being true and the shape of the work
-  changes. Then implement OAuth, signed V2 webhook ingress, org/account routing, private
-  media, recovery/dedupe, provider-pinned outbound, reconnect, disconnect, deletion, and
-  capacity controls; certify per [improvement plan](project-improvement-plan.md) A3.
+  changes. If the spike passes, implement OAuth, signed V2 webhook ingress, org/account
+  routing, private media, recovery/dedupe, provider-pinned outbound, reconnect,
+  disconnect, deletion, and capacity controls. Close the vendor/data-processing gates in
+  [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md) before admitting
+  external merchant data; later merchant-capacity discussions do not gate this controlled
+  test. Certify per [improvement plan](project-improvement-plan.md) A3.
 
 - [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
   thread's messages, Shopify orders, KB articles and merchant preferences. It counts the

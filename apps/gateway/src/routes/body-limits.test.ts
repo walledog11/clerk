@@ -22,6 +22,7 @@ const SIGNED_WEBHOOK_ROUTES = [
   '/webhooks/photon',
   '/webhooks/tiktok-shop',
   '/webhooks/gmail/push',
+  '/webhooks/socialapi',
 ] as const;
 
 describe('request body budgets', () => {

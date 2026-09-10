@@ -10,6 +10,10 @@
       "types": "./dist/instagram/index.d.ts",
       "default": "./dist/instagram/index.js"
     },
+    "./socialapi": {
+      "types": "./dist/socialapi/index.d.ts",
+      "default": "./dist/socialapi/index.js"
+    },
     "./tiktok": {
       "types": "./dist/tiktok/index.d.ts",
       "default": "./dist/tiktok/index.js"

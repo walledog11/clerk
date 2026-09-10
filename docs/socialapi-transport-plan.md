@@ -125,9 +125,28 @@ The original **9–15 engineering days** is a provisional budget, not a commitme
 
 ### SP. Controlled feasibility spike
 
-- [ ] Use controlled accounts and test conversations while S0 diligence proceeds; external merchant data remains gated on S0.
+- [ ] Use controlled accounts and test conversations now, without waiting for the remaining S0 vendor diligence; external merchant data remains gated on S0.
+- [ ] Put the controlled account's `SOCIALAPI_API_KEY` and `SOCIALAPI_BRAND_ID` in the ignored
+  `.env.socialapi.local`, then run `npm run spike:socialapi -- inspect`. Add
+  `SOCIALAPI_ACCOUNT_ID` and `SOCIALAPI_CONVERSATION_ID` as those become available. The probe
+  fingerprints identifiers and records only structural content facts;
+  keep the actual credentials, OAuth state/code, participant details, message text, and media URLs
+  out of evidence artifacts. Account-only inventory is the default; `--use-sole-account`
+  explicitly allows conversation inventory when the assigned brand has exactly one account.
+  `--use-newest-conversation` additionally reads the newest conversation only after a fresh,
+  controlled inbound message identifies it.
+  Mutating subcommands (`connect`, `exchange`, `send`, and `disconnect`) require `--execute`;
+  `send` also requires a controlled marker. Without configured account/conversation IDs it requires
+  both explicit selection flags and rejects a newest conversation whose last activity is more than
+  15 minutes old. `disconnect` requires
+  `--confirm-controlled-account`.
 - [ ] Demonstrate connect → inbound text and image → existing ticket/plan → approve → actual reply → disconnect using a thin adapter through the existing workflow.
 - [ ] Capture sanitized fixtures for account, sender, message, conversation, timestamp, media, and send-result fields. Compare the same controlled identities and messages through direct Meta where available; document any visibility or subscription limits.
+  Partial controlled evidence from 2026-09-09 is recorded in
+  [the controlled-spike evidence](production/socialapi-spike-evidence-2026-09-09.md): fresh inbound
+  text/image, a provider-accepted reply, its outgoing inbox row, and participant receipt passed.
+  The send-result ID did not match either outgoing-row ID. Direct-Meta equality, signed webhook
+  equality, and the Shopkeeper ticket/plan/approval path remain open.
 - [ ] Prove webhook and stored-message IDs converge; test missed delivery recovery and investigate platform-side inbox sync separately.
 - [ ] Exercise reconnect and a controlled direct-Meta handoff. Verify identity continuity, reply routing, and deduplication, or produce and test the mapping needed to preserve them.
 - [ ] Inspect all required attachment/event shapes and establish URL lifetime and deletion behavior. A successful text/image slice proves feasibility, not full production parity.
@@ -184,6 +203,13 @@ Done when one assigned organization connects through SocialAPI, an unassigned or
 ### S3. Signed inbound webhook
 
 Entry points: new `apps/gateway/src/routes/webhooks-socialapi.ts`, `apps/gateway/src/routes/webhooks.ts`, body-size tests, signature alerting, and integration resolution.
+
+**Local spike slice — 2026-09-09.** A content-free observation route now implements the V2 check,
+five-minute replay bound, delivery-ID requirement, signature alert classification, signed-webhook
+body limit, and deployment-time registration gate. The unsigned exception is available only while
+the endpoint secret is absent and is additionally schema/size/rate constrained. This is locally
+tested scaffolding, not S3 completion: it is undeployed, has no registered endpoint, and deliberately
+does not resolve integrations, deduplicate, persist, or enqueue.
 
 - [ ] Add `POST /webhooks/socialapi` using `SOCIALAPI_WEBHOOK_SECRET` and V2 HMAC-SHA256 over `<timestamp>.<raw body>`. Validate header format/length before constant-time comparison and reject timestamps outside a five-minute past/future tolerance; do not silently downgrade normal deliveries to V1.
 - [ ] Handle the vendor's initial `webhook.test` registration ping as the sole unsigned exception because it arrives before the endpoint secret is revealed. Require the exact event header and strict, small ping schema; rate-limit it, perform no persistence/queue/configuration side effect, and return only the acknowledgement. Reject unsigned test-shaped requests from all other paths. Once the endpoint exists, require V2 for test deliveries as well as normal events.

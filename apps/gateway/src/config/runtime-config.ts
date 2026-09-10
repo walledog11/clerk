@@ -240,6 +240,16 @@ export function getTelegramConfig(): TelegramConfig {
   };
 }
 
+export interface SocialApiWebhookConfig {
+  secret: string | null;
+}
+
+export function getSocialApiWebhookConfig(): SocialApiWebhookConfig {
+  return {
+    secret: readOptionalTrimmedEnv('SOCIALAPI_WEBHOOK_SECRET'),
+  };
+}
+
 export interface SpectrumConfig {
   projectId: string;
   projectSecret: string;

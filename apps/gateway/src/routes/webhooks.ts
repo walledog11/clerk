@@ -6,6 +6,7 @@ import { registerShopifyWebhookRoutes } from './webhooks-shopify.js';
 import { registerTikTokShopWebhookRoutes } from './webhooks-tiktok-shop.js';
 import { registerPhotonWebhookRoutes } from './webhooks-photon.js';
 import { registerGmailWebhookRoutes } from './webhooks-gmail.js';
+import { registerSocialApiWebhookRoutes } from './webhooks-socialapi.js';
 
 const router = express.Router();
 
@@ -16,5 +17,6 @@ registerShopifyWebhookRoutes(router);
 registerTikTokShopWebhookRoutes(router);
 registerPhotonWebhookRoutes(router);
 registerGmailWebhookRoutes(router);
+registerSocialApiWebhookRoutes(router);
 
 export default router;

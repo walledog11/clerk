@@ -25,7 +25,7 @@ stated contract, not proof that production behavior matches it.
 | Attachments | The inbox guide documents `attachment_url` and image/video/audio/file types. It states that most platforms return platform URLs subject to platform expiry; special SocialAPI mirroring behavior is documented for WhatsApp. | Instagram URL lifetime, all required event shapes, and deletion/unsent behavior remain unproven. Shopkeeper must copy supported media into private storage immediately. | **Blocking for external onboarding.** |
 | SLA and termination | Paid terms promise 99.9% monthly API uptime excluding platform outages and allow termination with 30 days' notice for any reason. | A 30-day termination-for-any-reason clause is materially heavier now that this is the launch transport rather than a bridge with a rehearsed exit. Keep the staged admission limit and service-continuity procedure, and treat notice period and export commitments as negotiating points. | Documented; support and export commitments remain open. |
 
-Sources reviewed on 2026-09-07:
+Sources reviewed on 2026-09-07 and rechecked against the live documentation on 2026-09-09:
 
 - [Scoped API keys](https://docs.social-api.ai/guides/scoped-keys)
 - [Platform credentials](https://docs.social-api.ai/guides/platform-credentials)
@@ -34,6 +34,24 @@ Sources reviewed on 2026-09-07:
 - [Inbox sync](https://docs.social-api.ai/api-reference/inbox/start-an-inbox-sync)
 - [Privacy policy](https://social-api.ai/privacy)
 - [Terms of service](https://social-api.ai/terms)
+
+### 2026-09-09 live-documentation recheck
+
+The current API reference still supports the planned core slice: assigned-brand Instagram connect,
+OAuth code exchange, brand-filtered account lookup, conversation-scoped send with an explicit
+`account_id`, and account disconnect. A typed, timeout-bounded client for that slice and a strict V2
+signature verifier now exist under `packages/integrations/src/socialapi`; they are reusable spike
+scaffolding, not live-provider acceptance.
+
+The current webhook guide documents both the legacy raw-body signature and the preferred V2
+`<timestamp>.<raw body>` signature, a stable delivery ID on real deliveries, and an unsigned initial
+`webhook.test` registration exception. It also says past-due webhook events are dropped while the
+underlying interactions remain recorded and later discoverable via the events API. Meanwhile, the
+current inbox guide says inbox calls proxy live data and that interaction content is never stored.
+That new contradiction reinforces, rather than clears, the retention blocker in the table above.
+Ask the vendor to reconcile inbox storage, underlying interaction/event storage, delivery-log
+payload storage, backups, and deletion in the DPA and written response. Do not infer the answer from
+either guide alone.
 
 ## Vendor message draft
 

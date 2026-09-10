@@ -88,6 +88,7 @@ export function getTestEnv(baseEnv = process.env) {
     META_VERIFY_TOKEN: baseEnv.META_VERIFY_TOKEN || 'test-verify-token',
     POSTMARK_API_KEY: baseEnv.POSTMARK_API_KEY || 'test-postmark-key',
     SHOPIFY_APP_SECRET: baseEnv.SHOPIFY_APP_SECRET || 'test-shopify-secret',
+    SOCIALAPI_WEBHOOK_SECRET: baseEnv.SOCIALAPI_WEBHOOK_SECRET || 'test-socialapi-webhook-secret',
     STRIPE_SECRET_KEY: baseEnv.STRIPE_SECRET_KEY || 'sk_test_stripe',
     STRIPE_WEBHOOK_SECRET: baseEnv.STRIPE_WEBHOOK_SECRET || 'whsec_test_stripe',
     TWILIO_ACCOUNT_SID: baseEnv.TWILIO_ACCOUNT_SID || 'ACtest',
