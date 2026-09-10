@@ -41,6 +41,8 @@ export function makeIgDmJob(
     instagramAccountId: string;
     integrationId: string;
     messageMid?: string | null;
+    provider?: 'meta_direct' | 'socialapi';
+    providerConversationId?: string | null;
     providerSentAt?: string;
     text?: string | null;
   },
@@ -49,6 +51,10 @@ export function makeIgDmJob(
     id: 'job-ig-test',
     data: {
       platform: 'ig_dm',
+      ...(options.provider ? { provider: options.provider } : {}),
+      ...(options.providerConversationId === undefined
+        ? {}
+        : { providerConversationId: options.providerConversationId }),
       integrationId: options.integrationId,
       organizationId,
       instagramAccountId: options.instagramAccountId,

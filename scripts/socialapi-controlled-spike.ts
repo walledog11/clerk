@@ -5,9 +5,9 @@ import {
   type SocialApiResult,
 } from '../packages/integrations/src/socialapi/index.js';
 
-type SpikeCommand = 'inspect' | 'connect' | 'exchange' | 'send' | 'disconnect';
+type SpikeCommand = 'inspect' | 'connect' | 'exchange' | 'send' | 'disconnect' | 'pin';
 
-const COMMANDS = new Set<SpikeCommand>(['inspect', 'connect', 'exchange', 'send', 'disconnect']);
+const COMMANDS = new Set<SpikeCommand>(['inspect', 'connect', 'exchange', 'send', 'disconnect', 'pin']);
 const CONTROLLED_REPLY_PREFIX = '[Shopkeeper SocialAPI controlled spike]';
 
 function requiredEnv(name: string, env: NodeJS.ProcessEnv): string {
@@ -33,13 +33,13 @@ function parseCommand(argv: string[]): SpikeCommand {
   const command = argv[2];
   if (command && COMMANDS.has(command as SpikeCommand)) return command as SpikeCommand;
   throw new Error(
-    'Usage: npm run spike:socialapi -- <inspect|connect|exchange|send|disconnect> [--execute]',
+    'Usage: npm run spike:socialapi -- <inspect|connect|exchange|send|disconnect|pin> [--execute]',
   );
 }
 
 function requireExecute(argv: string[]): void {
   if (!argv.includes('--execute')) {
-    throw new Error('This command changes provider state; rerun with --execute after checking the controlled target.');
+    throw new Error('This command changes provider or workspace state; rerun with --execute after checking the controlled target.');
   }
 }
 
@@ -193,6 +193,84 @@ async function inspect(
   return report;
 }
 
+
+/**
+ * Milestone-zero routing row. Creates or re-points one `ig_dm` integration to a
+ * SocialAPI account so a controlled DM can reach the durable workflow before
+ * OAuth exists. `@shopkeeper/db` is imported lazily so every other subcommand
+ * still runs with no database configured. Unlike `inspect`, this prints the account
+ * id in full: it is routing configuration the operator must copy into the gateway,
+ * not evidence, so keep its output out of committed artifacts.
+ */
+async function pinIntegration(
+  api: ReturnType<typeof createSocialApiClient>,
+  env: NodeJS.ProcessEnv,
+  argv: string[],
+): Promise<Record<string, unknown>> {
+  const organizationId = requiredEnv('SHOPKEEPER_ORGANIZATION_ID', env);
+  const configuredAccountId = optionalEnv('SOCIALAPI_ACCOUNT_ID', env);
+  let socialApiAccountId = configuredAccountId;
+  if (!socialApiAccountId) {
+    if (!argv.includes('--use-sole-account')) {
+      throw new Error('Set SOCIALAPI_ACCOUNT_ID, or pass --use-sole-account to pin the brand\'s only account.');
+    }
+    const accounts = unwrap('account inventory', await api.listInstagramAccounts(
+      requiredEnv('SOCIALAPI_BRAND_ID', env),
+    ));
+    if (accounts.length !== 1) {
+      throw new Error(`Expected exactly one assigned account, found ${accounts.length}.`);
+    }
+    socialApiAccountId = accounts[0]!.id;
+  }
+  // The Instagram-native account id when it is known; the provider id otherwise.
+  // Whatever is stored here is what the queued job carries and the worker matches.
+  const externalAccountId = optionalEnv('SOCIALAPI_IG_ACCOUNT_ID', env) ?? socialApiAccountId;
+  const { db } = await import('@shopkeeper/db');
+
+  const metadata = {
+    instagram: {
+      authModel: 'socialapi',
+      transport: 'socialapi',
+      socialApiAccountId,
+      connectedAt: new Date().toISOString(),
+    },
+  };
+
+  const existing = await db.integration.findFirst({
+    where: { organizationId, platform: 'ig_dm', externalAccountId },
+    select: { id: true },
+  });
+  const integration = existing
+    ? await db.integration.update({
+      where: { id: existing.id },
+      data: { accessToken: null, lifecycleStatus: 'active', metadata },
+      select: { id: true },
+    })
+    : await db.integration.create({
+      data: {
+        organizationId,
+        platform: 'ig_dm',
+        externalAccountId,
+        accessToken: null,
+        lifecycleStatus: 'active',
+        metadata,
+      },
+      select: { id: true },
+    });
+
+  return {
+    action: existing ? 'repointed' : 'created',
+    accountSelection: configuredAccountId ? 'configured' : 'sole_assigned_account',
+    integrationId: integration.id,
+    accountFingerprint: fingerprint(socialApiAccountId),
+    pinnedAccountId: socialApiAccountId,
+    next: [
+      `Set SOCIALAPI_PINNED_INTEGRATION_ID=${integration.id} on the gateway.`,
+      'Set SOCIALAPI_PINNED_ACCOUNT_ID to the pinnedAccountId above on the gateway.',
+    ],
+  };
+}
+
 export async function main(
   argv: string[] = process.argv,
   env: NodeJS.ProcessEnv = process.env,
@@ -202,6 +280,12 @@ export async function main(
     apiKey: requiredEnv('SOCIALAPI_API_KEY', env),
     baseUrl: optionalEnv('SOCIALAPI_BASE_URL', env),
   });
+
+  if (command === 'pin') {
+    requireExecute(argv);
+    console.log(JSON.stringify(await pinIntegration(api, env, argv), null, 2));
+    return;
+  }
 
   if (command === 'inspect') {
     console.log(JSON.stringify(await inspect(

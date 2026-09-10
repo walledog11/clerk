@@ -9,8 +9,12 @@ interface SendFailureContext {
   detail: string;
 }
 
-export async function recordInstagramSendFailure(context: SendFailureContext): Promise<void> {
-  await recordProviderSendFailure('meta', 'ig_dm', context.organizationId, {
+// The alert names the transport that actually failed. A SocialAPI outage must not
+// read as a Meta outage: the two have different owners and different recovery paths.
+export async function recordInstagramSendFailure(
+  context: SendFailureContext & { transport?: 'meta' | 'socialapi' },
+): Promise<void> {
+  await recordProviderSendFailure(context.transport ?? 'meta', 'ig_dm', context.organizationId, {
     counterClient: getRedis(),
     threadId: context.threadId,
     integrationId: context.integrationId,
@@ -29,7 +33,8 @@ export async function recordTikTokShopSendFailure(context: SendFailureContext): 
 
 export async function recordEmailSendFailure(
   context: SendFailureContext & {
-    provider: Exclude<OutboundProvider, 'meta'>;
+    // 'meta' and 'socialapi' are both ig_dm transports and never send email.
+    provider: Exclude<OutboundProvider, 'meta' | 'socialapi'>;
     originalChannel?: string;
   },
 ): Promise<void> {

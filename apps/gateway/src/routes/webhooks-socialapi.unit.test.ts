@@ -4,13 +4,15 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRegisteredWebhookRouterApp } from '../test-fixtures/webhook-route-test-helpers.js';
 
-const { mockLogger } = vi.hoisted(() => ({
+const { mockLogger, mockQueueAdd, mockLoadPinnedIntegration } = vi.hoisted(() => ({
   mockLogger: {
     debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
   },
+  mockQueueAdd: vi.fn(),
+  mockLoadPinnedIntegration: vi.fn(),
 }));
 
 vi.mock('../logger.js', () => ({ default: mockLogger }));
@@ -19,6 +21,10 @@ vi.mock('./webhooks-shared.js', () => ({
     incr: vi.fn().mockResolvedValue(1),
     expire: vi.fn().mockResolvedValue(1),
   }),
+  getMessageQueue: () => ({ add: mockQueueAdd }),
+}));
+vi.mock('../lib/instagram-integration.js', () => ({
+  loadPinnedSocialApiIntegration: mockLoadPinnedIntegration,
 }));
 
 import { registerSocialApiWebhookRoutes } from './webhooks-socialapi.js';
@@ -42,14 +48,28 @@ function signedRequest(body: string, timestamp = `${Math.floor(Date.now() / 1_00
 describe('SocialAPI webhook spike receiver', () => {
   beforeEach(() => {
     process.env.SOCIALAPI_WEBHOOK_SECRET = SECRET;
+    delete process.env.SOCIALAPI_PINNED_ACCOUNT_ID;
+    delete process.env.SOCIALAPI_PINNED_INTEGRATION_ID;
     mockLogger.debug.mockClear();
     mockLogger.error.mockClear();
     mockLogger.info.mockClear();
     mockLogger.warn.mockClear();
+    mockQueueAdd.mockReset();
+    mockQueueAdd.mockResolvedValue({ id: 'job-1' });
+    mockLoadPinnedIntegration.mockReset();
+    mockLoadPinnedIntegration.mockResolvedValue({
+      transport: 'socialapi',
+      id: 'integration-1',
+      organizationId: 'org-1',
+      instagramAccountId: '17841400000000000',
+      accessToken: null,
+    });
   });
 
   afterEach(() => {
     process.env.SOCIALAPI_WEBHOOK_SECRET = SECRET;
+    delete process.env.SOCIALAPI_PINNED_ACCOUNT_ID;
+    delete process.env.SOCIALAPI_PINNED_INTEGRATION_ID;
   });
 
   it('accepts only the strict unsigned registration ping while no secret is configured', async () => {
@@ -163,5 +183,140 @@ describe('SocialAPI webhook spike receiver', () => {
       .send(JSON.stringify({ event: 'dm.received', padding: 'x'.repeat(3_000_000) }));
 
     expect(response.status).toBe(413);
+  });
+  describe('pinned milestone-zero ingress', () => {
+    const ACCOUNT = 'acc_pinned';
+
+    function dmReceived(overrides: Record<string, unknown> = {}) {
+      return JSON.stringify({
+        event: 'dm.received',
+        data: {
+          id: 'interaction-provider-only',
+          account_id: ACCOUNT,
+          conversation_id: 'conv_1',
+          platform: 'instagram',
+          platform_id: 'native-message-id',
+          author: { id: 'author-1' },
+          content: { text: 'where is my order', media: [] },
+          received_at: '2026-09-10T01:18:38Z',
+          ...overrides,
+        },
+      });
+    }
+
+    function pin() {
+      process.env.SOCIALAPI_PINNED_ACCOUNT_ID = ACCOUNT;
+      process.env.SOCIALAPI_PINNED_INTEGRATION_ID = 'integration-1';
+    }
+
+    async function postDmReceived(body: string) {
+      return signedRequest(body)
+        .set('X-SocialAPI-Event', 'dm.received')
+        .set('X-SocialAPI-Delivery', 'delivery-ingress')
+        .send(body);
+    }
+
+    it('queues a normalized Instagram job for the pinned account', async () => {
+      pin();
+      const response = await postDmReceived(dmReceived());
+
+      expect(response.status).toBe(200);
+      expect(mockQueueAdd).toHaveBeenCalledTimes(1);
+      expect(mockQueueAdd).toHaveBeenCalledWith('process-ig-dm', expect.objectContaining({
+        platform: 'ig_dm',
+        provider: 'socialapi',
+        integrationId: 'integration-1',
+        organizationId: 'org-1',
+        instagramAccountId: '17841400000000000',
+        senderIgsid: 'author-1',
+        providerConversationId: 'conv_1',
+        providerSentAt: '2026-09-10T01:18:38Z',
+        text: 'where is my order',
+        attachments: [],
+      }));
+    });
+
+    it('keys deduplication on the native platform_id, never the interaction id', async () => {
+      pin();
+      await postDmReceived(dmReceived());
+
+      const job = mockQueueAdd.mock.calls[0]?.[1] as { externalMessageId: string };
+      expect(job.externalMessageId).toBe('native-message-id');
+      expect(job.externalMessageId).not.toBe('interaction-provider-only');
+    });
+
+    it('falls back to the raw Meta message id and sender when normalized fields are absent', async () => {
+      pin();
+      const body = JSON.stringify({
+        event: 'dm.received',
+        data: {
+          account_id: ACCOUNT,
+          platform: 'instagram',
+          content: { text: 'hello' },
+          received_at: '2026-09-10T01:18:38Z',
+          raw_payload: { message: { mid: 'raw-mid' }, sender: { id: 'raw-sender' } },
+        },
+      });
+      await postDmReceived(body);
+
+      expect(mockQueueAdd).toHaveBeenCalledWith('process-ig-dm', expect.objectContaining({
+        externalMessageId: 'raw-mid',
+        senderIgsid: 'raw-sender',
+      }));
+    });
+
+    it('carries media through as attachments so an image is never silently dropped', async () => {
+      pin();
+      await postDmReceived(dmReceived({
+        content: { text: null, media: [{ type: 'ephemeral' }, { type: 'image', url: 'https://cdn.example/i' }] },
+      }));
+
+      expect(mockQueueAdd).toHaveBeenCalledWith('process-ig-dm', expect.objectContaining({
+        text: null,
+        attachments: [{ type: 'ephemeral', url: null }, { type: 'image', url: 'https://cdn.example/i' }],
+      }));
+    });
+
+    it('stays observation-only for an unpinned account and for dm.sent', async () => {
+      pin();
+      const otherAccount = await postDmReceived(dmReceived({ account_id: 'acc_other' }));
+
+      const sentBody = JSON.stringify({ event: 'dm.sent', data: { account_id: ACCOUNT } });
+      const sent = await signedRequest(sentBody)
+        .set('X-SocialAPI-Event', 'dm.sent')
+        .set('X-SocialAPI-Delivery', 'delivery-sent')
+        .send(sentBody);
+
+      expect(otherAccount.status).toBe(200);
+      expect(sent.status).toBe(200);
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+    });
+
+    it('stays observation-only while no pin is configured', async () => {
+      const response = await postDmReceived(dmReceived());
+
+      expect(response.status).toBe(200);
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+    });
+
+    it('drops the event when the pinned row is missing or is not a SocialAPI row', async () => {
+      pin();
+      mockLoadPinnedIntegration.mockResolvedValue(null);
+
+      const response = await postDmReceived(dmReceived());
+
+      expect(response.status).toBe(200);
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('returns 500 so the vendor retries when queue admission fails', async () => {
+      pin();
+      mockQueueAdd.mockRejectedValue(new Error('redis down'));
+
+      const response = await postDmReceived(dmReceived());
+
+      expect(response.status).toBe(500);
+    });
   });
 });

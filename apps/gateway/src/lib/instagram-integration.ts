@@ -2,16 +2,36 @@ import { db } from '@shopkeeper/db';
 import { AmbiguousInstagramIntegrationError } from '@shopkeeper/integrations/instagram';
 
 import { isRecord } from './typing.js';
-export interface ActiveInstagramIntegration {
+interface ActiveInstagramIntegrationBase {
   id: string;
   organizationId: string;
   instagramAccountId: string;
+}
+
+export interface ActiveMetaDirectIntegration extends ActiveInstagramIntegrationBase {
+  transport: 'meta_direct';
   accessToken: string;
 }
+
+export interface ActiveSocialApiIntegration extends ActiveInstagramIntegrationBase {
+  transport: 'socialapi';
+  accessToken: null;
+}
+
+export type ActiveInstagramIntegration =
+  | ActiveMetaDirectIntegration
+  | ActiveSocialApiIntegration;
 
 function isInstagramLoginMetadata(metadata: unknown): boolean {
   if (!isRecord(metadata) || !isRecord(metadata.instagram)) return false;
   return metadata.instagram.authModel === 'instagram_login';
+}
+
+// Records written before the transport field existed are direct Meta; the field
+// is only ever read, never inferred from the row's current credentials.
+function isSocialApiMetadata(metadata: unknown): boolean {
+  if (!isRecord(metadata) || !isRecord(metadata.instagram)) return false;
+  return metadata.instagram.transport === 'socialapi';
 }
 
 function toActiveInstagramIntegration(
@@ -22,9 +42,10 @@ function toActiveInstagramIntegration(
     metadata: unknown;
     organizationId: string;
   },
-): ActiveInstagramIntegration | null {
+): ActiveMetaDirectIntegration | null {
   if (!integration.accessToken || !isInstagramLoginMetadata(integration.metadata)) return null;
   return {
+    transport: 'meta_direct',
     id: integration.id,
     organizationId: integration.organizationId,
     instagramAccountId: integration.externalAccountId,
@@ -40,9 +61,12 @@ const activeInstagramSelect = {
   organizationId: true,
 } as const;
 
+// Direct Meta ingress resolves direct Meta rows only. A SocialAPI row must never
+// be reachable from a Meta-signed webhook: the two transports observe different
+// Meta apps and their sender identities are not interchangeable.
 export async function resolveActiveInstagramIntegration(
   instagramAccountId: string,
-): Promise<ActiveInstagramIntegration | null> {
+): Promise<ActiveMetaDirectIntegration | null> {
   const integrations = await db.integration.findMany({
     where: {
       platform: 'ig_dm',
@@ -66,6 +90,7 @@ export async function loadActiveInstagramIntegration(input: {
   id: string;
   instagramAccountId: string;
   organizationId: string;
+  transport?: 'meta_direct' | 'socialapi';
 }): Promise<ActiveInstagramIntegration | null> {
   const integration = await db.integration.findFirst({
     where: {
@@ -77,6 +102,41 @@ export async function loadActiveInstagramIntegration(input: {
     },
     select: activeInstagramSelect,
   });
+  if (!integration) return null;
 
-  return integration ? toActiveInstagramIntegration(integration) : null;
+  if (input.transport === 'socialapi') {
+    return isSocialApiMetadata(integration.metadata)
+      ? {
+        transport: 'socialapi',
+        id: integration.id,
+        organizationId: integration.organizationId,
+        instagramAccountId: integration.externalAccountId,
+        accessToken: null,
+      }
+      : null;
+  }
+
+  return toActiveInstagramIntegration(integration);
+}
+
+/**
+ * Milestone-zero routing for the controlled SocialAPI spike: resolve the pinned
+ * integration row by id alone, before OAuth or an indexed `providerAccountId`
+ * column exists. The webhook has already matched the pinned account id.
+ */
+export async function loadPinnedSocialApiIntegration(
+  integrationId: string,
+): Promise<ActiveSocialApiIntegration | null> {
+  const integration = await db.integration.findFirst({
+    where: { id: integrationId, platform: 'ig_dm', lifecycleStatus: 'active' },
+    select: activeInstagramSelect,
+  });
+  if (!integration || !isSocialApiMetadata(integration.metadata)) return null;
+  return {
+    transport: 'socialapi',
+    id: integration.id,
+    organizationId: integration.organizationId,
+    instagramAccountId: integration.externalAccountId,
+    accessToken: null,
+  };
 }

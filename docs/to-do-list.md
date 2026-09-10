@@ -184,21 +184,25 @@ it costs — not a design.
   changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
   renewal evidence.
 
-- [ ] **Build the SocialAPI Instagram transport.** This is the critical path: `ig_dm`
-  is the product channel, SocialAPI is its selected transport through the first 100
-  users. Reusable client and webhook-verification scaffolding exists, but it is not wired
-  into either application and has no live-provider evidence. First run a controlled
-  connect → inbound text/image → ticket/plan → approve → received reply → disconnect
-  spike and determine whether a SocialAPI sender ID equals the direct-Meta
-  `Customer.platformId` (invariant 6 of the
-  [transport plan](socialapi-transport-plan.md)). If it does not, "normalize into the
-  existing durable Instagram workflow" stops being true and the shape of the work
-  changes. If the spike passes, implement OAuth, signed V2 webhook ingress, org/account
-  routing, private media, recovery/dedupe, provider-pinned outbound, reconnect,
-  disconnect, deletion, and capacity controls. Close the vendor/data-processing gates in
-  [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md) before admitting
-  external merchant data; later merchant-capacity discussions do not gate this controlled
-  test. Certify per [improvement plan](project-improvement-plan.md) A3.
+- [ ] **Make one real Instagram DM reach the merchant's phone and get answered.** This is
+  the critical path and the only A3 item that matters until it runs: `ig_dm` is the
+  product channel, SocialAPI is its selected transport through the first 100 users, and
+  no real DM has ever produced a Shopkeeper ticket. Milestone-zero ingress is built —
+  a signed `dm.received` for one env-pinned account is durably queued as a
+  `provider: 'socialapi'` Instagram job keyed on the native `platform_id`, the worker skips the
+  Meta-token paths a SocialAPI row cannot use, and an approved reply leaves through SocialAPI's
+  conversation endpoint. What is left is running it:
+  deploy the gateway, `npm run spike:socialapi -- pin --execute` to point one `ig_dm` row
+  at the controlled account, set `SOCIALAPI_PINNED_ACCOUNT_ID` and
+  `SOCIALAPI_PINNED_INTEGRATION_ID` on Railway, send a DM from the controlled
+  participant, and follow it to a ticket, a plan, a phone approval, and a received reply.
+  Set `SOCIALAPI_API_KEY` on the dashboard so the approved reply can actually leave. Only after
+  that: `dm.sent`
+  correlation, the ephemeral-vs-gallery image classification, recovery/dedupe, OAuth,
+  reconnect, disconnect, deletion, and capacity controls
+  ([transport plan](socialapi-transport-plan.md) S1–S6). Close the vendor/data-processing
+  gates in [S0 diligence](production/socialapi-s0-diligence-2026-09-07.md) before any
+  external merchant data. Certify per [improvement plan](project-improvement-plan.md) A3.
 
 - [ ] **Give the agent the customer's prior conversations.** `buildContext` loads this
   thread's messages, Shopify orders, KB articles and merchant preferences. It counts the

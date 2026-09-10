@@ -1,11 +1,18 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Request, Response, Router } from 'express';
-import { verifySocialApiWebhookV2 } from '@shopkeeper/integrations/socialapi';
+import {
+  normalizeSocialApiDmReceived,
+  verifySocialApiWebhookV2,
+  type SocialApiInboundDm,
+} from '@shopkeeper/integrations/socialapi';
 import { getSocialApiWebhookConfig } from '../config/runtime-config.js';
+import { JOB } from '../constants.js';
+import { loadPinnedSocialApiIntegration } from '../lib/instagram-integration.js';
 import logger from '../logger.js';
 import { rateLimit, sendTooManyRequests } from '../rate-limit.js';
+import type { InstagramInboundJobData } from '../types.js';
 import { webhookJsonParser } from './body-parsers.js';
-import { getRateLimitRedis } from './webhooks-shared.js';
+import { getMessageQueue, getRateLimitRedis } from './webhooks-shared.js';
 import {
   buildWebhookSignatureRequestMetadata,
   recordWebhookSignatureFailure,
@@ -79,6 +86,80 @@ function summarizePayload(body: unknown, deliveryId: string, event: string) {
   };
 }
 
+type IngressOutcome = 'queued' | 'not_routed' | 'failed';
+
+function toInboundJob(
+  inbound: SocialApiInboundDm,
+  integration: { id: string; organizationId: string; instagramAccountId: string },
+): InstagramInboundJobData {
+  return {
+    platform: 'ig_dm',
+    provider: 'socialapi',
+    integrationId: integration.id,
+    organizationId: integration.organizationId,
+    instagramAccountId: integration.instagramAccountId,
+    // SocialAPI's author id, not a direct-Meta IGSID. Invariant 6 of the transport
+    // plan expects the two to differ because each transport observes the shopper
+    // through a different Meta app, so this becomes Customer.platformId for
+    // SocialAPI-originated threads and is not interchangeable with a direct row.
+    senderIgsid: inbound.authorId,
+    externalMessageId: inbound.nativeMessageId,
+    providerConversationId: inbound.conversationId,
+    providerSentAt: inbound.receivedAt,
+    text: inbound.text,
+    attachments: inbound.media.map((item) => ({ type: item.type, url: item.url })),
+    traceId: randomUUID(),
+  };
+}
+
+/**
+ * Admits one verified `dm.received` to the durable inbound queue before the route
+ * acknowledges it, so a queue failure becomes a vendor retry rather than a lost
+ * message. Returns `not_routed` when no pinned account matches — that is an
+ * acknowledged no-op, not an error.
+ */
+async function admitInboundDm(body: unknown): Promise<IngressOutcome> {
+  const { pinnedAccountId, pinnedIntegrationId } = getSocialApiWebhookConfig();
+  if (!pinnedAccountId || !pinnedIntegrationId) return 'not_routed';
+
+  const inbound = normalizeSocialApiDmReceived(body);
+  if (!inbound || inbound.accountId !== pinnedAccountId) return 'not_routed';
+
+  try {
+    const integration = await loadPinnedSocialApiIntegration(pinnedIntegrationId);
+    if (!integration) {
+      logger.error(
+        { integrationId: fingerprint(pinnedIntegrationId) },
+        '[Webhook] Pinned SocialAPI integration is missing or not a SocialAPI row — dropping',
+      );
+      return 'not_routed';
+    }
+
+    const eventRateLimit = await rateLimit(
+      getRateLimitRedis(),
+      `webhook:socialapi:${integration.organizationId}`,
+    );
+    if (!eventRateLimit.success) {
+      logger.warn(
+        { organizationId: integration.organizationId },
+        '[Webhook] SocialAPI event rate limit exceeded — dropping event',
+      );
+      return 'not_routed';
+    }
+
+    const job = toInboundJob(inbound, integration);
+    await getMessageQueue().add(JOB.IG_DM, job);
+    logger.info(
+      { organizationId: integration.organizationId, traceId: job.traceId },
+      '[Webhook] SocialAPI DM queued',
+    );
+    return 'queued';
+  } catch (error) {
+    logger.error({ err: error }, '[Webhook] Failed to enqueue SocialAPI DM');
+    return 'failed';
+  }
+}
+
 export function registerSocialApiWebhookRoutes(router: Router): void {
   router.post('/socialapi', webhookJsonParser(), async (req: Request, res: Response) => {
     const { secret } = getSocialApiWebhookConfig();
@@ -145,13 +226,19 @@ export function registerSocialApiWebhookRoutes(router: Router): void {
     if (deliveryId) {
       logger.info(
         summarizePayload(req.body, deliveryId, bodyEvent),
-        '[Webhook] SocialAPI signed event observed during controlled spike',
+        '[Webhook] SocialAPI signed event observed',
       );
     } else {
       logger.info(
         { event: bodyEvent },
-        '[Webhook] SocialAPI signed test delivery observed during controlled spike',
+        '[Webhook] SocialAPI signed test delivery observed',
       );
+    }
+
+    // Only dm.received creates work. dm.sent and every other event stay
+    // observed-and-acknowledged so the vendor does not retry them.
+    if (bodyEvent === 'dm.received' && await admitInboundDm(req.body) === 'failed') {
+      return res.sendStatus(500);
     }
     return res.sendStatus(200);
   });

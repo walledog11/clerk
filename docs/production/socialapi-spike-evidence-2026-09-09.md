@@ -2,8 +2,9 @@
 
 Status: partial. Account inventory, controlled text/image discovery, provider-accepted text reply,
 participant receipt, webhook endpoint registration, and signed `dm.received` delivery passed.
-Outbound `dm.sent` correlation, Shopkeeper persistence/approval, reconnect, and disconnect remain
-open. Image coverage and send-result correlation have unresolved provider gaps.
+Milestone-zero ingress and outbound through the durable workflow are implemented and
+deterministically covered but not yet deployed or exercised against a live DM. Outbound `dm.sent` correlation, reconnect, and
+disconnect remain open. Image coverage and send-result correlation have unresolved provider gaps.
 
 ## Scope and handling
 
@@ -89,6 +90,50 @@ SHA-256 prefixes were used only to compare identifier equality inside the transi
 
 No go/no-go decision is justified by this partial controlled-spike evidence.
 
+## Milestone-zero ingress slice — landed 2026-09-09
+
+The receiver is no longer observation-only. What changed, and what it does not yet do:
+
+- A verified `dm.received` whose `data.account_id` matches `SOCIALAPI_PINNED_ACCOUNT_ID` is
+  normalized and added to the existing inbound BullMQ queue as an Instagram job carrying
+  `provider: 'socialapi'`. Enqueue happens before the `200`; a queue failure returns `500` so the
+  vendor's retry is the recovery path.
+- The job's `externalMessageId` is the native `platform_id` (raw `message.mid` fallback) — the join
+  this spike proved. The provider interaction `id`, which matched neither inbox identifier, is
+  never used for deduplication.
+- `senderIgsid` carries SocialAPI's author id. Transport-plan invariant 6 expects this to differ
+  from a direct-Meta IGSID because each transport observes the shopper through a different Meta
+  app, so it becomes `Customer.platformId` for SocialAPI threads and is not interchangeable with a
+  direct row's identity. Nothing migrates between them.
+- The worker branches on transport. A SocialAPI job skips Meta profile enrichment and Meta media
+  download, both of which need a Meta token the row does not hold, so a SocialAPI customer has no
+  display name yet and media renders through `formatInstagramMessage` as
+  `[Instagram <type> attachment]`. The `ephemeral` image this spike could not fetch therefore
+  reaches the merchant as a visible marker rather than being silently dropped.
+- Routing is one pinned account, not account lookup: `SOCIALAPI_PINNED_ACCOUNT_ID` plus
+  `SOCIALAPI_PINNED_INTEGRATION_ID`, with `npm run spike:socialapi -- pin --execute` creating or
+  re-pointing the `ig_dm` row. With either variable unset the route stays observation-only. S1
+  replaces this with the indexed `providerAccountId` column.
+- The thread stores the webhook's `conversation_id` in `Thread.externalSpaceId`, and an approved
+  reply for a SocialAPI thread leaves through SocialAPI's conversation endpoint with the workspace
+  `SOCIALAPI_API_KEY`. It shares the 24-hour window check, reply-integration routing, and outbound
+  recording with the direct Meta path, skips the Meta health/permission/token gates, and is never
+  retried through Meta. Send failures alert as `provider=socialapi`, so a SocialAPI outage cannot
+  read as a Meta outage.
+- Still absent: OAuth, `dm.sent` reconciliation, recovery and catch-up reads, health probing,
+  reconnect, disconnect, deletion, capacity controls, and per-transport observability.
+
+Deterministic coverage: 14 route tests (pinned enqueue, native-id keying, raw fallbacks, media
+pass-through, unpinned and `dm.sent` no-ops, missing pinned row, queue-failure `500`), 4 normalizer
+tests, 3 worker integration tests against a real database (persistence without a Meta call,
+unfetchable media rendered rather than dropped, and a SocialAPI job refused against a direct Meta
+row), and 4 dispatch integration tests (provider send rather than Graph, refusal without a
+conversation id, refusal without an API key, and no Meta retry on failure). Full unit, integration,
+node-script, typecheck, lint, knip, and doc-reference checks pass.
+
+The dashboard integration suite went red once during this work and passed on two immediate reruns
+with no code change, matching the known workspace-concurrency flake rather than anything here.
+
 ## Locally verified receiver slice
 
 The gateway now has a spike-only `POST /webhooks/socialapi` route. While no endpoint secret is
@@ -102,4 +147,5 @@ Focused route tests cover the registration gate, unsigned rejection, V2 acceptan
 signatures, event mismatch, required real-delivery IDs, content-free logging, and the signed-webhook
 body limit. The route tests, gateway typecheck/lint/build, and integrations build passed locally on
 2026-09-09. Commit `c3b8a79e` is deployed and its endpoint is registered. Two real signed
-`dm.received` deliveries passed; the route remains observation-only and creates no Shopkeeper work.
+`dm.received` deliveries passed against that observation-only build; the ingress slice recorded
+above supersedes the no-work behavior and is not yet deployed or live-verified.
