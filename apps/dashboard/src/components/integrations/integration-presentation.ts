@@ -62,6 +62,7 @@ export interface IntegrationAttentionSummary {
 function availabilityFor(
   definition: IntegrationDefinition,
   flags: IntegrationDeploymentFlags,
+  integrations: Integration[],
 ): IntegrationAvailability {
   if (definition.kind === "unavailable") {
     return { state: "coming-soon", label: definition.unavailableLabel }
@@ -73,6 +74,17 @@ function availabilityFor(
       : { state: "not-configured", label: "Connect" }
   }
   if (definition.kind === "oauth" && definition.availabilityFlag === "tiktok-shop" && !flags.tiktokShopConfigured) {
+    return { state: "coming-soon", label: "Coming soon" }
+  }
+  // Closed to *new* connections only. A workspace that already holds the connection
+  // keeps its card and its Configure action: the gate exists so a merchant does not
+  // start a transport that would go quiet, not to retire one that is already running.
+  if (
+    definition.kind === "oauth"
+    && definition.availabilityFlag === "instagram"
+    && !flags.instagramIntegrationEnabled
+    && !integrations.some((integration) => definition.matches(integration))
+  ) {
     return { state: "coming-soon", label: "Coming soon" }
   }
   return { state: "available", label: null }
@@ -137,7 +149,7 @@ export function deriveIntegrationCardModels({
   definitions?: IntegrationDefinition[]
 }): IntegrationCardModel[] {
   return definitions.map((originalDefinition) => {
-    const availability = availabilityFor(originalDefinition, flags)
+    const availability = availabilityFor(originalDefinition, flags, integrations)
     const definition = descriptionFor(originalDefinition, availability) === originalDefinition.description
       ? originalDefinition
       : { ...originalDefinition, description: descriptionFor(originalDefinition, availability) }

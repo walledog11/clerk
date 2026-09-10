@@ -186,10 +186,32 @@ describe('isGmailNativeInboundEnabled', () => {
 });
 
 describe('isInstagramIntegrationEnabledForOrg', () => {
-  it('is available for every workspace', () => {
+  it('opens direct connect in production only to allowlisted workspaces', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('INSTAGRAM_INTEGRATION_ENABLED', 'true');
+    vi.stubEnv('INSTAGRAM_BETA_ORG_IDS', ' org_beta , org_other ');
+    expect(isInstagramIntegrationEnabledForOrg('org_beta')).toBe(true);
+    expect(isInstagramIntegrationEnabledForOrg('org_other')).toBe(true);
+    expect(isInstagramIntegrationEnabledForOrg('org_any')).toBe(false);
+    expect(isInstagramIntegrationEnabledForOrg(null)).toBe(false);
+  });
+
+  it('stays closed in production when the switch is off, allowlist or not', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('INSTAGRAM_INTEGRATION_ENABLED', 'false');
     vi.stubEnv('INSTAGRAM_BETA_ORG_IDS', 'org_beta');
+    expect(isInstagramIntegrationEnabledForOrg('org_beta')).toBe(false);
+  });
+
+  it('closes production rather than opening it when the allowlist is cleared', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('INSTAGRAM_INTEGRATION_ENABLED', 'true');
+    vi.stubEnv('INSTAGRAM_BETA_ORG_IDS', '');
+    expect(isInstagramIntegrationEnabledForOrg('org_any')).toBe(false);
+  });
+
+  it('defaults open outside production so local development works', () => {
+    vi.stubEnv('NODE_ENV', 'development');
     expect(isInstagramIntegrationEnabledForOrg('org_any')).toBe(true);
     expect(isInstagramIntegrationEnabledForOrg(null)).toBe(true);
   });

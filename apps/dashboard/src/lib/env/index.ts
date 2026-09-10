@@ -239,10 +239,33 @@ export function isGmailNativeInboundEnabled(): boolean {
   return parseBooleanEnv("GMAIL_NATIVE_INBOUND", false);
 }
 
+/**
+ * Whether this workspace may start a *new* direct-Meta Instagram connection.
+ *
+ * Direct Meta stopped being the launch transport for `ig_dm` on 2026-09-09
+ * (docs/socialapi-transport-plan.md); SocialAPI carries the channel through the
+ * first 100 users. The direct app holds Standard Access only, so a merchant who
+ * connects it sees the OAuth succeed and then receives nothing from any customer
+ * who has not messaged the app before. Keep the implementation intact and closed
+ * to new connections rather than offering a connect flow that goes quiet.
+ *
+ * Production requires both the switch and an explicit allowlist: an empty
+ * INSTAGRAM_BETA_ORG_IDS closes the door there instead of opening it to every
+ * workspace, so clearing the variable cannot silently reopen direct connect.
+ * Outside production both default to open so local development still works.
+ */
 export function isInstagramIntegrationEnabledForOrg(
-  _clerkOrganizationId?: string | null,
+  clerkOrganizationId?: string | null,
 ): boolean {
-  return true
+  const outsideProduction = process.env.NODE_ENV !== "production";
+  if (!parseBooleanEnv("INSTAGRAM_INTEGRATION_ENABLED", outsideProduction)) return false;
+
+  const allowlist = (readEnv("INSTAGRAM_BETA_ORG_IDS") ?? "")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean);
+  if (allowlist.length === 0) return outsideProduction;
+  return typeof clerkOrganizationId === "string" && allowlist.includes(clerkOrganizationId);
 }
 
 export function getDashboardOpsAlertConfig(): DashboardOpsAlertConfig {

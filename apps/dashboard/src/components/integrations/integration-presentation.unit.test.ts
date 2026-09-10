@@ -231,12 +231,24 @@ describe("integration presentation", () => {
       },
       isAdmin: true,
     })
-    expect(models.find((model) => model.definition.id === "instagram")?.availability.state).toBe("available")
+    expect(models.find((model) => model.definition.id === "instagram")?.availability.state).toBe("coming-soon")
     expect(models.find((model) => model.definition.id === "tiktok-shop")?.availability.state).toBe("coming-soon")
     expect(models.find((model) => model.definition.id === "whatsapp")?.availability.state).toBe("coming-soon")
     expect(getIntegrationDefinition("instagram").description).toBe(
       "Receive and reply to customer DMs from an Instagram Professional account.",
     )
+  })
+
+  it("keeps a connected Instagram card manageable after direct connect closes", () => {
+    const connected = integration({ id: "ig-1", platform: "ig_dm" })
+    const models = deriveIntegrationCardModels({
+      integrations: [connected],
+      flags: { ...FLAGS, instagramIntegrationEnabled: false },
+      isAdmin: true,
+    })
+    const instagram = models.find((model) => model.definition.id === "instagram")
+    expect(instagram?.availability.state).toBe("available")
+    expect(instagram?.isConnected).toBe(true)
   })
 
   it.each([
