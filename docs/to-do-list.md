@@ -185,7 +185,7 @@ it costs — not a design.
   renewal evidence.
 
 - [ ] **Get a SocialAPI plan in front of the merchant's phone for approval.** The inbound half is
-  proven: on 2026-09-10 a real Instagram DM became thread `f161a9b1`, was classified `Order
+  proven: on 2026-09-09 a real Instagram DM became thread `f161a9b1`, was classified `Order
   Status`, and the agent's reply left through SocialAPI with a `sapi_dm_...` id
   ([evidence](production/socialapi-spike-evidence-2026-09-09.md)). What that run did **not**
   exercise is approval: the plan was a single clarifying `send_reply`, and `decideAutonomy` sends

@@ -86,13 +86,13 @@ SHA-256 prefixes were used only to compare identifier equality inside the transi
 4. Exercise a controlled webhook retry and bounded recovery read using the native `platform_id` as
    the candidate canonical message key; confirm one durable result once application ingress exists.
 5. ~~Route the controlled message through Shopkeeper ticket creation, planning, and a received
-   reply while the 24-hour window is open.~~ Done 2026-09-10; see the live run below. Still open:
+   reply while the 24-hour window is open.~~ Done 2026-09-09; see the live run below. Still open:
    send a DM whose plan carries an `action`-category call so the approval leg reaches the phone, and
    confirm the participant received the reply in their Instagram app.
 6. Exercise disconnect/reconnect only after the account and recovery target are explicitly
    confirmed.
 
-The 2026-09-10 live run justifies a provisional go on transport feasibility: the path works end to
+The 2026-09-09 live run justifies a provisional go on transport feasibility: the path works end to
 end for text. It does not close identity, media, recovery, or vendor diligence, and it does not
 authorize external merchant data.
 
@@ -143,7 +143,7 @@ node-script, typecheck, lint, knip, and doc-reference checks pass.
 The dashboard integration suite went red once during this work and passed on two immediate reruns
 with no code change, matching the known workspace-concurrency flake rather than anything here.
 
-## Live end-to-end run — 2026-09-10
+## Live end-to-end run — 2026-09-09
 
 The first real Instagram DM to produce a Shopkeeper ticket. Merge commit `351894e8` deployed to
 Railway (deep health reported database, Redis, worker, queues and iMessage healthy) and to Vercel
