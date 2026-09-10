@@ -74,7 +74,13 @@ function isInstagramInboundJobData(data: unknown): data is InstagramInboundJobDa
     && (typeof data.text === 'string' || data.text === null)
     && Array.isArray(data.attachments)
     && data.attachments.every(isInstagramInboundAttachment)
-    && typeof data.traceId === 'string';
+    && typeof data.traceId === 'string'
+    && (data.provider === undefined || data.provider === 'meta_direct' || data.provider === 'socialapi')
+    && (
+      data.providerConversationId === undefined
+      || data.providerConversationId === null
+      || typeof data.providerConversationId === 'string'
+    );
 }
 
 function publicInstagramShareUrl(value: string | null): string | null {
@@ -190,6 +196,12 @@ export async function handleIgDmJob(job: Job<InboundJobData>, aiSummaryQueue: Qu
     text,
     traceId,
   } = candidate;
+  const transport = candidate.provider ?? 'meta_direct';
+  // SocialAPI replies address a conversation, not a recipient, so the outbound
+  // path needs the provider conversation id the webhook carried.
+  const providerConversationId = transport === 'socialapi'
+    ? candidate.providerConversationId ?? null
+    : null;
   if (await alreadyIngested(organizationId, externalMessageId, aiSummaryQueue)) return;
   const sentAt = new Date(providerSentAt);
   if (!Number.isFinite(sentAt.getTime())) {
@@ -202,41 +214,50 @@ export async function handleIgDmJob(job: Job<InboundJobData>, aiSummaryQueue: Qu
       id: integrationId,
       instagramAccountId,
       organizationId,
+      transport,
     });
     if (!integration) {
       logger.info(
-        { instagramAccountId, integrationId, organizationId, traceId },
+        { instagramAccountId, integrationId, organizationId, traceId, transport },
         '[Worker] Instagram integration disconnected or replaced before processing — dropping',
       );
       return;
     }
 
+    // Profile enrichment and attachment download both speak Meta's Graph API with
+    // the integration's Meta token, which a SocialAPI row does not have. Until the
+    // provider's own enrichment and media paths are built, a SocialAPI message
+    // carries no display name and its media renders through formatInstagramMessage
+    // as an unsupported-attachment marker rather than being silently dropped.
     let customerName: string | null = null;
-    const profileResult = await fetchInstagramMessagingUserProfile(
-      senderIgsid,
-      integration.accessToken,
-    );
-    if (profileResult.ok) {
-      customerName = profileResult.data.name ?? profileResult.data.username;
-    } else {
-      logger.warn(
-        {
-          category: profileResult.error.category,
-          code: profileResult.error.code,
-          integrationId,
-          requestId: profileResult.error.requestId,
-          senderIgsid,
-        },
-        '[Worker] Instagram profile enrichment failed',
+    let storedAttachments: string[] = [];
+    if (integration.transport === 'meta_direct') {
+      const profileResult = await fetchInstagramMessagingUserProfile(
+        senderIgsid,
+        integration.accessToken,
+      );
+      if (profileResult.ok) {
+        customerName = profileResult.data.name ?? profileResult.data.username;
+      } else {
+        logger.warn(
+          {
+            category: profileResult.error.category,
+            code: profileResult.error.code,
+            integrationId,
+            requestId: profileResult.error.requestId,
+            senderIgsid,
+          },
+          '[Worker] Instagram profile enrichment failed',
+        );
+      }
+
+      storedAttachments = await persistProviderAttachments(
+        organizationId,
+        attachments.filter(attachment => isSupportedInstagramBinaryAttachment(attachment.type)),
+        downloadInstagramAttachment,
+        externalMessageId,
       );
     }
-
-    const storedAttachments = await persistProviderAttachments(
-      organizationId,
-      attachments.filter(attachment => isSupportedInstagramBinaryAttachment(attachment.type)),
-      downloadInstagramAttachment,
-      externalMessageId,
-    );
 
     await processInboundMessage(
       organizationId,
@@ -252,9 +273,13 @@ export async function handleIgDmJob(job: Job<InboundJobData>, aiSummaryQueue: Qu
         receivedAt: sentAt,
         traceId,
         isRealCustomerMessage: true,
+        ...(providerConversationId ? { externalSpaceId: providerConversationId } : {}),
       },
     );
-    logger.info({ senderIgsid, organizationId, traceId }, '[Worker] Successfully saved Instagram DM');
+    logger.info(
+      { senderIgsid, organizationId, traceId, transport },
+      '[Worker] Successfully saved Instagram DM',
+    );
   } catch (error) {
     logger.error({ err: error, traceId }, '[Worker] DB operation failed for Instagram DM');
     throw error;

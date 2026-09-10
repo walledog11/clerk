@@ -119,7 +119,9 @@ Effort estimates are active engineering days and exclude vendor response time an
 | S7 | P0 | Certify with two supervised external canaries | Engineering / founder | 7–14 days observation after acceptance | S0; S1–S6 complete |
 | S8 | P0 | Run staged launch and capacity review | Founder / release | Continuous | S7 |
 
-S1–S6 below are implementation checklists, not a strictly sequential dependency chain. First build the smallest complete path across S2–S5, including text, an image, a real approved reply, and disconnect. Then complete recovery and lifecycle hardening. Tests, provider-tagged logs, environment validation, and basic failure visibility accompany every increment; S7 assembles live evidence rather than starting integration testing.
+**Milestone zero is that it works at all.** The next deliverable is one real Instagram DM arriving at a Shopkeeper-controlled account, becoming a ticket, getting a plan, being approved, and the reply landing in the sender's Instagram app. That has never happened. Build the shortest path to it — text only, one account, no connect UI, a pinned integration row instead of OAuth if that is faster — and run it. S4's recovery, S6's observability, and S8's capacity apparatus are what you build *after* watching it work and learning what actually breaks; none of them gate milestone zero, and none of them should be written before it.
+
+S1–S6 below are implementation checklists, not a sequential dependency chain and not a build order. Once milestone zero runs, widen it in this order: image, real OAuth, disconnect/reconnect, second account. Then harden. Tests and provider-tagged logs accompany every increment; S7 assembles live evidence rather than starting integration testing.
 
 The original **9–15 engineering days** is a provisional budget, not a commitment. SP consumes that budget; it is not a separate unbudgeted addition. Re-estimate remaining work after SP. Because this is now the launch transport rather than a loan against Meta approval, a vendor gap found in SP is a reason to fix the plan or change provider — not a reason to wait for direct Meta.
 
@@ -209,18 +211,31 @@ Entry points: new `apps/gateway/src/routes/webhooks-socialapi.ts`, `apps/gateway
 **Local spike slice — 2026-09-09.** A content-free observation route now implements the V2 check,
 five-minute replay bound, delivery-ID requirement, signature alert classification, signed-webhook
 body limit, and deployment-time registration gate. The unsigned exception is available only while
-the endpoint secret is absent and is additionally schema/size/rate constrained. This is locally
-tested scaffolding, not S3 completion. Commit `c3b8a79e` deployed and an active endpoint was
-registered on 2026-09-09. It still deliberately does not resolve integrations, deduplicate, persist,
-or enqueue. Two real signed `dm.received` deliveries passed with one attempt and `200`; outbound
-`dm.sent`, retry, and durable-ingress acceptance remain open.
+the endpoint secret is absent and is additionally schema/size/rate constrained. Commit `c3b8a79e`
+deployed and an active endpoint was registered on 2026-09-09. Two real signed `dm.received`
+deliveries passed with one attempt and `200`.
+
+**Milestone-zero outbound — 2026-09-09.** Approved replies for a SocialAPI thread now leave
+through SocialAPI's conversation endpoint using the workspace `SOCIALAPI_API_KEY`, addressed by the
+`Thread.externalSpaceId` the webhook persisted. See S5 below. The rest of S5 — health probing,
+disconnect routing, reconnect generations, and outage behavior — is open.
+
+**Milestone-zero ingress — 2026-09-09.** The route no longer only observes. A verified
+`dm.received` whose `data.account_id` equals `SOCIALAPI_PINNED_ACCOUNT_ID` is normalized and added
+to the existing inbound queue as a `provider: 'socialapi'` Instagram job before the route
+acknowledges, so a queue failure returns `500` and the vendor retries. Deduplication keys on the
+native `platform_id` (falling back to raw `message.mid`), never the provider interaction id. Every
+other event, and every account that is not pinned, stays acknowledged-and-observed. This is the
+shortest path that reaches the durable workflow: routing is one env-pinned account rather than
+account lookup, so the bullets below that describe OAuth, `providerAccountId` resolution,
+reconciliation, and capacity are still open, and S1 replaces the pin.
 
 - [x] Add `POST /webhooks/socialapi` using `SOCIALAPI_WEBHOOK_SECRET` and V2 HMAC-SHA256 over `<timestamp>.<raw body>`. Validate header format/length before constant-time comparison and reject timestamps outside a five-minute past/future tolerance; do not silently downgrade normal deliveries to V1. Done 2026-09-09 in `c3b8a79e`; unit tests and two production `dm.received` deliveries passed.
 - [x] Handle the vendor's initial `webhook.test` registration ping as the sole unsigned exception because it arrives before the endpoint secret is revealed. Require the exact event header and strict, small ping schema; rate-limit it, perform no persistence/queue/configuration side effect, and return only the acknowledgement. Reject unsigned test-shaped requests from all other paths. Once the endpoint exists, require V2 for test deliveries as well as normal events. Done 2026-09-09: registration succeeded, the secret was installed directly in Railway, and the unsigned shape returned `401` afterward. The provider's separately triggered signed synthetic test currently has an event header/body mismatch and returns `400`; real deliveries pass.
-- [ ] Acknowledge supported inbound events only after durable queue admission, within the vendor's ten-second deadline. Return a retryable error for transient database/queue failures. Explicitly acknowledge authenticated test deliveries and intentionally ignored events without manufacturing message jobs.
-- [ ] Accept `dm.received`; ignore or use `dm.sent` only to reconcile an outbound result; explicitly classify referral and unknown events.
-- [ ] Resolve `data.account_id` through indexed `providerAccountId`, require platform/transport/lifecycle match, and never accept an organization identifier from the webhook.
-- [ ] Normalize verified canonical sender/message IDs (using the tested mapping if necessary), original provider timestamp, conversation ID, text, and media into the existing Instagram job. Include provider account and connection generation from the validated integration.
+- [x] Acknowledge supported inbound events only after durable queue admission, within the vendor's ten-second deadline. Return a retryable error for transient database/queue failures. Explicitly acknowledge authenticated test deliveries and intentionally ignored events without manufacturing message jobs. Done 2026-09-09 for `dm.received`; enqueue precedes the `200` and a queue failure returns `500`.
+- [x] Accept `dm.received`; ignore or use `dm.sent` only to reconcile an outbound result; explicitly classify referral and unknown events. Done 2026-09-09 for the accept/ignore split: only `dm.received` creates work. `dm.sent` reconciliation is still unbuilt and needs the identifier answer from the spike's open evidence.
+- [ ] Resolve `data.account_id` through indexed `providerAccountId`, require platform/transport/lifecycle match, and never accept an organization identifier from the webhook. Milestone zero matches one env-pinned account and loads that integration by id, asserting its `transport: 'socialapi'` metadata; the organization is always read from the row, never the webhook. The indexed column and multi-account lookup are open.
+- [x] Normalize verified canonical sender/message IDs (using the tested mapping if necessary), original provider timestamp, conversation ID, text, and media into the existing Instagram job. Include provider account and connection generation from the validated integration. Done 2026-09-09 except connection generation, which arrives with S1's reconnect handling. `normalizeSocialApiDmReceived` reads `data.platform_id` with a raw `message.mid` fallback for the message id and `data.author.id` with a raw `sender.id` fallback for the sender.
 - [ ] Preserve existing rate limits, body limits, no-content logging, trace IDs, bulk queue behavior, and signature-failure alerts with `provider=socialapi`.
 - [ ] Make retries idempotent using the existing organization-scoped external-message uniqueness guarantee.
 - [ ] Use stable delivery IDs for delivery correlation/deduplication where present; pings may omit them. Delivery IDs do not replace canonical message IDs for webhook-plus-poll deduplication. Retry timestamps describe the delivery attempt, not the customer's message time.
@@ -247,10 +262,10 @@ Done when webhooks and polling cannot create duplicate messages, a missed webhoo
 
 Entry points: `instagram-dispatch.ts`, provider send-failure mapping, token health, durable integration disconnect, and workspace deletion.
 
-- [ ] Branch outbound by the pinned transport after loading the exact `replyIntegrationId`.
-- [ ] Keep Shopkeeper's local 24-hour-window check. For SocialAPI, require `Thread.externalSpaceId` and send through the conversation endpoint.
-- [ ] Preserve outbound claim/idempotency behavior, but attribute calls and alerts to `provider=socialapi`; store the accepted provider message ID.
-- [ ] Never retry a SocialAPI failure through Meta. Known transient failures remain retryable through the same provider; unknown outcomes remain unknown.
+- [x] Branch outbound by the pinned transport after loading the exact `replyIntegrationId`. Done 2026-09-09 in `dispatchInstagramDirect`: `metadata.instagram.transport === 'socialapi'` selects the provider send and skips the Meta health, permission, and token gates that a SocialAPI row cannot satisfy.
+- [x] Keep Shopkeeper's local 24-hour-window check. For SocialAPI, require `Thread.externalSpaceId` and send through the conversation endpoint. Done 2026-09-09; the window check is shared, and a SocialAPI thread with no `externalSpaceId` refuses to send rather than guessing a route.
+- [x] Preserve outbound claim/idempotency behavior, but attribute calls and alerts to `provider=socialapi`; store the accepted provider message ID. Done 2026-09-09: `recordOutboundCall` and `recordInstagramSendFailure` both carry the transport, so a SocialAPI outage no longer reads as a Meta outage.
+- [x] Never retry a SocialAPI failure through Meta. Known transient failures remain retryable through the same provider; unknown outcomes remain unknown. Done 2026-09-09 and asserted by a test that a failed SocialAPI send touches no Graph API host.
 - [ ] Add SocialAPI health probing for account status/reconnect reason. Do not run direct Meta subscription/token-refresh logic for SocialAPI rows.
 - [ ] Route durable disconnect cleanup by transport: direct unsubscribes Meta; SocialAPI deletes the connected account. Workspace deletion also deletes the remote brand when safe.
 - [ ] Ensure reconnect updates the existing integration and thread routing when the verified native account is unchanged; increment generation and prevent stale jobs from restoring old routes. Implement the S1 cleanup snapshot and migration handoff before external onboarding.

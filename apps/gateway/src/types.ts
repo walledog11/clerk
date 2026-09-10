@@ -79,6 +79,13 @@ export interface InstagramInboundJobData {
   text: string | null;
   attachments: InstagramInboundAttachment[];
   traceId: string;
+  /**
+   * Optional for backward compatibility with jobs already queued by the direct
+   * Meta webhook: absent means `meta_direct`. It must never be inferred as
+   * `socialapi` from the integration's current state.
+   */
+  provider?: 'meta_direct' | 'socialapi';
+  providerConversationId?: string | null;
 }
 
 export interface AiSummaryJobData {

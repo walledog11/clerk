@@ -52,3 +52,76 @@ export function verifySocialApiWebhookV2(
   }
   return { ok: true, timestampSeconds };
 }
+
+export interface SocialApiInboundMedia {
+  type: string;
+  url: string | null;
+}
+
+export interface SocialApiInboundDm {
+  accountId: string;
+  conversationId: string | null;
+  platform: string;
+  /**
+   * `data.platform_id` — the native Instagram message id. This is the canonical
+   * dedupe key: the 2026-09-09 controlled spike observed it matching the stored
+   * inbox row while `data.id` (the provider-only interaction id) matched neither
+   * inbox identifier, so `data.id` must not be used to join webhook delivery
+   * against recovery reads.
+   */
+  nativeMessageId: string | null;
+  authorId: string;
+  text: string | null;
+  media: SocialApiInboundMedia[];
+  receivedAt: string;
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function readMedia(content: UnknownRecord): SocialApiInboundMedia[] {
+  const items = Array.isArray(content.media) ? content.media : [];
+  return items.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const type = readString(item.type) ?? 'unsupported';
+    return [{ type, url: readString(item.url) ?? readString(item.attachment_url) }];
+  });
+}
+
+/**
+ * Normalizes a verified `dm.received` body into the fields Shopkeeper's Instagram
+ * workflow needs. Returns null when a required routing field is absent; the caller
+ * decides whether that is a drop or a retry.
+ */
+export function normalizeSocialApiDmReceived(body: unknown): SocialApiInboundDm | null {
+  if (!isRecord(body) || !isRecord(body.data)) return null;
+  const data = body.data;
+  const raw = isRecord(data.raw_payload) ? data.raw_payload : {};
+  const author = isRecord(data.author) ? data.author : {};
+  const rawSender = isRecord(raw.sender) ? raw.sender : {};
+  const rawMessage = isRecord(raw.message) ? raw.message : {};
+  const content = isRecord(data.content) ? data.content : {};
+
+  const accountId = readString(data.account_id);
+  const authorId = readString(author.id) ?? readString(rawSender.id);
+  const receivedAt = readString(data.received_at);
+  if (!accountId || !authorId || !receivedAt) return null;
+
+  return {
+    accountId,
+    conversationId: readString(data.conversation_id),
+    platform: readString(data.platform) ?? 'instagram',
+    nativeMessageId: readString(data.platform_id) ?? readString(rawMessage.mid),
+    authorId,
+    text: readString(content.text),
+    media: readMedia(content),
+    receivedAt,
+  };
+}

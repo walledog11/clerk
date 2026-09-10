@@ -115,6 +115,21 @@ async function createInstagramLoginIntegration() {
   });
 }
 
+async function createSocialApiIntegration() {
+  return createTestIntegration(org.id, {
+    platform: ChannelType.ig_dm,
+    externalAccountId: `ig_socialapi_${org.id.slice(0, 8)}`,
+    accessToken: null,
+    metadata: {
+      instagram: {
+        authModel: 'socialapi',
+        transport: 'socialapi',
+        socialApiAccountId: 'acc_controlled',
+      },
+    },
+  });
+}
+
 async function routeInstagramThread(
   threadId: string,
   integrationId: string,
@@ -785,5 +800,85 @@ describe('dispatchMessage — async outbound (OUTBOUND_EMAIL_ASYNC)', () => {
     });
     expect(saved?.sendStatus).toBe('unknown');
     expect(saved?.sendError).toBe('Email queue admission outcome unknown');
+  });
+});
+
+describe('dispatchMessage — SocialAPI Instagram transport', () => {
+  const originalKey = process.env.SOCIALAPI_API_KEY;
+
+  beforeEach(() => {
+    process.env.SOCIALAPI_API_KEY = 'test-socialapi-key';
+  });
+
+  afterEach(() => {
+    restoreEnv('SOCIALAPI_API_KEY', originalKey);
+  });
+
+  async function socialApiThread(conversationId: string | null = 'conv_controlled') {
+    const integration = await createSocialApiIntegration();
+    const customer = await createTestCustomer(org.id, 'socialapi_customer');
+    const thread = await createTestThread(org.id, customer.id, ChannelType.ig_dm);
+    await routeInstagramThread(thread.id, integration.id);
+    if (conversationId) {
+      await db.thread.update({ where: { id: thread.id }, data: { externalSpaceId: conversationId } });
+    }
+    return { customer, integration, thread };
+  }
+
+  it('sends through SocialAPI with the thread conversation, not the Meta Graph API', async () => {
+    const { customer, integration, thread } = await socialApiThread();
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({
+      success: true,
+      message_id: 'socialapi-msg-1',
+      message_ids: ['socialapi-msg-1'],
+    }), { status: 200 }));
+
+    const result = await dispatchMessage({ ...thread, customer }, org, 'SocialAPI reply.');
+
+    expect(result).toMatchObject({ ok: true });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('social-api.ai');
+    expect(url).not.toContain('graph.instagram.com');
+    expect(JSON.parse(String(init.body))).toMatchObject({ text: 'SocialAPI reply.' });
+    const saved = await db.message.findFirstOrThrow({
+      where: { threadId: thread.id, senderType: SenderType.agent },
+    });
+    expect(saved.integrationId).toBe(integration.id);
+    expect(saved.providerMessageId).toBe('socialapi-msg-1');
+  });
+
+  it('refuses to send when the thread has no provider conversation id', async () => {
+    const { customer, thread } = await socialApiThread(null);
+
+    const result = await dispatchMessage({ ...thread, customer }, org, 'SocialAPI reply.');
+
+    expect(result).toMatchObject({ ok: false });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send when no workspace API key is configured', async () => {
+    delete process.env.SOCIALAPI_API_KEY;
+    const { customer, thread } = await socialApiThread();
+
+    const result = await dispatchMessage({ ...thread, customer }, org, 'SocialAPI reply.');
+
+    expect(result).toMatchObject({ ok: false });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('never retries a SocialAPI failure through Meta', async () => {
+    const { customer, integration, thread } = await socialApiThread();
+    mockFetch.mockResolvedValueOnce(new Response('{"error":"nope"}', { status: 502 }));
+
+    const result = await dispatchMessage({ ...thread, customer }, org, 'SocialAPI reply.');
+
+    expect(result).toMatchObject({ ok: false });
+    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('graph.instagram.com'))).toBe(true);
+    expect(mockRecordProviderSendFailure).toHaveBeenCalledWith(
+      'socialapi',
+      'ig_dm',
+      org.id,
+      expect.objectContaining({ threadId: thread.id, integrationId: integration.id }),
+    );
   });
 });

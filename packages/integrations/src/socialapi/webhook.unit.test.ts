@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { verifySocialApiWebhookV2 } from './webhook.js';
+import { normalizeSocialApiDmReceived, verifySocialApiWebhookV2 } from './webhook.js';
 
 const secret = 'webhook-secret';
 const timestamp = '1789002000';
@@ -66,5 +66,58 @@ describe('SocialAPI V2 webhook verification', () => {
       timestamp: null,
       nowMs,
     })).toEqual({ ok: false, reason: 'missing' });
+  });
+});
+
+describe('normalizeSocialApiDmReceived', () => {
+  const base = {
+    event: 'dm.received',
+    data: {
+      id: 'interaction-1',
+      account_id: 'acc_1',
+      conversation_id: 'conv_1',
+      platform: 'instagram',
+      platform_id: 'native-1',
+      author: { id: 'author-1' },
+      content: { text: 'hi', media: [] },
+      received_at: '2026-09-10T01:18:38Z',
+    },
+  };
+
+  it('reads the native message id rather than the provider interaction id', () => {
+    const normalized = normalizeSocialApiDmReceived(base);
+    expect(normalized?.nativeMessageId).toBe('native-1');
+    expect(normalized?.accountId).toBe('acc_1');
+    expect(normalized?.authorId).toBe('author-1');
+    expect(normalized?.conversationId).toBe('conv_1');
+  });
+
+  it('falls back to the raw Meta message and sender ids', () => {
+    const normalized = normalizeSocialApiDmReceived({
+      data: {
+        account_id: 'acc_1',
+        received_at: '2026-09-10T01:18:38Z',
+        raw_payload: { message: { mid: 'raw-mid' }, sender: { id: 'raw-sender' } },
+      },
+    });
+    expect(normalized?.nativeMessageId).toBe('raw-mid');
+    expect(normalized?.authorId).toBe('raw-sender');
+  });
+
+  it('keeps a urlless media item so an ephemeral image is visible downstream', () => {
+    const normalized = normalizeSocialApiDmReceived({
+      data: {
+        ...base.data,
+        content: { text: null, media: [{ type: 'ephemeral' }] },
+      },
+    });
+    expect(normalized?.text).toBeNull();
+    expect(normalized?.media).toEqual([{ type: 'ephemeral', url: null }]);
+  });
+
+  it('returns null when a required routing field is missing', () => {
+    expect(normalizeSocialApiDmReceived({ data: { account_id: 'acc_1' } })).toBeNull();
+    expect(normalizeSocialApiDmReceived({ data: { received_at: 'now', author: { id: 'a' } } })).toBeNull();
+    expect(normalizeSocialApiDmReceived(null)).toBeNull();
   });
 });

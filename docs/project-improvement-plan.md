@@ -1,6 +1,23 @@
 # Shopkeeper improvement and validation plan
 
-Created: 2026-09-07. Last reconciled: 2026-09-09. Status: in progress; A1 and A2 are verified, A4's implementation is landed, B2 is in progress, and Gate 1 remains open. **A3 is the critical path**; a controlled provider-level text/image and reply slice passed, and reusable client/webhook spike scaffolding is locally verified, but the SocialAPI path is not yet wired into Shopkeeper's durable workflow.
+Created: 2026-09-07. Last reconciled: 2026-09-09. Status: in progress; A1 and A2 are verified, A4's implementation is landed, B2 is in progress, and Gate 1 remains open. **A3 is the critical path**; a controlled provider-level text/image and reply slice passed, and milestone-zero SocialAPI ingress *and* outbound through the durable workflow are now implemented and deterministically covered — neither has been deployed or exercised against a live DM, which is the next thing to do.
+
+## Operating stance — beta
+
+Shopkeeper is in beta with no users. The rule that outranks every checklist below: **make it work
+before making it certifiable.** Not one real Instagram DM has ever produced a Shopkeeper ticket, and
+until that happens every gate, capacity control, alert threshold, and observation window in this
+document is apparatus built around a path that does not run.
+
+**The next deliverable is one sentence:** a real Instagram DM arrives, becomes a ticket, the agent
+plans a reply, the merchant approves it from their phone, and the customer receives it. Nothing else
+in A3 is on the critical path until that has run once, with Shopkeeper-controlled accounts, by the
+shortest route that works.
+
+This is not permission to skip safety on money, tenant isolation, or truthful outcomes — those are
+the product. It is a bound on ceremony: a gate, an evidence artifact, or a hardening item earns its
+place once the thing it guards exists and works, and not before. Harden what actually broke, not
+what might.
 
 ## Objective
 
@@ -49,7 +66,7 @@ P0 means required for the paid pilot or its evidence. P1 means bounded product/e
 | --- | --- | --- |
 | A1 | `verified` | Inbox regression, browser smoke, and lint passed with the A2 candidate. |
 | A2 | `verified` | Released and accepted on `e4cfab72`; subsequent production revision `60b373ef` has passing CI and deployed Railway roles. See the release inventory for the separately evidenced Vercel and Clerk state. |
-| A3 | `in_progress` | **The critical path.** Controlled inbound text/image, provider send, participant receipt, endpoint registration, and two real signed `dm.received` deliveries passed; see the dated spike evidence. Webhook account/conversation/author IDs matched the bounded inbox, and webhook native `platform_id` matched the inbox row while webhook interaction `id` did not. The new image was `ephemeral` with no URL, a blocking media-coverage gap. Commit `c3b8a79e` is deployed; the route is intentionally observation-only. Next: capture `dm.sent` correlation, resolve ephemeral media and direct-Meta sender equality, then wire persistence/approval and exercise recovery/reconnect. Vendor/data-processing diligence remains mandatory before external merchant data. Direct Meta is deferred and does not gate this phase. |
+| A3 | `in_progress` | **The critical path.** Controlled inbound text/image, provider send, participant receipt, endpoint registration, and two real signed `dm.received` deliveries passed; see the dated spike evidence. Webhook account/conversation/author IDs matched the bounded inbox, and webhook native `platform_id` matched the inbox row while webhook interaction `id` did not. The new image was `ephemeral` with no URL, a blocking media-coverage gap. **Milestone zero is now implemented end to end:** a verified `dm.received` for one env-pinned account is durably queued as a `provider: 'socialapi'` Instagram job before the route acknowledges, keyed on the native `platform_id`; the worker branches so a SocialAPI row never reaches Meta-token paths; and an approved reply leaves through SocialAPI's conversation endpoint, never retried through Meta. It is deterministically covered but not deployed and not yet run against a live DM. Next: deploy, pin the controlled account, and watch one real DM become a ticket, a plan, an approval, and a received reply. Then `dm.sent` correlation, the ephemeral-image classification, and recovery. Vendor/data-processing diligence remains mandatory before external merchant data. Direct Meta is deferred and does not gate this phase. |
 | A4 | `in_progress` | Structured completion facts and deterministic sensitive-copy rendering are implemented and landed. Open: a production grounded-reply canary, the strict release-run disposition, and the schema-carried-completion rework recorded under A4 as structural debt. |
 | B1 | `not_started` | Split 2026-09-09. The analytical half — cost envelope, billable unit, deterministic entitlements — is Gate 1 and needs no Stripe. The commercial half — prices, checkout, plan mapping — is deferred to Gate 2. Both still need owner decisions. |
 | B2 | `in_progress` | Price parity is verified. Fail-closed spend reads and a visible daily usage/cap panel shipped in `60b373ef`; durable reservations and service allowances remain open. |

@@ -256,4 +256,87 @@ describe('Message worker — normalized ig_dm jobs', () => {
       where: { organizationId: org.id, platformId: 'ig_disconnected_sender' },
     })).toBeNull();
   });
+  describe('SocialAPI transport', () => {
+    async function createSocialApiIntegration() {
+      return createTestIntegration(org.id, {
+        platform: ChannelType.ig_dm,
+        externalAccountId: `ig_socialapi_${org.id}`,
+        accessToken: null,
+        metadata: { instagram: { authModel: 'socialapi', transport: 'socialapi' } },
+      });
+    }
+
+    it('persists a SocialAPI DM without calling Meta for a token it does not have', async () => {
+      const integration = await createSocialApiIntegration();
+      const fetchCallsBefore = getMockFetch().mock.calls.length;
+
+      const handler = getCapturedHandlers().get('inbound-messages');
+      await handler!(makeIgDmJob(org.id, 'socialapi_author_1', {
+        instagramAccountId: integration.externalAccountId,
+        integrationId: integration.id,
+        provider: 'socialapi',
+        providerConversationId: 'conv_1',
+        messageMid: 'native.mid.1',
+        text: 'where is my order',
+      }));
+
+      const customer = await db.customer.findFirstOrThrow({
+        where: { organizationId: org.id, platformId: 'socialapi_author_1' },
+      });
+      const thread = await db.thread.findFirstOrThrow({
+        where: { organizationId: org.id, customerId: customer.id, channelType: ChannelType.ig_dm },
+      });
+      const message = await db.message.findFirstOrThrow({ where: { threadId: thread.id } });
+
+      expect(message).toMatchObject({
+        senderType: 'customer',
+        contentText: 'where is my order',
+        externalMessageId: 'native.mid.1',
+        integrationId: integration.id,
+      });
+      expect(thread.replyIntegrationId).toBe(integration.id);
+      // Meta profile enrichment and media download are the only outbound calls this
+      // path would make, and both need a Meta token a SocialAPI row cannot hold.
+      expect(getMockFetch().mock.calls.length).toBe(fetchCallsBefore);
+    });
+
+    it('represents media it cannot yet fetch instead of dropping the message', async () => {
+      const integration = await createSocialApiIntegration();
+
+      const handler = getCapturedHandlers().get('inbound-messages');
+      await handler!(makeIgDmJob(org.id, 'socialapi_author_2', {
+        instagramAccountId: integration.externalAccountId,
+        integrationId: integration.id,
+        provider: 'socialapi',
+        messageMid: 'native.mid.2',
+        text: null,
+        attachments: [{ type: 'ephemeral', url: null }],
+      }));
+
+      const customer = await db.customer.findFirstOrThrow({
+        where: { organizationId: org.id, platformId: 'socialapi_author_2' },
+      });
+      const thread = await db.thread.findFirstOrThrow({
+        where: { organizationId: org.id, customerId: customer.id },
+      });
+      const message = await db.message.findFirstOrThrow({ where: { threadId: thread.id } });
+
+      expect(message.contentText).toBe('[Instagram ephemeral attachment]');
+    });
+
+    it('refuses a SocialAPI job that points at a direct Meta row', async () => {
+      const integration = await createInstagramLoginIntegration(`ig_direct_guard_${org.id}`);
+
+      const handler = getCapturedHandlers().get('inbound-messages');
+      await handler!(makeIgDmJob(org.id, 'socialapi_wrong_transport', {
+        instagramAccountId: integration.externalAccountId,
+        integrationId: integration.id,
+        provider: 'socialapi',
+      }));
+
+      expect(await db.customer.findFirst({
+        where: { organizationId: org.id, platformId: 'socialapi_wrong_transport' },
+      })).toBeNull();
+    });
+  });
 });
