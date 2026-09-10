@@ -215,6 +215,74 @@ describe("createRefund full-refund input", () => {
     expect(result).toMatchObject({ status: "policy_block", data: { code: "currency_mismatch" } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  // Live shape of order #1031: a USD shop, a Toronto customer charged in CAD.
+  // The shop currency and the refund currency are supposed to differ here, and
+  // treating that as a mismatch made every international order unrefundable.
+  it("refunds an order whose presentment currency differs from the shop currency", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        order: {
+          id: 456,
+          currency: "USD",
+          presentment_currency: "CAD",
+          financial_status: "paid",
+          refunds: [],
+          line_items: [{ id: 11, title: "Hat", quantity: 1, current_quantity: 1 }],
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        refund: {
+          currency: "CAD",
+          transactions: [{
+            kind: "suggested_refund",
+            gateway: "manual",
+            parent_id: 222,
+            amount: "59.90",
+            currency: "CAD",
+            maximum_refundable: "59.90",
+          }],
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        data: {
+          refundCreate: {
+            refund: {
+              id: "gid://shopify/Refund/9001",
+              totalRefundedSet: { presentmentMoney: { amount: "59.90" } },
+              transactions: { nodes: [{ status: "SUCCESS" }] },
+            },
+            userErrors: [],
+          },
+        },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createRefund({ order_id: "456", amount: "59.90", currency: "CAD" }, ctx);
+
+    expect(result).toMatchObject({ status: "ok", refundedCents: 5990 });
+    // The mutation settles in the currency the customer was charged.
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body as string).variables.input.currency).toBe("CAD");
+  });
+
+  it("policy-blocks when Shopify returns no refund currency at all", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        order: {
+          id: 456,
+          financial_status: "paid",
+          refunds: [],
+          line_items: [{ id: 11, title: "Hat", quantity: 1, current_quantity: 1 }],
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({ refund: { transactions: [] } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createRefund({ order_id: "456", amount: "20.00" }, ctx);
+
+    expect(result).toMatchObject({ status: "policy_block", data: { code: "currency_missing" } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("createRefund provider outcomes", () => {

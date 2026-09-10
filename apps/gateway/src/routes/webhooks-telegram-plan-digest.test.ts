@@ -150,6 +150,26 @@ describe('POST /webhooks/telegram — pending plan commands', () => {
     expect(ctx.pendingPlan).toBeNull();
   });
 
+  // 2026-09-10: the queue was empty when the merchant's "Yes" landed, so the
+  // fast path declined it and the model turn treated the word as a fresh
+  // instruction — which it satisfied by attempting the refund itself. A
+  // decision about a draft that is gone gets answered here, not forwarded.
+  it('"yes" with nothing queued answers deterministically and runs no turn', async () => {
+    const chatId = '5555009';
+    await bindMember(chatId);
+
+    await request(app)
+      .post('/webhooks/telegram')
+      .set('x-telegram-bot-api-secret-token', SECRET)
+      .send({ message: { message_id: 1, chat: { id: Number(chatId), type: 'private' }, text: 'yes' } });
+
+    await processPendingOperatorEvents(org.id);
+    await waitForReplies(1);
+
+    expect(executeOperatorAgentTurnSpy).not.toHaveBeenCalled();
+    expect(lastReplyText()).toContain('Nothing is waiting for your approval');
+  });
+
   it('does not run or discard a plan that requires thread review', async () => {
     const chatId = '5555012';
     const memberKey = await bindMember(chatId);

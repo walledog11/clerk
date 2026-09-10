@@ -61,6 +61,17 @@ function serializeOrderLineItem(lineItem: ShopifyOrderLineItem) {
   };
 }
 
+// What the customer was actually charged, and only when that differs from the
+// shop's own currency. A single-currency store serializes exactly as before.
+function presentmentCharge(order: ShopifyOrder): { presentment_total_price: string; presentment_currency: string } | null {
+  const priceSet = order.current_total_price_set ?? order.total_price_set;
+  const presentment = priceSet?.presentment_money;
+  const currency = presentment?.currency_code ?? order.presentment_currency;
+  if (!currency || !presentment?.amount) return null;
+  if (order.currency && currency.toUpperCase() === order.currency.toUpperCase()) return null;
+  return { presentment_total_price: presentment.amount, presentment_currency: currency };
+}
+
 export function serializeOrder(order: ShopifyOrder) {
   return {
     id: String(order.id),
@@ -70,6 +81,8 @@ export function serializeOrder(order: ShopifyOrder) {
     fulfillment_status: order.fulfillment_status ?? null,
     total_price: order.current_total_price ?? order.total_price ?? null,
     currency: order.currency ?? null,
+    // The customer paid this, not total_price above. Quote it to them, and refund it.
+    ...(presentmentCharge(order) ?? {}),
     items: (order.line_items ?? []).map(serializeOrderLineItem),
     shipping_address: serializeAddress(order.shipping_address),
   };

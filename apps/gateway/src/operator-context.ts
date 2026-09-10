@@ -15,6 +15,7 @@ import type { ExpectedPlanIdentity } from '@shopkeeper/agent/plan-execution';
 import { getPlanExecution } from '@shopkeeper/agent/execution-ledger';
 import { AGENT_PLAN_CACHE_VERSION, readAgentPlanCacheRecordShape } from '@shopkeeper/agent/plan-cache-shape';
 import { hashInstruction, hashPlan } from '@shopkeeper/agent/agent-actions';
+import logger from './logger.js';
 import { isRecord } from './lib/typing.js';
 import { readRequestDisplay, type RequestDisplay } from './message-handlers/request-display.js';
 
@@ -490,9 +491,12 @@ export async function appendPendingPlan(
   });
 }
 
+// `code` distinguishes "nothing is queued" from "several are, say which" —
+// callers must not tell those apart by reading the sentence. Only the first
+// means the merchant adjudicated something that is not there.
 export type SelectPendingPlanResult =
   | { plan: PendingPlan }
-  | { error: string };
+  | { error: string; code: 'none_pending' | 'needs_disambiguation' | 'needs_thread_review' };
 
 function summarizePendingPlan(plan: PendingPlan): string {
   const who = plan.customerName ? plan.customerName.split(' ')[0] : 'the customer';
@@ -519,17 +523,18 @@ export function selectPendingPlan(
   digest?: PendingDigest | null,
 ): SelectPendingPlanResult {
   if (plans.length === 0) {
-    return { error: 'Error: no plan is awaiting the merchant\'s approval.' };
+    return { error: 'Error: no plan is awaiting the merchant\'s approval.', code: 'none_pending' };
   }
   const selectable = (plan: PendingPlan): SelectPendingPlanResult => {
     const briefingItem = digest?.items.find((item) => item.threadId === plan.threadId
       && (!item.planId || item.planId === plan.planId));
     if (briefingItem && briefingItem.kind !== 'approval') {
-      return { error: 'This conversation needs an instruction, not approval. Read the request and ask what the merchant wants done.' };
+      return { error: 'This conversation needs an instruction, not approval. Read the request and ask what the merchant wants done.', code: 'needs_thread_review' };
     }
     if (pendingPlanNeedsThreadReview(plan, digest)) {
       return {
         error: 'The request details were unavailable in the briefing. Open the thread before approving this plan.',
+        code: 'needs_thread_review',
       };
     }
     return { plan };
@@ -543,7 +548,7 @@ export function selectPendingPlan(
     ? `Multiple plans are pending — ask which one before acting: ${pendingPlanOptions(plans, digest)}.`
     : `That reference does not match the pending plan. Ask the merchant to confirm: ${pendingPlanOptions(plans, digest)}.`;
   if (!trimmed) {
-    return { error: ambiguous };
+    return { error: ambiguous, code: 'needs_disambiguation' };
   }
 
   if (/^\d+$/.test(trimmed)) {
@@ -557,26 +562,27 @@ export function selectPendingPlan(
     const item = digest?.items[ordinal - 1];
     if (item) {
       if (item.needsThreadReview) {
-        return { error: 'Open the thread to read the original request before acting on this conversation.' };
+        return { error: 'Open the thread to read the original request before acting on this conversation.', code: 'needs_thread_review' };
       }
       if (item.kind !== 'approval') {
         return {
           error: `Number ${ordinal} in the briefing is not a drafted plan, so there is nothing to approve. Tell the merchant what it is and ask what they want done.`,
+          code: 'needs_thread_review',
         };
       }
       const byOrdinal = item.planId
         ? plans.find((plan) => plan.planId === item.planId && plan.threadId === item.threadId)
         : plans.find((plan) => plan.threadId === item.threadId);
       if (byOrdinal) return selectable(byOrdinal);
-      return { error: `The plan for number ${ordinal} is no longer pending — it may already have run.` };
+      return { error: `The plan for number ${ordinal} is no longer pending — it may already have run.`, code: 'needs_disambiguation' };
     }
     if (digest && digest.items.length > 0) {
-      return { error: `There is no number ${ordinal} on that briefing. ${ambiguous}` };
+      return { error: `There is no number ${ordinal} on that briefing. ${ambiguous}`, code: 'needs_disambiguation' };
     }
 
     const index = ordinal - 1;
     if (index >= 0 && index < plans.length) return selectable(plans[index]!);
-    return { error: ambiguous };
+    return { error: ambiguous, code: 'needs_disambiguation' };
   }
 
   const byPlanId = plans.filter((plan) => plan.planId === trimmed);
@@ -586,33 +592,50 @@ export function selectPendingPlan(
   const byName = plans.filter((plan) => plan.customerName?.toLowerCase().includes(needle));
   if (byName.length === 1) return selectable(byName[0]!);
 
-  return { error: ambiguous };
+  return { error: ambiguous, code: 'needs_disambiguation' };
 }
 
-async function pendingPlanMatchesCurrentCache(
+/**
+ * Why a parked plan is no longer offerable, or null when it still is.
+ *
+ * Six separate conditions used to collapse into one boolean, so a card the
+ * merchant was looking at could be discarded and the only trace was that their
+ * "yes" met an empty queue. Reconstructing which condition fired took a
+ * production forensic pass with the logs already expired (2026-09-10). Each one
+ * now names itself.
+ */
+type PendingPlanStaleReason =
+  | 'identity_incomplete'
+  | 'cache_absent'
+  | 'cache_version_superseded'
+  | 'plan_replaced'
+  | 'source_message_advanced'
+  | 'plan_edited'
+  | 'instruction_changed';
+
+async function pendingPlanStaleReason(
   organizationId: string,
   plan: PendingPlan,
-): Promise<boolean> {
+): Promise<PendingPlanStaleReason | null> {
   // Identity-less queue entries predate durable approval and cannot describe a
   // current cache unambiguously. Do not offer them and wait for an approval to
   // discover that they are stale.
   if (!plan.planId || !plan.sourceMessageId || !plan.planHash || !plan.instructionHash) {
-    return false;
+    return 'identity_incomplete';
   }
   const thread = await db.thread.findFirst({
     where: { id: plan.threadId, organizationId },
     select: { cachedPlan: true, cachedPlanMessageId: true },
   });
   const cached = readAgentPlanCacheRecordShape(thread?.cachedPlan);
-  return Boolean(
-    cached
-    && cached.version === AGENT_PLAN_CACHE_VERSION
-    && cached.planId === plan.planId
-    && cached.lastCustomerMessageId === plan.sourceMessageId
-    && thread?.cachedPlanMessageId === plan.sourceMessageId
-    && hashPlan(cached.plan) === plan.planHash
-    && hashInstruction(cached.instruction) === plan.instructionHash
-  );
+  if (!cached) return 'cache_absent';
+  if (cached.version !== AGENT_PLAN_CACHE_VERSION) return 'cache_version_superseded';
+  if (cached.planId !== plan.planId) return 'plan_replaced';
+  if (cached.lastCustomerMessageId !== plan.sourceMessageId) return 'source_message_advanced';
+  if (thread?.cachedPlanMessageId !== plan.sourceMessageId) return 'source_message_advanced';
+  if (hashPlan(cached.plan) !== plan.planHash) return 'plan_edited';
+  if (hashInstruction(cached.instruction) !== plan.instructionHash) return 'instruction_changed';
+  return null;
 }
 
 async function resolveStalePendingPlanContext(
@@ -664,8 +687,19 @@ export async function loadLivePendingPlans(
       ? await getPlanExecution(organizationId, plan.planId).catch(() => null)
       : null;
     const terminal = execution && execution.status !== 'pending' && execution.status !== 'claimed';
-    const current = terminal ? false : await pendingPlanMatchesCurrentCache(organizationId, plan);
-    if (terminal || !current) {
+    const reason = terminal ? null : await pendingPlanStaleReason(organizationId, plan);
+    if (terminal || reason) {
+      // The merchant may be looking at this card right now, so say what was
+      // dropped and why. Silence here is what turned one production incident
+      // into a forensic reconstruction against expired logs.
+      logger.info({
+        organizationId,
+        memberKey,
+        threadId: plan.threadId,
+        planId: plan.planId ?? null,
+        reason: terminal ? 'execution_terminal' : reason,
+        ...(terminal ? { executionStatus: execution?.status } : {}),
+      }, '[Operator] Parked plan dropped before the merchant could act on it');
       await resolveStalePendingPlanContext(organizationId, memberKey, plan).catch(() => undefined);
       continue;
     }

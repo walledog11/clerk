@@ -7,7 +7,7 @@ of its own fix: the moment an item reads as evidence rather than as an instructi
 it back. Evidence checklists, failure drills, and standing procedure live in the linked
 docs.
 
-Last reviewed: 2026-09-09.
+Last reviewed: 2026-09-10.
 
 Work is grouped by **what kind of action it needs**, not by when it was filed.
 
@@ -77,6 +77,13 @@ provider. **None of these is a code task.**
 
 ### Operator and agent
 
+- [ ] **Nothing prunes a stale `pendingQuestion`.** `loadLivePendingPlans` drops parked plans
+  whose execution is terminal or whose cache moved on; questions have no equivalent, so one
+  parked for thread `dd5eb30f` was still in the production ledger 11 days later, feeding the
+  operator ledger the model reads. It is also what makes a bare "yes" ambiguous: the keyword
+  fast path defers to the model whenever a question is pending, so a stale one changes how an
+  unrelated approval is handled. Give questions the same liveness check as plans.
+
 - [ ] **Watch the escalation notice clear itself.** Reply as the merchant *in the
   composer* and confirm the widget notice disappears. Approving an agent plan cannot
   discharge it — `recordMerchantReply` is merchant-only by design, which was confirmed
@@ -91,7 +98,10 @@ provider. **None of these is a code task.**
   validator was also caught wrongly rejecting a *supported* claim and fixed in `0e5bcec0`. What
   is still unobserved is the positive pair — a mutation that actually succeeds and a reply whose
   copy its own journal result supports — because no agent mutation has yet committed in
-  production. Blocked behind the refund currency guard.
+  production. Blocked behind the refund currency fix in
+  [PR #89](https://github.com/walledog11/shopkeeper/pull/89). Note the failed refund it observed
+  ran in a free-form operator turn, not an approved plan execution — the invariant held, but not
+  on the path this bullet is about.
 
 ### Channels and providers
 
@@ -190,44 +200,50 @@ it costs — not a design.
   changing pricing copy or provisioning Stripe IDs. Keep founder/test workspaces out of demand and
   renewal evidence.
 
-- [ ] **Finish the SocialAPI approval leg at the refund.** Everything up to the write is
-  proven in production on 2026-09-10, on thread `f161a9b1`: a real Instagram DM naming order
-  1031 planned `create_refund` + `add_internal_note` + `send_reply`, routed to `needs_review`
-  because the plan carried an `action`-category call, and reached the bound iMessage line 34
-  seconds after the DM. The merchant replied `Yes`, the turn ran as `mode: human_approved`,
-  and `pendingPlans` cleared. **The refund itself did not go through** — `create_refund`
-  returned `policy_block` / `currency_mismatch` twice, the agent re-read the order, and it
-  escalated to the merchant instead of claiming success. The customer received nothing, which
-  is the A4 invariant holding under a real failure. What remains for the leg is the refund
-  block below, then confirming the approved reply reaches the participant's Instagram app.
-  Note the first live run's plan was blocked by `ungrounded_customer_reply` until `0e5bcec0`
+- [ ] **Prove the SocialAPI approval leg — it has not run yet.** On 2026-09-10 a real
+  Instagram DM naming order 1031 planned `create_refund` + `add_internal_note` + `send_reply`,
+  routed to `needs_review` because the plan carried an `action`-category call, and reached the
+  bound iMessage line 34 seconds after the DM. **That is where the proven part stops.** The
+  merchant replied `Yes`, the parked plan was already gone from the queue, and the model
+  attempted the refund on its own authority instead — `executionId` null on all seven action
+  rows, no `PlanExecution` claim. A merchant approval has still never executed a reviewed plan
+  in production. Land [PR #89](https://github.com/walledog11/shopkeeper/pull/89), then re-run
+  one DM end to end: approval executing the reviewed plan, the refund committing, and the reply
+  arriving in the participant's Instagram app. The first live run's plan was blocked by
+  `ungrounded_customer_reply` until `0e5bcec0`
   ([PR #88](https://github.com/walledog11/shopkeeper/pull/88)) landed; the before/after on the
   same message text is the clearest evidence that fix works.
 
-- [ ] **Unblock the refund currency guard.** `packages/agent/src/shopify/refunds.ts` blocks a
-  refund when the order's currency and the currency Shopify returns from `calculateRefund`
-  differ (`code: "currency_mismatch"`). Order #1031 reports `currency: "USD"` and ships to
-  Toronto, and the block fired on both the currency-qualified call and the retry without one.
-  The untested reading is presentment-vs-shop currency: `order.currency` is the shop currency
-  while the calculation comes back in the customer's presentment currency, in which case the
-  guard is right that they differ and wrong to call it unsafe — and no US merchant with an
-  international customer can be refunded by the agent. Read what `calculateRefund` actually
-  returned before changing the comparison. This is the last thing standing between the
-  approval leg and a completed A3 round trip.
+- [ ] **Ship the refund currency fix.** Confirmed against the live store: order #1031 is a
+  USD shop with a Toronto customer charged **59.90 CAD**, `calculateRefund` correctly returns
+  CAD, and the guard compared it against the *shop* currency and called it unsafe — so no US
+  merchant with an international customer could be refunded by the agent. The order read had
+  the same confusion, exposing only shop-currency fields, so the agent saw `$43.48 USD` for an
+  order the customer paid `59.90 CAD` for: the wrong figure to refund and the wrong one to
+  quote. Both fixed in [PR #89](https://github.com/walledog11/shopkeeper/pull/89); this closes
+  when that lands and a refund commits in production.
 
-- [ ] **`approve_pending_plan` errors before the plan it approves runs.** In the 2026-09-10
-  approval turn the control tool fired twice — 09:44:45 and 09:44:50 — both returning "no plan
-  is awaiting the merchant's approval", and then `create_refund` executed anyway as
-  `human_approved`. The control tool and the executor disagree about whether a pending
-  approval exists. Matches the persist-before-send race already recorded for operator plans;
-  confirm whether that is the same defect or a second one before fixing either.
+- [ ] **Find out why the merchant's parked plan was discarded.** Not the persist-before-send
+  race — `notifyOperator` commits the plan before the card goes out, and the card did go out at
+  09:40:44. By the merchant's reply at 09:44:40 the queue was empty, so `approve_pending_plan`
+  was right both times and the model improvising the refund afterwards is what PR #89 stops.
+  The leading reading is the thread re-planning at 09:40:50, six seconds after the card, which
+  orphans the parked entry and makes `loadLivePendingPlans` prune it as `plan_replaced`. PR #89
+  makes that drop name which of seven conditions fired, so the next occurrence is diagnosable;
+  this closes when a reproduction or a production log line says which one it was. If it is the
+  re-plan, the fix is upstream — a re-plan should re-park and re-notify, not silently invalidate
+  a card the merchant is looking at.
 
-- [ ] **`AgentAction.approverId` is null on human-approved rows.** Every row in the
-  2026-09-10 approval turn carries `mode: "human_approved"` with `approverId: null` and no
-  `approvedAt`. The audit trail can say a human approved and not which human, which is the one
-  question an audit record of a money movement exists to answer. The operator turn knows the
-  identity — the agent note on the operator thread carries `clerkUserId` — so this is a
-  plumbing gap, not a missing signal.
+- [ ] **Re-check the audit trail once PR #89 is live.** The null `approverId` on the
+  2026-09-10 rows was not a plumbing gap — every approval entry point threads the approver
+  correctly. `resolveRunPolicy` defaulted an unstated mode to `human_approved`, so the
+  strongest label in the enum arrived with no approver to name. PR #89 makes the default
+  `auto_executed` and has the free-form operator turn state its mode and name the merchant.
+  One residual stays open by choice: a genuine plan approval whose Clerk lookup fails still
+  records `human_approved` with a null approver, because downgrading it would assert nobody
+  approved it. Also fix the Review page's "You approved" panel, which queries
+  `modes: ["human_approved"]` with no operator exclusion and so counts direct operator
+  instructions as plans the merchant approved before they ran.
 
 - [ ] **Finish the SocialAPI Instagram transport past milestone zero.** This is
   the critical path and the only A3 item that matters until it runs end to end: `ig_dm` is

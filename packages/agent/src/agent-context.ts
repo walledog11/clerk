@@ -96,12 +96,25 @@ export interface VerifiedOrderRef {
   orderId: string;
 }
 
+// Why the rest of this turn may not run action-category tools. Set by a module
+// control tool when the thing the merchant was adjudicating is not there: their
+// message authorized *that* item, so it authorizes nothing the model picks
+// instead. `code` is what control flow reads; `message` is for the merchant.
+export interface ActionAuthorityBlock {
+  code: "adjudicated_item_missing";
+  message: string;
+}
+
 // Module-agnostic agent context: the org identity and the conversation any
 // module's agent loop operates on. Future modules compose their own context on
 // top of this base.
 export interface BaseAgentContext {
   // Checked at model/tool boundaries; hosts use this to fence a lost lease.
   assertExecutionAllowed?: () => void;
+  // Turn-scoped and one-way: once set, no action-category tool runs again in
+  // this turn. Nothing clears it, because nothing that happens later in a turn
+  // can retroactively authorize what the merchant never saw.
+  actionAuthorityBlock?: ActionAuthorityBlock | null;
   orgId: string;
   orgName: string;
   authState?: AgentAuthState;

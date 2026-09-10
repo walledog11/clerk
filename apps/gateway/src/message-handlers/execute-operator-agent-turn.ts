@@ -2,8 +2,10 @@ import { executeAgentTurn } from '@shopkeeper/agent/turn';
 import { resolveOperatorThread } from '@shopkeeper/agent/internal-thread';
 import {
   executeCurrentCachedHomePlan,
+  formatApproverId,
   type ExpectedPlanIdentity,
 } from '@shopkeeper/agent/plan-execution';
+import { hashInstruction } from '@shopkeeper/agent/agent-actions';
 import { resolveAgentSettings } from '@shopkeeper/agent/settings';
 import type { RawToolCall } from '@shopkeeper/agent/types';
 import type { AgentToolDefinition } from '@shopkeeper/agent/tools';
@@ -77,17 +79,34 @@ export async function executeOperatorAgentTurn(
 ): Promise<ExecuteOperatorAgentTurnResult> {
   await assertBillingWriteAllowedForOrgId(params.orgId);
 
-  const org = await db.organization.findUniqueOrThrow({
-    where: { id: params.orgId },
-    select: { settings: true },
-  });
+  const [org, approver] = await Promise.all([
+    db.organization.findUniqueOrThrow({
+      where: { id: params.orgId },
+      select: { settings: true },
+    }),
+    resolveClerkUserApprover(params.clerkUserId),
+  ]);
   const resolvedThread = await resolveOperatorThread(params.orgId, params.operatorKey);
+
+  // The merchant typed this instruction, so a named human authorized the turn
+  // and the audit rows say which one. `approvedPlanHash` is deliberately absent:
+  // they authorized the instruction, not a drafted set of tool calls they read
+  // first, and that difference is what distinguishes these rows from an approved
+  // plan's. Without this the turn fell through to the unstated-mode default.
+  const approval = approver
+    ? {
+        approverId: formatApproverId(approver),
+        approvedAt: new Date(),
+        instructionHash: hashInstruction(params.instruction),
+      }
+    : undefined;
 
   const result = await executeAgentTurn({
     orgId: params.orgId,
     threadId: resolvedThread.id,
     orgSettings: resolveAgentSettings(org.settings),
     instruction: params.instruction,
+    ...(approval ? { auditMode: 'human_approved' as const, approval } : {}),
     ...(params.turnId ? { turnId: params.turnId } : {}),
     failureRoute: FAILURE_ROUTE,
     ...(params.operatorLedger ? { operatorLedger: params.operatorLedger } : {}),

@@ -1,7 +1,7 @@
 import { defineTool, stringArg, toolError, toolOk, type AgentToolDefinition } from '@shopkeeper/agent/tools';
 import { formatOperatorDispatchFailure, isPlanExecutionFailureMessage } from '@shopkeeper/agent/message-dispatch';
 import { ConflictError } from '@shopkeeper/agent/errors';
-import type { SupportContext } from '@shopkeeper/agent/context';
+import type { BaseAgentContext, SupportContext } from '@shopkeeper/agent/context';
 import logger from '../logger.js';
 import {
   expectedPlanIdentity,
@@ -12,6 +12,21 @@ import {
   type OperatorContext,
 } from '../operator-context.js';
 import { runApprovedPendingPlan, clearPendingPlan } from './pending-plan-actions.js';
+
+// The merchant's decision named a plan that is not in the queue. Their message
+// authorized that plan and nothing else, so withdraw this turn's authority to
+// run action-category tools before handing the error back to the model. Without
+// this the model answers a failed approval by doing the thing itself: on
+// 2026-09-10 it attempted a real refund with no plan, no execution claim and no
+// approver, and only a Shopify currency guard stopped it.
+function withdrawActionAuthority(ctx: unknown, message: string): void {
+  const context = ctx as Partial<BaseAgentContext> | undefined;
+  if (!context) return;
+  context.actionAuthorityBlock = {
+    code: 'adjudicated_item_missing',
+    message,
+  };
+}
 import { applyOperatorAnswerReplan } from './operator-answer-replan.js';
 
 export interface OperatorSessionToolDeps {
@@ -74,7 +89,12 @@ export function buildOperatorSessionTools(
     policy: { categoryPermission: false },
     execute: async (input: PlanRefInput, ctx) => {
       const selected = selectPendingPlan(context.pendingPlans, input.plan_ref, context.pendingDigest);
-      if ('error' in selected) return toolError(selected.error);
+      if ('error' in selected) {
+        if (selected.code === 'none_pending') {
+          withdrawActionAuthority(ctx, 'the merchant approved a plan that is no longer queued, so nothing in this turn is approved. Tell them the draft is gone and ask them to reopen the conversation.');
+        }
+        return toolError(selected.error);
+      }
       const pendingPlan = selected.plan;
       if (isPendingPlanInvalid(pendingPlan)) {
         return toolError('Error: this draft failed validation and cannot be approved. Revise it, dismiss it, or take over in the dashboard.');

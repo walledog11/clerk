@@ -10,7 +10,7 @@ import type { ShopifyFulfillment, ShopifyOrder } from "./types.js";
 import { optionalString, requireNonEmptyString, requireNumericId } from "./validation.js";
 
 function orderFields(): string {
-  return "id,name,created_at,financial_status,fulfillment_status,total_price,current_total_price,currency,line_items,shipping_address";
+  return "id,name,created_at,financial_status,fulfillment_status,total_price,current_total_price,currency,presentment_currency,total_price_set,current_total_price_set,line_items,shipping_address";
 }
 
 export async function getShopifyOrders(

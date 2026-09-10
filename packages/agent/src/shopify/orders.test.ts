@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse } from "../testing/json-response.js";
 import { listRecentUnfulfilledOrderIds } from "./orders.js";
+import { serializeOrder } from "./serializers.js";
 
 const ctx = {
   shop: "test-store.myshopify.com",
@@ -46,5 +47,49 @@ describe("listRecentUnfulfilledOrderIds", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonResponse({ orders: [] })));
 
     await expect(listRecentUnfulfilledOrderIds(ctx)).resolves.toEqual([]);
+  });
+});
+
+describe("serializeOrder currency", () => {
+  const baseOrder = {
+    id: 456,
+    name: "#1031",
+    currency: "USD",
+    current_total_price: "43.48",
+    financial_status: "paid",
+    line_items: [{ id: 11, title: "Hat", quantity: 1 }],
+  };
+
+  // The presentment fields must be invisible on a single-currency store: every
+  // existing planner fixture is one, and their serialized orders have to stay
+  // byte-identical for this change to owe no model evaluation.
+  it("omits presentment fields when the store charges in its own currency", () => {
+    expect(serializeOrder(baseOrder)).toEqual(serializeOrder({
+      ...baseOrder,
+      presentment_currency: "USD",
+      current_total_price_set: {
+        shop_money: { amount: "43.48", currency_code: "USD" },
+        presentment_money: { amount: "43.48", currency_code: "USD" },
+      },
+    }));
+    expect(serializeOrder(baseOrder)).not.toHaveProperty("presentment_currency");
+  });
+
+  // Order #1031: the merchant's books say $43.48 USD, the customer paid 59.90 CAD.
+  // Without this the agent quotes and refunds the wrong number.
+  it("exposes what the customer was actually charged when the currencies differ", () => {
+    expect(serializeOrder({
+      ...baseOrder,
+      presentment_currency: "CAD",
+      current_total_price_set: {
+        shop_money: { amount: "43.48", currency_code: "USD" },
+        presentment_money: { amount: "59.90", currency_code: "CAD" },
+      },
+    })).toMatchObject({
+      total_price: "43.48",
+      currency: "USD",
+      presentment_total_price: "59.90",
+      presentment_currency: "CAD",
+    });
   });
 });

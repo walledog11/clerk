@@ -87,6 +87,25 @@ async function enforceToolPolicy(
   ctx: BaseAgentContext,
   settings?: OrgSettings,
 ): Promise<string | null> {
+  // A merchant's "yes" approves the plan they were shown. When the control tool
+  // could not find that plan, the turn has no standing authorization at all, and
+  // the model improvising the action itself is the one outcome that must not
+  // happen — it moved real money in production on 2026-09-10 with no plan, no
+  // execution claim and no approver. Checked before the static policy because
+  // this is about whether the turn may act, not about what the input says.
+  //
+  // Registry tools only. A module's own control tools are the adjudication
+  // surface, not improvisation: they are all category "action" too, so blocking
+  // them would take out `answer_operator_question` — the correct recovery when a
+  // bare "yes" turns out to answer a question rather than approve a plan.
+  if (
+    ctx.actionAuthorityBlock
+    && definition.category === "action"
+    && getToolDefinition(definition.name)
+  ) {
+    return formatPolicyError(ctx.actionAuthorityBlock.message);
+  }
+
   const s = resolveAgentSettings(settings);
   const staticResult = checkParsedStaticToolPolicy(definition, input, s, {
     authState: ctx.authState,

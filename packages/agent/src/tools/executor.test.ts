@@ -191,3 +191,64 @@ describe("goodwill spend reservation finalization", () => {
     expect(mockReleaseDailyRefundSpendReservation).not.toHaveBeenCalled();
   });
 });
+
+describe("actionAuthorityBlock", () => {
+  function blockedCtx(): BaseAgentContext {
+    return {
+      ...threadlessCtx(vi.fn()),
+      shopify: { shop: "test.myshopify.com", accessToken: "shpat_test", grantedScopes: null },
+      actionAuthorityBlock: {
+        code: "adjudicated_item_missing",
+        message: "the merchant approved a plan that is no longer queued.",
+      },
+    } as BaseAgentContext;
+  }
+
+  // The 2026-09-10 incident: the merchant's "Yes" named a plan the queue no
+  // longer had, and the model answered the failed approval by attempting the
+  // refund itself. No plan, no execution claim, no approver.
+  it("refuses a registry action tool once the turn's authority is withdrawn", async () => {
+    const result = await executeToolWithStatus(
+      "create_refund",
+      { order_id: "456", amount: "20.00" },
+      blockedCtx(),
+    );
+
+    expect(result.status).toBe("policy_block");
+    expect(result.result).toContain("no longer queued");
+  });
+
+  it("still allows read tools, which cannot commit anything", async () => {
+    const result = await executeToolWithStatus("search_kb", { query: "returns" }, blockedCtx());
+
+    expect(result.status).not.toBe("policy_block");
+  });
+
+  // Every operator control tool is category "action" too. Blocking them would
+  // remove the correct recovery when a bare "yes" was answering a question
+  // rather than approving a plan.
+  it("still allows a module control tool, which is the adjudication surface", async () => {
+    const controlTool = defineTool({
+      name: "test_answer_operator_question",
+      description: "Test-only operator control tool.",
+      fields: {},
+      category: "action",
+      group: "thread",
+      capabilities: [],
+      label: "Answered question",
+      planStepLabel: "Answer question",
+      policy: { categoryPermission: false },
+      execute: async () => ({ status: "ok" as const, message: "Answered." }),
+    });
+
+    const result = await executeToolWithStatus(
+      "test_answer_operator_question",
+      {},
+      blockedCtx(),
+      undefined,
+      { test_answer_operator_question: controlTool },
+    );
+
+    expect(result.status).toBe("success");
+  });
+});

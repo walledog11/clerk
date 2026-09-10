@@ -198,12 +198,17 @@ export async function createRefund(
     }
 
     const calculation = await calculateRefund(ctx, orderId, refundLineItems);
-    const orderCurrency = orderData.order.currency?.toUpperCase();
-    const calculationCurrency = calculation.refund?.currency?.toUpperCase();
-    const currency = calculationCurrency ?? orderCurrency;
-    if (!currency || (orderCurrency && calculationCurrency && orderCurrency !== calculationCurrency)) {
+    // A refund settles in the currency the customer was charged, which Shopify
+    // returns here. `order.currency` is the shop's own currency and differs on
+    // every international order (USD shop, CAD buyer) — comparing the two called
+    // a correct calculation unsafe and made international orders unrefundable.
+    // The currencies that must agree are the calculation's and the transactions'
+    // it is refunding against, checked below once transactions are built.
+    const currency = calculation.refund?.currency?.toUpperCase()
+      ?? orderData.order.currency?.toUpperCase();
+    if (!currency) {
       return {
-        ...toolPolicyBlock("Error: refund policy blocked - Shopify returned a missing or mismatched refund currency.", { code: "currency_mismatch", orderCurrency, calculationCurrency }),
+        ...toolPolicyBlock("Error: refund policy blocked - Shopify returned no refund currency.", { code: "currency_missing" }),
         refundedCents: null,
       };
     }
@@ -224,7 +229,7 @@ export async function createRefund(
     }
     if (transactions.some(transaction => transaction.currency && transaction.currency.toUpperCase() !== currency)) {
       return {
-        ...toolPolicyBlock("Error: refund policy blocked - a refundable transaction uses a different currency from the order.", { code: "currency_mismatch" }),
+        ...toolPolicyBlock(`Error: refund policy blocked - a refundable transaction uses a different currency from the ${currency} refund.`, { code: "currency_mismatch", currency }),
         refundedCents: null,
       };
     }
@@ -235,7 +240,7 @@ export async function createRefund(
     if (requestedCents !== refundableCents) {
       return {
         ...toolPolicyBlock(
-          `Error: refund policy blocked - requested amount $${centsToMoney(requestedCents)} does not equal Shopify's complete refundable balance of $${centsToMoney(refundableCents)}. Partial or custom refunds require merchant handling.`,
+          `Error: refund policy blocked - requested amount ${centsToMoney(requestedCents)} ${currency} does not equal Shopify's complete refundable balance of ${centsToMoney(refundableCents)} ${currency}. Partial or custom refunds require merchant handling.`,
           { code: "amount_mismatch", requestedCents, refundableCents, currency },
         ),
         refundedCents: null,
