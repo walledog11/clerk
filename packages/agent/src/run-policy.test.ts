@@ -451,7 +451,7 @@ describe("runAgent policy enforcement", () => {
     expect(mockEscalateToHuman).toHaveBeenCalledWith(expect.stringContaining("does not equal Shopify's complete refundable balance"));
     expect(mockReleaseDailyRefundSpendReservation).toHaveBeenCalledWith(
       "reservation_1",
-      expect.stringContaining("requested amount $20.00"),
+      expect.stringContaining("requested amount 20.00 USD"),
     );
     expect(mockCommitDailyRefundSpendReservation).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);

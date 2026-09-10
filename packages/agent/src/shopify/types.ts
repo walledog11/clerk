@@ -48,6 +48,13 @@ export interface ShopifyOrderLineItem {
   fulfillment_status?: string | null;
 }
 
+// Shopify returns every money field twice: once in the shop's own currency and
+// once in the currency the customer was actually charged.
+interface ShopifyPriceSet {
+  shop_money?: { amount?: string; currency_code?: string };
+  presentment_money?: { amount?: string; currency_code?: string };
+}
+
 export interface ShopifyOrder {
   id: number | string;
   name?: string;
@@ -60,6 +67,12 @@ export interface ShopifyOrder {
   total_price?: string;
   current_total_price?: string;
   currency?: string;
+  // Shop currency is what the merchant's books are in; presentment currency is
+  // what the customer was charged. They differ on every international order, and
+  // a refund settles in the presentment currency, not this one.
+  presentment_currency?: string;
+  total_price_set?: ShopifyPriceSet;
+  current_total_price_set?: ShopifyPriceSet;
   line_items?: ShopifyOrderLineItem[];
   shipping_address?: ShopifyCustomerAddress | null;
   customer?: { id: number | string } | null;
