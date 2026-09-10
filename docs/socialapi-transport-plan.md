@@ -145,8 +145,10 @@ The original **9–15 engineering days** is a provisional budget, not a commitme
   Partial controlled evidence from 2026-09-09 is recorded in
   [the controlled-spike evidence](production/socialapi-spike-evidence-2026-09-09.md): fresh inbound
   text/image, a provider-accepted reply, its outgoing inbox row, and participant receipt passed.
-  The send-result ID did not match either outgoing-row ID. Direct-Meta equality, signed webhook
-  equality, and the Shopkeeper ticket/plan/approval path remain open.
+  Two later real signed `dm.received` deliveries passed. Webhook account, conversation, author, and
+  native message IDs matched the bounded inbox surfaces; the webhook interaction ID did not match
+  either inbox-row ID. The fresh image was `ephemeral` with no URL. `dm.sent` correlation,
+  direct-Meta sender equality, and the Shopkeeper ticket/plan/approval path remain open.
 - [ ] Prove webhook and stored-message IDs converge; test missed delivery recovery and investigate platform-side inbox sync separately.
 - [ ] Exercise reconnect and a controlled direct-Meta handoff. Verify identity continuity, reply routing, and deduplication, or produce and test the mapping needed to preserve them.
 - [ ] Inspect all required attachment/event shapes and establish URL lifetime and deletion behavior. A successful text/image slice proves feasibility, not full production parity.
@@ -208,11 +210,13 @@ Entry points: new `apps/gateway/src/routes/webhooks-socialapi.ts`, `apps/gateway
 five-minute replay bound, delivery-ID requirement, signature alert classification, signed-webhook
 body limit, and deployment-time registration gate. The unsigned exception is available only while
 the endpoint secret is absent and is additionally schema/size/rate constrained. This is locally
-tested scaffolding, not S3 completion: it is undeployed, has no registered endpoint, and deliberately
-does not resolve integrations, deduplicate, persist, or enqueue.
+tested scaffolding, not S3 completion. Commit `c3b8a79e` deployed and an active endpoint was
+registered on 2026-09-09. It still deliberately does not resolve integrations, deduplicate, persist,
+or enqueue. Two real signed `dm.received` deliveries passed with one attempt and `200`; outbound
+`dm.sent`, retry, and durable-ingress acceptance remain open.
 
-- [ ] Add `POST /webhooks/socialapi` using `SOCIALAPI_WEBHOOK_SECRET` and V2 HMAC-SHA256 over `<timestamp>.<raw body>`. Validate header format/length before constant-time comparison and reject timestamps outside a five-minute past/future tolerance; do not silently downgrade normal deliveries to V1.
-- [ ] Handle the vendor's initial `webhook.test` registration ping as the sole unsigned exception because it arrives before the endpoint secret is revealed. Require the exact event header and strict, small ping schema; rate-limit it, perform no persistence/queue/configuration side effect, and return only the acknowledgement. Reject unsigned test-shaped requests from all other paths. Once the endpoint exists, require V2 for test deliveries as well as normal events.
+- [x] Add `POST /webhooks/socialapi` using `SOCIALAPI_WEBHOOK_SECRET` and V2 HMAC-SHA256 over `<timestamp>.<raw body>`. Validate header format/length before constant-time comparison and reject timestamps outside a five-minute past/future tolerance; do not silently downgrade normal deliveries to V1. Done 2026-09-09 in `c3b8a79e`; unit tests and two production `dm.received` deliveries passed.
+- [x] Handle the vendor's initial `webhook.test` registration ping as the sole unsigned exception because it arrives before the endpoint secret is revealed. Require the exact event header and strict, small ping schema; rate-limit it, perform no persistence/queue/configuration side effect, and return only the acknowledgement. Reject unsigned test-shaped requests from all other paths. Once the endpoint exists, require V2 for test deliveries as well as normal events. Done 2026-09-09: registration succeeded, the secret was installed directly in Railway, and the unsigned shape returned `401` afterward. The provider's separately triggered signed synthetic test currently has an event header/body mismatch and returns `400`; real deliveries pass.
 - [ ] Acknowledge supported inbound events only after durable queue admission, within the vendor's ten-second deadline. Return a retryable error for transient database/queue failures. Explicitly acknowledge authenticated test deliveries and intentionally ignored events without manufacturing message jobs.
 - [ ] Accept `dm.received`; ignore or use `dm.sent` only to reconcile an outbound result; explicitly classify referral and unknown events.
 - [ ] Resolve `data.account_id` through indexed `providerAccountId`, require platform/transport/lifecycle match, and never accept an organization identifier from the webhook.
