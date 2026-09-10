@@ -277,6 +277,55 @@ describe("plan grounding", () => {
     ])).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
   });
 
+  it("grounds a refund named by the order name the plan itself read", () => {
+    // Production 2026-09-10: an Instagram shopper with no linked Shopify
+    // customer asked for a refund on order 1031. ctx.recentOrders is empty for
+    // an unresolved customer, so the only place the name "#1031" exists is the
+    // plan's own get_order_by_name result — and the reply names the order the
+    // way the customer does. Without the read result the claim read as
+    // ungrounded and the whole plan became unapprovable.
+    const calls = [
+      { id: "read", name: "get_order_by_name", input: { order_name: "1031" } },
+      {
+        id: "refund",
+        name: "create_refund",
+        input: { order_id: "6163445514474", amount: "43.48", currency: "USD" },
+      },
+      {
+        id: "reply",
+        name: "send_reply",
+        input: { text: "I've processed a full refund of $43.48 for order #1031." },
+      },
+    ];
+    const readResults = {
+      read: JSON.stringify({ id: "6163445514474", name: "#1031", currency: "USD" }),
+    };
+
+    expect(detectUngroundedReplyText(calls, { readResults })).toEqual([]);
+    expect(detectUngroundedReplyText(calls)).toEqual([
+      expect.objectContaining({ toolCallId: "reply" }),
+    ]);
+  });
+
+  it("does not let a read of one order ground a claim about another", () => {
+    const readResults = {
+      read: JSON.stringify({ id: "6163445514474", name: "#9999", currency: "USD" }),
+    };
+    expect(detectUngroundedReplyText([
+      { id: "read", name: "get_order_by_name", input: { order_name: "9999" } },
+      {
+        id: "refund",
+        name: "create_refund",
+        input: { order_id: "6163445514474", amount: "43.48", currency: "USD" },
+      },
+      {
+        id: "reply",
+        name: "send_reply",
+        input: { text: "I've processed a full refund of $43.48 for order #1031." },
+      },
+    ], { readResults })).toEqual([expect.objectContaining({ toolCallId: "reply" })]);
+  });
+
   it("rejects wrong order, amount, and currency in completion copy", () => {
     const action = {
       id: "refund",

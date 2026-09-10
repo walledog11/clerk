@@ -60,12 +60,17 @@ function canonicalAmount(value: string | undefined): string | undefined {
   return `${BigInt(whole)}.${fraction.padEnd(2, "0")}`;
 }
 
-function orderTarget(orderId: string, ctx?: FactContext): CompletionFactTarget {
-  const order = ctx?.recentOrders?.find((candidate) => candidate.id === orderId);
+function orderTarget(
+  orderId: string,
+  ctx?: FactContext,
+  orderNames?: ReadonlyMap<string, string>,
+): CompletionFactTarget {
+  const name = ctx?.recentOrders?.find((candidate) => candidate.id === orderId)?.name
+    ?? orderNames?.get(orderId);
   return {
     kind: "order",
     id: orderId,
-    ...(order?.name ? { aliases: [order.name] } : {}),
+    ...(name && name !== orderId ? { aliases: [name] } : {}),
   };
 }
 
@@ -92,6 +97,7 @@ function mutationFacts(input: {
   executionReference: string;
   result?: string;
   ctx?: FactContext;
+  orderNames?: ReadonlyMap<string, string>;
 }): CompletionFact[] {
   const parsed = record(input.rawInput);
   if (!parsed) return [];
@@ -101,7 +107,7 @@ function mutationFacts(input: {
   const currencyFromInput = textField(parsed, "currency")?.toUpperCase();
   const orderOptions = orderId
     ? {
-        target: orderTarget(orderId, input.ctx),
+        target: orderTarget(orderId, input.ctx, input.orderNames),
         ...(currencyFromInput || orderCurrency(orderId, input.ctx)
           ? { currency: currencyFromInput ?? orderCurrency(orderId, input.ctx) }
           : {}),
@@ -172,16 +178,55 @@ function mutationFacts(input: {
   }
 }
 
+/**
+ * Order names read on this turn, keyed by order id.
+ *
+ * `ctx.recentOrders` only holds the orders of a *resolved* Shopify customer, so
+ * a turn acting for an unidentified shopper — every social DM until identity
+ * linking exists — has the order's name in its own `get_order_by_name` result
+ * and nowhere else. Without it the refund fact carries a bare numeric id, the
+ * reply names the order the way the customer does, and a supported claim reads
+ * as ungrounded. Proposal and execution both need this, so they share it.
+ */
+function collectOrderNames(
+  entries: readonly { tool: string; raw: string | undefined }[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const { tool, raw } of entries) {
+    if (tool !== "get_order_by_name" && tool !== "get_shopify_orders") continue;
+    if (!raw) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    for (const candidate of Array.isArray(parsed) ? parsed : [parsed]) {
+      const order = record(candidate);
+      if (!order) continue;
+      const id = textField(order, "id");
+      const name = textField(order, "name");
+      if (id && name) names.set(id, name);
+    }
+  }
+  return names;
+}
+
 export function proposedCompletionFacts(
   calls: readonly RawToolCall[],
   ctx?: FactContext,
+  readResults?: Readonly<Record<string, string>>,
 ): CompletionFact[] {
+  const orderNames = collectOrderNames(
+    calls.map((call) => ({ tool: call.name, raw: readResults?.[call.id] })),
+  );
   return calls.flatMap((call) => mutationFacts({
     tool: call.name,
     rawInput: call.input,
     outcome: "proposed",
     executionReference: call.id,
     ctx,
+    orderNames,
   }));
 }
 
@@ -189,6 +234,10 @@ export function executedCompletionFacts(
   actions: readonly ActionEntry[],
   ctx?: FactContext,
 ): CompletionFact[] {
+  const orderNames = collectOrderNames(actions.map((action) => ({
+    tool: action.tool,
+    raw: (action.status ?? "success") === "success" ? action.result : undefined,
+  })));
   return actions.flatMap((action, index) => {
     const executionReference = action.providerOperationKey ?? action.toolCallId ?? `action:${index}`;
     if (
@@ -208,6 +257,7 @@ export function executedCompletionFacts(
       executionReference,
       result: action.result,
       ctx,
+      orderNames,
     });
   });
 }
